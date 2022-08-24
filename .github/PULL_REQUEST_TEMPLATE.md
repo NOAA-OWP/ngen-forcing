@@ -45,19 +45,5 @@
 
 ### Target Environment support
 
-- [ ] Windows
 - [ ] Linux
-- [ ] Browser
 
-### Accessibility
-
-- [ ] Keyboard friendly
-- [ ] Screen reader friendly
-
-### Other
-
-- [ ] Is useable without CSS
-- [ ] Is useable without JS
-- [ ] Flexible from small to large screens
-- [ ] No linting errors or warnings
-- [ ] JavaScript tests are passing
