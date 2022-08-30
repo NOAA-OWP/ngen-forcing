@@ -96,7 +96,7 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
     # get catchment ids and reference start time for NextGen forcing file
     df = pd.read_csv(weighted_csv_files[0])
     cat_id[:] = df['id'].values
-    start_time = get_date_time(weighted_csv_files[0])
+    start_time = get_date_time_csv(weighted_csv_files[0])
 
     # AORC reference time to use
     ref_date = pd.Timestamp("1970-01-01 00:00:00")
@@ -133,7 +133,7 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
         df.to_csv(weighted_csv_files[i],header=True,index=False)
     
     #create output netcdf file name
-    output_path = join(output_root, forcing, "NextGen_forcing_"+start_time+".nc")
+    output_path = join(forcing, "NextGen_forcing_"+start_time+".nc")
 
     #make the data set
     filename = output_path
@@ -248,8 +248,10 @@ if __name__ == '__main__':
     parser.add_argument("-a", dest="aorc_netcdf", type=str, required=True, help="The input aorc netcdf files directory")
     parser.add_argument("-w", dest="weight_files", type=str, required=True, help="The output weight files sub_dir")
     parser.add_argument("-f", dest="forcing", type=str, required=True, help="The output forcing files sub_dir")
+    parser.add_argument("-c", dest="catchment_source", type=str, required=True, help="The hydrofabric catchment file or data source")
     parser.add_argument("-e_csv", dest="ExactExtract_csv_files", type=str, required=True, help="The output sub_dir for ExactExtract csv files created from each AORC file")
     parser.add_argument("-e", dest="ExactExtract_executable", type=str, required=True, help="The pathway pointing to the ExactExtract executable")
+    parser.add_argument("-j", dest="num_processes", type=int, required=False, default=96, help="The number of processes to run in parallel")
     args = parser.parse_args()
 
     #retrieve parsed values
@@ -260,11 +262,10 @@ if __name__ == '__main__':
     forcing = join(output_root,args.forcing)
     exactextract_files = join(output_root,args.ExactExtract_csv_files)
     exactextract_executable = args.ExactExtract_executable
+    num_processes = args.num_processes
+    hyfabfile = args.catchment_source
 
     #generate catchment geometry from hydrofabric
-    #hyfabfile = "/home/jason.ducker/sugar_creek/catchment_data.geojson"
-    hyfabfile = "/home/jason.ducker/hydrofabric/huc01/catchment_data.geojson"
-
     cat_df_full = gpd.read_file(hyfabfile)
     g = [i for i in cat_df_full.geometry]
     h = [i for i in cat_df_full.id]
@@ -310,7 +311,6 @@ if __name__ == '__main__':
 
     #prepare for processing
     num_forcing_files = len(datafiles)
-    num_processes = 25
 
     #generate the data objects for child processes
     file_groups = np.array_split(np.array(datafiles), num_processes)
