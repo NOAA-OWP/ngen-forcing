@@ -7,7 +7,7 @@ import numpy
 import netCDF4 as nc4
 import os
 import sys
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, MultiPolygon, shape
 
 import ESMF.util.helpers as helpers
 import ESMF.api.constants as constants
@@ -59,6 +59,8 @@ def mesh_create_polygon(coord_list, cat_id, cleanup_geometry=False):
         node_id.append(i)
         lons.append(float(coord[0]))
         lats.append(float(coord[1]))
+        if np.isnan(coord[0]) or np.isnan(coord[1]):
+            print("cat_id: {} has none float type coordidates".format(cat_id))
         thistuple = (float(coord[0]), float(coord[1]))
         poly_coords.append(thistuple)
         i += 1
@@ -72,7 +74,9 @@ def mesh_create_polygon(coord_list, cat_id, cleanup_geometry=False):
     # for a new hydrofabric
     if cleanup_geometry:
         #only incorrect catchments need clean up
-        if cat_id == 'cat-39990' or cat_id == 'cat-39965':
+        if (cat_id == 'cat-17452' or cat_id == 'cat-24659' or cat_id == 'cat-10357' or cat_id == 'cat-7619' or cat_id == 'cat-17070' or
+            cat_id == 'cat-17351' or cat_id == 'cat-3206' or cat_id == 'cat-25479' or cat_id == 'cat-25644'):
+        #if cat_id == 'cat-39990' or cat_id == 'cat-39965':    #this line for the older hydrofabric with Polygon geometry
             # check that the angle is not zero
             index = []
             for i in range(len(lons)-2):
@@ -97,21 +101,28 @@ def mesh_create_polygon(coord_list, cat_id, cleanup_geometry=False):
                 except ZeroDivisionError:
                     raise(ZeroDivisionError("ZeroDivisionError, abs_vec1, abs_vec2 = {}, {}".format(abs_vec1, abs_vec2)))
 
-            #remove the vertices associated with zero angle
-            idx = index[0]
-            del node_id[idx]
-            # keep the node_id contiguous
-            for i in range(len(node_id)):
-                if i >= idx:
-                    node_id[i] = node_id[i] - 1
-            del lons[idx]
-            del lats[idx]
-            del poly_coords[idx]
+            #TODO need to generalize to deal with more than one zero angle case
+            if len(index) != 0:
+                #remove the vertices associated with zero angle
+                idx = index[0]
+                del node_id[idx]
+                # keep the node_id contiguous
+                for i in range(len(node_id)):
+                    if i >= idx:
+                        node_id[i] = node_id[i] - 1
+                del lons[idx]
+                del lats[idx]
+                del poly_coords[idx]
+
             # Handle the clockwise ordering of polygon vertices
             node_id.reverse()
             lons.reverse()
             lats.reverse()
             poly_coords.reverse()
+            tmp_node_id = []
+            for i in range(len(node_id)):
+                tmp_node_id.append(len(node_id)-node_id[i]-1)
+            node_id = tmp_node_id
 
     #add the center of the polygon to the nodes
     elem_id = []
@@ -136,16 +147,12 @@ def mesh_create_polygon(coord_list, cat_id, cleanup_geometry=False):
 
     #lons_lats_array = np.empty((lons_array.size + lats_array.size), dtype=int)
     lons_lats_array = numpy.zeros([lons_array.size + lats_array.size], dtype='float64')
-    if cleanup_geometry:
-        if cat_id == 'cat-39990' or cat_id == 'cat-39965':
-            lons_lats_array[0::2] = lats_array    #lons_array -> lats_array for cat-39990, cat-39965
-            lons_lats_array[1::2] = lons_array    #lats_array -> lons_array for cat-39990, cat-39965
-        else:
-            lons_lats_array[0::2] = lons_array
-            lons_lats_array[1::2] = lats_array
+    lons_lats_array[0::2] = lons_array
+    lons_lats_array[1::2] = lats_array
 
     nodeCoord = lons_lats_array
 
+    #polygon is used for building mask
     polygon = Polygon(poly_coords)
     nodeOwner = np.zeros(num_node)
 
@@ -163,7 +170,7 @@ def mesh_create_polygon(coord_list, cat_id, cleanup_geometry=False):
     elem_coordy = np.sum(lats_array)/num_node
     elem_coord.append(elem_coordx)
     elem_coord.append(elem_coordy)
-
+    
     elemConn = np.array(elem_conn)
     elemCoord = np.array(elem_coord)
 
@@ -174,8 +181,10 @@ def mesh_create_polygon(coord_list, cat_id, cleanup_geometry=False):
     elemType=np.array(elem_type)
 
     mesh.add_nodes(num_node,nodeId,nodeCoord,nodeOwner)
-
-    mesh.add_elements(num_elem,elemId,elemType,elemConn, element_coords=elemCoord)
+    try:
+        mesh.add_elements(num_elem,elemId,elemType,elemConn, element_coords=elemCoord)
+    except ValueError:
+        raise(RuntimeError("Cannot add elements for catchment {}".format(cat_id)))
 
     return mesh, lons_min, lons_max, lats_min, lats_max, polygon
 
@@ -284,9 +293,9 @@ def read_sub_netcdf(cat_id, datafile, var_name_list, var_value_list, lons_min_gr
             if num_ones != 0:
                 avg_var_value[i] /= num_ones
             else:
-                print("no grid point inside the polygon, the catchment is too small")
-                print("landmask =\n {}".format(landmask))
-                sys.exit()
+                #print("no grid point inside the polygon, the catchment {} is too small".format(cat_id))
+                #print("landmask =\n {}".format(landmask))
+                pass
 
     date_time = get_date_time(datafile)
     with open(avg_outfile, 'a') as wfile:
@@ -398,30 +407,45 @@ def grid_to_mesh_regrid(cat_id, lons_start, lats_start, lons_min, lons_max, lats
 
     srcgrid = ESMF.Grid(max_index, 
                         coord_sys=ESMF.CoordSys.SPH_DEG,
-                        staggerloc=ESMF.StaggerLoc.CENTER,
+                        #staggerloc=ESMF.StaggerLoc.CENTER,
+                        staggerloc=[ESMF.StaggerLoc.CENTER, ESMF.StaggerLoc.CORNER],
                         coord_typekind=ESMF.TypeKind.R4,
                         num_peri_dims=0, periodic_dim=0, pole_dim=0)
 
-    gridCoordLat = srcgrid.get_coords(lat)
+    # Add coordinates to the source grid.
+    #srcgrid.add_coords(staggerloc=[ESMF.StaggerLoc.CENTER])    #This line get a warning "This coordinate has already been added"
+
     gridCoordLon = srcgrid.get_coords(lon)
+    gridCoordLat = srcgrid.get_coords(lat)
+
+    gridLonCorner = srcgrid.get_coords(lon, staggerloc=ESMF.StaggerLoc.CORNER)
+    gridLatCorner = srcgrid.get_coords(lat, staggerloc=ESMF.StaggerLoc.CORNER)
 
     lons_par = lons[srcgrid.lower_bounds[ESMF.StaggerLoc.CENTER][0]:srcgrid.upper_bounds[ESMF.StaggerLoc.CENTER][0]]
     lats_par = lats[srcgrid.lower_bounds[ESMF.StaggerLoc.CENTER][1]:srcgrid.upper_bounds[ESMF.StaggerLoc.CENTER][1]]
 
-    # make sure to use indexing='ij' as ESMPy backend uses matrix indexing (not Cartesian)
-    lonm, latm = numpy.meshgrid(lons_par, lats_par, indexing='ij')
+    gridCoordLat[...] = lats_par.reshape(1, lats_par.size)
+    gridCoordLon[...] = lons_par.reshape(lons_par.size, 1)
 
-    gridCoordLon[:] = lonm
-    gridCoordLat[:] = latm
+    #recalculate the grid corner
+    lons_corner_upper = lons_start + lons_max_grid * lons_delta + 0.5*lons_delta
+    lons_corner_lower = lons_start + lons_min_grid * lons_delta - 0.5*lons_delta
+    lats_corner_upper = lats_start + lats_max_grid * lats_delta + 0.5*lats_delta
+    lats_corner_lower = lats_start + lats_min_grid * lats_delta - 0.5*lats_delta
+    lons_corner = numpy.arange(lons_corner_lower, lons_corner_upper, lons_delta)
+    lats_corner = numpy.arange(lats_corner_lower, lats_corner_upper, lats_delta)
 
-    # Create a field on the centers of the source grid with the mask applied.
+    lons_corner_par = lons_corner[srcgrid.lower_bounds[ESMF.StaggerLoc.CORNER][0]:srcgrid.upper_bounds[ESMF.StaggerLoc.CORNER][0]]
+    lats_corner_par = lats_corner[srcgrid.lower_bounds[ESMF.StaggerLoc.CORNER][1]:srcgrid.upper_bounds[ESMF.StaggerLoc.CORNER][1]]
+    gridLatCorner[...] = lats_corner_par.reshape(1, lats_corner_par.size)
+    gridLonCorner[...] = lons_corner_par.reshape(lons_corner_par.size, 1)
+
+    grid_file = "/local/esmpy/huc01/grid_mesh/grid_file"+cat_id
+    mesh_file = "/local/esmpy/huc01/grid_mesh/mesh_file"+cat_id
+    srcgrid._write_(grid_file)
+    mesh._write_(mesh_file)
+
     srcfield = ESMF.Field(srcgrid, name="srcfield", staggerloc=ESMF.StaggerLoc.CENTER)
-
-    gridLon = srcfield.grid.get_coords(lon, ESMF.StaggerLoc.CENTER)
-    gridLat = srcfield.grid.get_coords(lat, ESMF.StaggerLoc.CENTER)
-
-    #srcfield_tmp = srcfield.data[:,:]
-    #print("type of srcfield.data = {}".format(type(srcfield_tmp)))    #<class 'numpy.ndarray'>
 
     dstfield = ESMF.Field(mesh, name='dstfield', meshloc=ESMF.MeshLoc.ELEMENT)
     xctfield = ESMF.Field(mesh, name='xctfield', meshloc=ESMF.MeshLoc.ELEMENT)
@@ -434,9 +458,11 @@ def grid_to_mesh_regrid(cat_id, lons_start, lats_start, lons_min, lons_max, lats
             os.remove(weight_file)
 
         regrid = ESMF.Regrid(srcfield, dstfield, filename=weight_file, 
-                             #regrid_method=ESMF.RegridMethod.BILINEAR, 
-                             regrid_method=ESMF.RegridMethod.PATCH,
-                             unmapped_action=ESMF.UnmappedAction.IGNORE)
+            ignore_degenerate=True,
+            #regrid_method=ESMF.RegridMethod.BILINEAR, 
+            #regrid_method=ESMF.RegridMethod.PATCH,
+            regrid_method=ESMF.RegridMethod.CONSERVE,
+            unmapped_action=ESMF.UnmappedAction.IGNORE)
         regrid.destroy()
 
     # process the srcfield data
@@ -517,9 +543,7 @@ def csv_to_netcdf(num_catchments, num_time, date_time, aorc_ncfile, regrid_weigh
     filename = output_path
     filename_out = output_path
 
-    print("num_catchments = {}".format(num_catchments))
     cat_id = numpy.zeros(num_catchments, dtype=object)
-    print("cat_id.size = {}".format(cat_id.size))
     time = []
 
     apcp_surface = []
@@ -657,7 +681,10 @@ def process_sublist(data : dict, lock: Lock, num: int):
         g_sublist = data["g_sublist"][i]
 
         #extract catchment geometry
-        x,y = g_sublist.exterior.coords.xy
+        if geomtype == 'Polygon':
+            x,y = g_sublist.exterior.coords.xy
+        if geomtype == 'MultiPolygon':
+            x,y = g_sublist.geoms[0].exterior.coords.xy
         all_coords = np.dstack((x,y))
         coord_list = all_coords[0]
         cat_id = data["cat_ids"][i]
@@ -760,21 +787,22 @@ if __name__ == '__main__':
         cleanup_geometry = True
 
     #generate catchment geometry from hydrofabric 
-    hyfabfile = "/local/ngen/data/huc01/huc_01/hydrofabric/spatial/catchment_data.geojson"
+    #hyfabfile = "/local/ngen/data/huc01/huc_01/hydrofabric/spatial/catchment_data.geojson"
+    hyfabfile = "/local/ngen/data/profile/huc01/hydrofabric/catchment_data.geojson"
     cat_df_full = gpd.read_file(hyfabfile)
+    print(cat_df_full.head(3))
+    #print(cat_df_full.geometry.geom_type)    #output rows of object type: Polygon or MultiPolygon
+    geomtype = cat_df_full.geometry[0].geom_type    #pick first row, assume all are the same geom_type
+    print("geom type is {}".format(geomtype))
+    print("geomtype = {}".format(type(geomtype)))
+    if geomtype == 'MultiPlolygon':
+        cat_df_full.explode(ignore_index=True)
+        print(cat_df_full.head(3))
+
     g = [i for i in cat_df_full.geometry]
     h = [i for i in cat_df_full.id]
     n_cats = len(g)
     print("number of catchments = {}".format(n_cats))
-
-    cat_dict = {}
-    for i in range(n_cats):
-        if h[i] == "cat-39990":
-            cat_dict.update({"cat-39990":i})
-            print("for cat-39990, list index = {}".format(i))
-        if h[i] == "cat-39965":
-            cat_dict.update({"cat-39965":i})
-            print("for cat-39965, list index = {}".format(i))
 
     datafile_path = join(input_root, aorc_netcdf, "AORC-OWP_*.nc4")
     #datafile_path = join(input_root, aorc_netcdf, "AORC-OWP_2012063005z.nc4")
@@ -814,10 +842,13 @@ if __name__ == '__main__':
         #prepare for processing
         #num_csv_inputs = len(csv_files)
         num_csv_inputs = len(g)
-        num_processes = 25
+        num_processes = 64
 
         #generate the data objects for child processes
-        g_groups = np.array_split(np.array(g), num_processes)
+        g_array = np.empty(len(g), dtype="object")
+        g_array[:] = g
+        g_groups = np.array_split(g_array, num_processes)
+        #g_groups = np.array_split(np.array(g), num_processes)    #This line of code is replaced by above 3 lines of code to be compatible with Shapely 2.0
         cat_groups = np.array_split(np.array(h), num_processes)
         pos_groups = np.array_split(np.array(range(n_cats)), num_processes)
 
@@ -829,6 +860,7 @@ if __name__ == '__main__':
             # fill the dictionary with needed at
             data = {}
             data["g_sublist"] = g_groups[i].tolist()
+            #print("list len [i] = {}".format(len(data["g_sublist"])))
             data["cat_ids"] = cat_groups[i]
             data["offsets"] = pos_groups[i]
             data["datafile"] = datafile
