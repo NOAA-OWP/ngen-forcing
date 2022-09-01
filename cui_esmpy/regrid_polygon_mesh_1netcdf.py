@@ -402,12 +402,14 @@ def grid_to_mesh_regrid(cat_id, lons_start, lats_start, lons_min, lons_max, lats
     lons = numpy.arange(lons_lower, lons_upper, lons_delta)
     max_index = numpy.array([lons.size, lats.size])
 
+    #start_time = time.time()
     srcgrid = ESMF.Grid(max_index, 
                         coord_sys=ESMF.CoordSys.SPH_DEG,
                         #staggerloc=ESMF.StaggerLoc.CENTER,
                         staggerloc=[ESMF.StaggerLoc.CENTER, ESMF.StaggerLoc.CORNER],
                         coord_typekind=ESMF.TypeKind.R4,
                         num_peri_dims=0, periodic_dim=0, pole_dim=0)
+    #print("Grid time = {}".format(time.time() - start_time))
 
     # Add coordinates to the source grid.
     #srcgrid.add_coords(staggerloc=[ESMF.StaggerLoc.CENTER])    #This line get a warning "This coordinate has already been added"
@@ -460,12 +462,14 @@ def grid_to_mesh_regrid(cat_id, lons_start, lats_start, lons_min, lons_max, lats
         else:
             print("The weight_file does not exist")
 
+        #start_time = time.time()
         regrid = ESMF.Regrid(srcfield, dstfield, filename=weight_file, 
                              ignore_degenerate=True,
                              #regrid_method=ESMF.RegridMethod.BILINEAR, 
                              #regrid_method=ESMF.RegridMethod.PATCH,
                              regrid_method=ESMF.RegridMethod.CONSERVE,
                              unmapped_action=ESMF.UnmappedAction.IGNORE)
+        #print("Regrid time = {}".format(time.time() - start_time))
         regrid.destroy()
 
     # process the srcfield data
@@ -479,6 +483,7 @@ def grid_to_mesh_regrid(cat_id, lons_start, lats_start, lons_min, lons_max, lats
     srcfield_vars.append('UGRD_10maboveground')
     srcfield_vars.append('VGRD_10maboveground')
 
+    #start_time = time.time()
     #get input datafile_in atributes: scale_factor, offset
     ds1 = nc4.Dataset(datafile_in)
    
@@ -495,34 +500,55 @@ def grid_to_mesh_regrid(cat_id, lons_start, lats_start, lons_min, lons_max, lats
 
     # read in the weight file
     ds = nc4.Dataset(weight_file)
+    #print("data loading time = {}".format(time.time() - start_time))
 
+    #start_time = time.time()
     weight = ds['S']
+    #print("type of weight is {}".format(type(weight)))
+    w_array = numpy.array(weight, dtype='float')
+    #print("type of w_array is {}".format(type(w_array)))
     col = ds['col']
+    #col_array = numpy.array(col)
+    #print("type of col_array is {}".format(type(col_array)))
     row = ds['row']
+    #row_array = numpy.array(row)
+    #print("type of row_array is {}".format(type(row_array)))
 
-    time = ds1.variables['time'][0]
+    Time = ds1.variables['time'][0]
     with open(esmf_outfile, 'a') as wfile:
+        #start_time = time.time()    #the loop is the most time consuming part of the code
         for m in range(1):
-            time = ds1.variables['time'][m]
-            out_data = "{},{}".format(cat_id, time)
+            Time = ds1.variables['time'][m]
+            out_data = "{},{}".format(cat_id, Time)
             for i in range(len(srcfield_vars)):
                 srcfield.read(filename=datafile_in, variable=srcfield_vars[i], timeslice=m+1)
                 srcfield_tmp = srcfield.data[:,:]
+                #print("srcfield_tmp type: {}".format(type(srcfield_tmp)))
                 #ESMF matrix uses Fortran convention
                 flat_array = srcfield_tmp.flatten(order='F')
-
-                # calculate the weighted average
-                sum = 0.0
+                #print("flat_array type: {}".format(type(flat_array)))
+                #new_array = numpy.zeros([len(col)], dtype='float64')
+                new_array = numpy.zeros([len(col)], dtype='float')
                 for k in range(len(col)):
                     l = col[k] - 1
-                    sum += weight[k] * flat_array[l]
+                    new_array[k] = flat_array[l]
+                #print("new_array type: {}".format(type(new_array)))
+                sum = numpy.dot(w_array, new_array.T)
+
+                # calculate the weighted average
+                #sum = 0.0
+                #for k in range(len(col)):
+                #    l = col[k] - 1
+                #    sum += weight[k] * flat_array[l]
                 #take into account the scale_factor and offset in the input netcdf datafile
                 average = sum * scale_factor[i] + add_offset[i]
                 if i == 0 and average < 0:    # i == 0 corresponds srcfield_vars for APCP_surface
                     average = 0.0
                 out_data += ",{}".format(average)
             wfile.write(out_data+'\n')
+        #print("weight loop time = {}".format(time.time() - start_time))
     wfile.close()
+    #print("calculate weighted avg time = {}".format(time.time() - start_time))
 
     return srcfield.data, lons_par, lats_par
 
@@ -711,11 +737,15 @@ def process_sublist(data : dict, lock: Lock, num: int):
         cat_id = data["cat_ids"][i]
 
         #create polygon mesh
+        #start_time = time.time()
         (mesh, lons_min, lons_max, lats_min, lats_max, polygon) = mesh_create_polygon(coord_list, cat_id, cleanup_geometry)
+        #print("mesh time = {}".format(time.time() - start_time))
 
         #define the boundary for extract sub-netcdf data
+        #start_time = time.time()
         lats_min_grid, lats_max_grid, lats_delta, lats_first, lons_min_grid, lons_max_grid, lons_delta, lons_first = get_cat_geometry(aorcfile,
         lons_min, lons_max, lats_min, lats_max)
+        #print("get geometry time = {}".format(time.time() - start_time))
 
         var_name_list = ['time', 'latitude', 'longitude', 'APCP_surface', 'DLWRF_surface', 'DSWRF_surface', 'PRES_surface', 'SPFH_2maboveground',
                          'TMP_2maboveground', 'UGRD_10maboveground', 'VGRD_10maboveground']
@@ -725,17 +755,23 @@ def process_sublist(data : dict, lock: Lock, num: int):
             var_value_list.append([])
 
         #extract sub-netcdf data
+        #start_time = time.time()
         var_value_list, Var_array, landmask, nlats, nlons, ds = read_sub_netcdf(cat_id, datafile, var_name_list, var_value_list,
                                                                   lons_min_grid, lons_max_grid, lats_min_grid, lats_max_grid,
                                                                   lons_delta, lats_delta, polygon)
+        #print("read_sub_netcdf time = {}".format(time.time() - start_time))
 
         #write to netcdf file for the cat_id
         filename_out = join(output_root, netcdf_files, "AORC_"+cat_id+".nc")
+        #start_time = time.time()
         write_sub_netcdf(filename_out, var_name_list, var_value_list, Var_array, landmask, nlats, nlons, ds)
+        #print("write_sub_netcdf time = {}".format(time.time() - start_time))
 
         #perform regridding, generate weight file, and calculate average for cat_id
+        #start_time = time.time()
         (srcfield_data, lons_par, lats_par) = grid_to_mesh_regrid(cat_id, lons_first, lats_first, lons_min, lons_max, lats_min, lats_max, polygon, esmf_outfile, mesh,
                                                                   lats_min_grid, lats_max_grid, lats_delta, lons_min_grid, lons_max_grid, lons_delta, iter_k)
+        #print("regrid time = {}".format(time.time() - start_time))
 
 
 def plot_srcfield(srcfield_data, lons_par, lats_par):
@@ -908,6 +944,10 @@ if __name__ == '__main__':
 
     #write a netcdf file every time step the same as the input file
     regrid_weight_forcing = True
+    start_time = time.time()
     csv_to_netcdf(num_catchments, aorc_ncfile, regrid_weight_forcing)
+    print("csv_to_netcdf time = {}".format(time.time() - start_time))
     regrid_weight_forcing = False
+    start_time = time.time()
     csv_to_netcdf(num_catchments, aorc_ncfile, regrid_weight_forcing)
+    print("csv_to_netcdf time = {}".format(time.time() - start_time))
