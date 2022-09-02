@@ -109,24 +109,24 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
         #since ExactExtract module doesn't account for scale_factor and offset
         # keys for a given variable, we will have to finish calculating the lumped
         # sum for the ExactExtract csv files
-        df['APCP_surface_weighted_sum'] = df['APCP_surface_weighted_sum']*scale_factor[0] + add_offset[0]
-        df['DLWRF_surface_weighted_mean'] = df['DLWRF_surface_weighted_mean']*scale_factor[1] + add_offset[1]
-        df['DSWRF_surface_weighted_mean'] = df['DSWRF_surface_weighted_mean']*scale_factor[2] + add_offset[2]
-        df['PRES_surface_weighted_mean'] = df['PRES_surface_weighted_mean']*scale_factor[3] + add_offset[3]
-        df['SPFH_2maboveground_weighted_mean'] = df['SPFH_2maboveground_weighted_mean']*scale_factor[4] + add_offset[4]
-        df['TMP_2maboveground_weighted_mean'] = df['TMP_2maboveground_weighted_mean']*scale_factor[5] + add_offset[5]
-        df['UGRD_10maboveground_weighted_mean'] = df['UGRD_10maboveground_weighted_mean']*scale_factor[6] + add_offset[6]
-        df['VGRD_10maboveground_weighted_mean'] = df['VGRD_10maboveground_weighted_mean']*scale_factor[7] + add_offset[7]
+        df['APCP_surface_sum'] = df['APCP_surface_sum']*scale_factor[0] + add_offset[0]
+        df['DLWRF_surface_mean'] = df['DLWRF_surface_mean']*scale_factor[1] + add_offset[1]
+        df['DSWRF_surface_mean'] = df['DSWRF_surface_mean']*scale_factor[2] + add_offset[2]
+        df['PRES_surface_mean'] = df['PRES_surface_mean']*scale_factor[3] + add_offset[3]
+        df['SPFH_2maboveground_mean'] = df['SPFH_2maboveground_mean']*scale_factor[4] + add_offset[4]
+        df['TMP_2maboveground_mean'] = df['TMP_2maboveground_mean']*scale_factor[5] + add_offset[5]
+        df['UGRD_10maboveground_mean'] = df['UGRD_10maboveground_mean']*scale_factor[6] + add_offset[6]
+        df['VGRD_10maboveground_mean'] = df['VGRD_10maboveground_mean']*scale_factor[7] + add_offset[7]
 
         # Now add the ExactExtract csv data to netcdf variables 
-        APCP_surface[:,i] = df['APCP_surface_weighted_sum'].values
-        DLWRF_surface[:,i] = df['DLWRF_surface_weighted_mean'].values
-        DSWRF_surface[:,i] = df['DSWRF_surface_weighted_mean'].values
-        PRES_surface[:,i] = df['PRES_surface_weighted_mean'].values
-        SPFH_2maboveground[:,i] = df['SPFH_2maboveground_weighted_mean'].values
-        TMP_2maboveground[:,i] = df['TMP_2maboveground_weighted_mean'].values
-        UGRD_10maboveground[:,i] = df['UGRD_10maboveground_weighted_mean'].values
-        VGRD_10maboveground[:,i] = df['VGRD_10maboveground_weighted_mean'].values
+        APCP_surface[:,i] = df['APCP_surface_sum'].values
+        DLWRF_surface[:,i] = df['DLWRF_surface_mean'].values
+        DSWRF_surface[:,i] = df['DSWRF_surface_mean'].values
+        PRES_surface[:,i] = df['PRES_surface_mean'].values
+        SPFH_2maboveground[:,i] = df['SPFH_2maboveground_mean'].values
+        TMP_2maboveground[:,i] = df['TMP_2maboveground_mean'].values
+        UGRD_10maboveground[:,i] = df['UGRD_10maboveground_mean'].values
+        VGRD_10maboveground[:,i] = df['VGRD_10maboveground_mean'].values
 
         # save csv file with updated data after accounting for
         # scale factor and offset within netcdf metadata
@@ -230,7 +230,7 @@ def process_sublist(data : dict, lock: Lock, num: int):
     
         ''''''''''''''''''''''''''''
     Example call for ExactExtract Module
-    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "weighted_mean(VGRD_10maboveground)" -o NextGen_VGRD_Lumped_Sum_Forcings.csv
+    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "mean(VGRD_10maboveground)" -o NextGen_VGRD_Lumped_Sum_Forcings.csv
     '''''''''''''''''''''''''''
 
         # Call ExactExtract Module to produce NextGen csv weighted lumped sum data
@@ -305,9 +305,9 @@ if __name__ == '__main__':
     avg_variable_technique = '' 
     for i in np.arange(len(AORC_met_vars)):
         if AORC_met_vars[i] == 'APCP_surface':
-            avg_variable_technique += ' -s "weighted_sum('+AORC_met_vars[i]+')"' 
+            avg_variable_technique += ' -s "sum('+AORC_met_vars[i]+')"' 
         else:
-            avg_variable_technique += ' -s "weighted_mean('+AORC_met_vars[i]+')"' 
+            avg_variable_technique += ' -s "mean('+AORC_met_vars[i]+')"' 
 
 
 
@@ -365,7 +365,7 @@ if __name__ == '__main__':
 
     ''''''''''''''''''''''''''''
     Example call for ExactExtract Module requesting weight file
-    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "weighted_mean(VGRD_10maboveground)" --strategy "coverage_fraction" -o NextGen_AORC_weights.csv
+    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "mean(VGRD_10maboveground)" --strategy "coverage_fraction" -o NextGen_AORC_weights.csv
     '''''''''''''''''''''''''''
 
     # Call ExactExtract Module to produce weighted csv file for AORC forcings file
