@@ -78,9 +78,9 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
    
 
     print("num_catchments = {}".format(num_catchments))
-    cat_id = np.zeros(num_catchments, dtype=str)
+    cat_id = np.zeros(num_catchments, dtype="S16") # "cat-" + up to 7 digits... but maybe plus \0? Add some padding, JIC.
     print("num_time_steps = {}".format(num_files))
-    time = np.zeros(num_files, dtype=float)
+    time = np.zeros((num_catchments,num_files), dtype=float)
 
     APCP_surface = np.zeros((num_catchments,num_files), dtype=float)
     DLWRF_surface = np.zeros((num_catchments,num_files), dtype=float)
@@ -104,29 +104,29 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
     # Loop over ech ExactExtract csv file, read and append data to netcdf arrays
     for i in np.arange(num_files):
         file_date = get_date_time_csv(weighted_csv_files[i])
-        time[i] = (pd.Timestamp(datetime.datetime.strptime(file_date,'%Y%m%d%H')) - ref_date).total_seconds()
+        time[:,i] = (pd.Timestamp(datetime.datetime.strptime(file_date,'%Y%m%d%H')) - ref_date).total_seconds() # Broadcast at work
         df = pd.read_csv(weighted_csv_files[i])
         #since ExactExtract module doesn't account for scale_factor and offset
         # keys for a given variable, we will have to finish calculating the lumped
         # sum for the ExactExtract csv files
-        df['APCP_surface_weighted_sum'] = df['APCP_surface_weighted_sum']*scale_factor[0] + add_offset[0]
-        df['DLWRF_surface_weighted_mean'] = df['DLWRF_surface_weighted_mean']*scale_factor[1] + add_offset[1]
-        df['DSWRF_surface_weighted_mean'] = df['DSWRF_surface_weighted_mean']*scale_factor[2] + add_offset[2]
-        df['PRES_surface_weighted_mean'] = df['PRES_surface_weighted_mean']*scale_factor[3] + add_offset[3]
-        df['SPFH_2maboveground_weighted_mean'] = df['SPFH_2maboveground_weighted_mean']*scale_factor[4] + add_offset[4]
-        df['TMP_2maboveground_weighted_mean'] = df['TMP_2maboveground_weighted_mean']*scale_factor[5] + add_offset[5]
-        df['UGRD_10maboveground_weighted_mean'] = df['UGRD_10maboveground_weighted_mean']*scale_factor[6] + add_offset[6]
-        df['VGRD_10maboveground_weighted_mean'] = df['VGRD_10maboveground_weighted_mean']*scale_factor[7] + add_offset[7]
+        df['APCP_surface_sum'] = df['APCP_surface_sum']*scale_factor[0] + add_offset[0]
+        df['DLWRF_surface_mean'] = df['DLWRF_surface_mean']*scale_factor[1] + add_offset[1]
+        df['DSWRF_surface_mean'] = df['DSWRF_surface_mean']*scale_factor[2] + add_offset[2]
+        df['PRES_surface_mean'] = df['PRES_surface_mean']*scale_factor[3] + add_offset[3]
+        df['SPFH_2maboveground_mean'] = df['SPFH_2maboveground_mean']*scale_factor[4] + add_offset[4]
+        df['TMP_2maboveground_mean'] = df['TMP_2maboveground_mean']*scale_factor[5] + add_offset[5]
+        df['UGRD_10maboveground_mean'] = df['UGRD_10maboveground_mean']*scale_factor[6] + add_offset[6]
+        df['VGRD_10maboveground_mean'] = df['VGRD_10maboveground_mean']*scale_factor[7] + add_offset[7]
 
         # Now add the ExactExtract csv data to netcdf variables 
-        APCP_surface[:,i] = df['APCP_surface_weighted_sum'].values
-        DLWRF_surface[:,i] = df['DLWRF_surface_weighted_mean'].values
-        DSWRF_surface[:,i] = df['DSWRF_surface_weighted_mean'].values
-        PRES_surface[:,i] = df['PRES_surface_weighted_mean'].values
-        SPFH_2maboveground[:,i] = df['SPFH_2maboveground_weighted_mean'].values
-        TMP_2maboveground[:,i] = df['TMP_2maboveground_weighted_mean'].values
-        UGRD_10maboveground[:,i] = df['UGRD_10maboveground_weighted_mean'].values
-        VGRD_10maboveground[:,i] = df['VGRD_10maboveground_weighted_mean'].values
+        APCP_surface[:,i] = df['APCP_surface_sum'].values
+        DLWRF_surface[:,i] = df['DLWRF_surface_mean'].values
+        DSWRF_surface[:,i] = df['DSWRF_surface_mean'].values
+        PRES_surface[:,i] = df['PRES_surface_mean'].values
+        SPFH_2maboveground[:,i] = df['SPFH_2maboveground_mean'].values
+        TMP_2maboveground[:,i] = df['TMP_2maboveground_mean'].values
+        UGRD_10maboveground[:,i] = df['UGRD_10maboveground_mean'].values
+        VGRD_10maboveground[:,i] = df['VGRD_10maboveground_mean'].values
 
         # save csv file with updated data after accounting for
         # scale factor and offset within netcdf metadata
@@ -145,21 +145,29 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
     ncfile_out = nc4.Dataset(filename_out, 'w', format='NETCDF4')
 
     #add the dimensions
-    time_dim = ncfile_out.createDimension('time', num_files)
+    time_dim = ncfile_out.createDimension('time', None)
     catchment_id_dim = ncfile_out.createDimension('catchment-id', num_catchments)
     string_dim =ncfile_out.createDimension('str_dim', 1)
 
     # create variables
     cat_id_out = ncfile_out.createVariable('ids', 'str', ('catchment-id'), fill_value="None")
-    time_out = ncfile_out.createVariable('Time', 'double', ('time',), fill_value=-99999)
-    APCP_surface_out = ncfile_out.createVariable('RAINRATE', 'f4', ('catchment-id', 'time',), fill_value=-99999)
-    TMP_2maboveground_out = ncfile_out.createVariable('T2D', 'f4', ('catchment-id', 'time',), fill_value=-99999)
-    SPFH_2maboveground_out = ncfile_out.createVariable('Q2D', 'f4', ('catchment-id', 'time',), fill_value=-99999)
-    UGRD_10maboveground_out = ncfile_out.createVariable('U2D', 'f4', ('catchment-id', 'time',), fill_value=-99999)
-    VGRD_10maboveground_out = ncfile_out.createVariable('V2D', 'f4', ('catchment-id', 'time',), fill_value=-99999)
-    PRES_surface_out = ncfile_out.createVariable('PSFC', 'f4', ('catchment-id', 'time',), fill_value=-99999)
-    DSWRF_surface_out = ncfile_out.createVariable('SWDOWN', 'f4', ('catchment-id', 'time',), fill_value=-99999)
-    DLWRF_surface_out = ncfile_out.createVariable('LWDOWN', 'f4', ('catchment-id', 'time',), fill_value=-99999)
+    time_out = ncfile_out.createVariable('Time', 'double', ('catchment-id','time',), fill_value=-99999)
+    APCP_surface_out = ncfile_out.createVariable('RAINRATE', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+    TMP_2maboveground_out = ncfile_out.createVariable('T2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+    SPFH_2maboveground_out = ncfile_out.createVariable('Q2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+    UGRD_10maboveground_out = ncfile_out.createVariable('U2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+    VGRD_10maboveground_out = ncfile_out.createVariable('V2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+    PRES_surface_out = ncfile_out.createVariable('PSFC', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+    DSWRF_surface_out = ncfile_out.createVariable('SWDOWN', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+    DLWRF_surface_out = ncfile_out.createVariable('LWDOWN', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
 
     #set output netcdf file atributes
     varout_dict = {'time':time_out,
@@ -174,7 +182,13 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
         else:
             varout_name = varout_dict[name]
             for attrname in variable.ncattrs():
-                if attrname != '_FillValue':
+                if name == "time" and attrname == "units":
+                    #slight hack here to be compatible with current NetCDFPerFeatureDataProvider
+                    # ... change it instead?
+                    #see also https://www.unidata.ucar.edu/software/netcdf/time/recs.html
+                    setattr(varout_name, "units", "seconds")
+                    setattr(varout_name, "epoch_start", "01/01/1970 00:00:00")
+                elif attrname != '_FillValue':
                     setattr(varout_name, attrname, getattr(variable, attrname))
 
     #drop the scale_factor from the output netcdf forcing file attributes
@@ -191,7 +205,7 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
     setattr(cat_id_out, 'description', 'catchment_id')
    
     cat_id_out[:] = cat_id[:]
-    time_out[:] = time[:]
+    time_out[:,:] = time[:,:]
     APCP_surface_out[:,:] = APCP_surface[:,:]
     DLWRF_surface_out[:,:] = DLWRF_surface[:,:]
     DSWRF_surface_out[:,:] = DSWRF_surface[:,:]
@@ -230,7 +244,7 @@ def process_sublist(data : dict, lock: Lock, num: int):
     
         ''''''''''''''''''''''''''''
     Example call for ExactExtract Module
-    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "weighted_mean(VGRD_10maboveground)" -o NextGen_VGRD_Lumped_Sum_Forcings.csv
+    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "mean(VGRD_10maboveground)" -o NextGen_VGRD_Lumped_Sum_Forcings.csv
     '''''''''''''''''''''''''''
 
         # Call ExactExtract Module to produce NextGen csv weighted lumped sum data
@@ -305,9 +319,9 @@ if __name__ == '__main__':
     avg_variable_technique = '' 
     for i in np.arange(len(AORC_met_vars)):
         if AORC_met_vars[i] == 'APCP_surface':
-            avg_variable_technique += ' -s "weighted_sum('+AORC_met_vars[i]+')"' 
+            avg_variable_technique += ' -s "sum('+AORC_met_vars[i]+')"' 
         else:
-            avg_variable_technique += ' -s "weighted_mean('+AORC_met_vars[i]+')"' 
+            avg_variable_technique += ' -s "mean('+AORC_met_vars[i]+')"' 
 
 
 
@@ -365,7 +379,7 @@ if __name__ == '__main__':
 
     ''''''''''''''''''''''''''''
     Example call for ExactExtract Module requesting weight file
-    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "weighted_mean(VGRD_10maboveground)" --strategy "coverage_fraction" -o NextGen_AORC_weights.csv
+    exactextract -r "VGRD_10maboveground:NETCDF:AORC_Charlotte_2015121309.nc4:VGRD_10maboveground" -p catchment_data.geojson -f id -s "mean(VGRD_10maboveground)" --strategy "coverage_fraction" -o NextGen_AORC_weights.csv
     '''''''''''''''''''''''''''
 
     # Call ExactExtract Module to produce weighted csv file for AORC forcings file
