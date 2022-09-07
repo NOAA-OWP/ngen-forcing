@@ -153,21 +153,21 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
     cat_id_out = ncfile_out.createVariable('ids', 'str', ('catchment-id'), fill_value="None")
     time_out = ncfile_out.createVariable('Time', 'double', ('catchment-id','time',), fill_value=-99999)
     APCP_surface_out = ncfile_out.createVariable('RAINRATE', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     TMP_2maboveground_out = ncfile_out.createVariable('T2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     SPFH_2maboveground_out = ncfile_out.createVariable('Q2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     UGRD_10maboveground_out = ncfile_out.createVariable('U2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     VGRD_10maboveground_out = ncfile_out.createVariable('V2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     PRES_surface_out = ncfile_out.createVariable('PSFC', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     DSWRF_surface_out = ncfile_out.createVariable('SWDOWN', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     DLWRF_surface_out = ncfile_out.createVariable('LWDOWN', 'f4', ('catchment-id', 'time',), fill_value=-99999,
-        chunksizes=(num_catchments,1), compression="zlib", complevel=1, shuffle=True)
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
 
     #set output netcdf file atributes
     varout_dict = {'time':time_out,
