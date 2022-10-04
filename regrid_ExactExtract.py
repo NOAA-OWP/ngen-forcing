@@ -109,7 +109,7 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
         #since ExactExtract module doesn't account for scale_factor and offset
         # keys for a given variable, we will have to finish calculating the lumped
         # sum for the ExactExtract csv files
-        df['APCP_surface_sum'] = df['APCP_surface_sum']*scale_factor[0] + add_offset[0]
+        df['APCP_surface_mean'] = df['APCP_surface_mean']*scale_factor[0] + add_offset[0]
         df['DLWRF_surface_mean'] = df['DLWRF_surface_mean']*scale_factor[1] + add_offset[1]
         df['DSWRF_surface_mean'] = df['DSWRF_surface_mean']*scale_factor[2] + add_offset[2]
         df['PRES_surface_mean'] = df['PRES_surface_mean']*scale_factor[3] + add_offset[3]
@@ -119,7 +119,7 @@ def csv_to_netcdf(num_catchments, weighted_csv_files, aorc_ncfile):
         df['VGRD_10maboveground_mean'] = df['VGRD_10maboveground_mean']*scale_factor[7] + add_offset[7]
 
         # Now add the ExactExtract csv data to netcdf variables 
-        APCP_surface[:,i] = df['APCP_surface_sum'].values
+        APCP_surface[:,i] = df['APCP_surface_mean'].values
         DLWRF_surface[:,i] = df['DLWRF_surface_mean'].values
         DSWRF_surface[:,i] = df['DSWRF_surface_mean'].values
         PRES_surface[:,i] = df['PRES_surface_mean'].values
@@ -304,10 +304,7 @@ if __name__ == '__main__':
   
     avg_variable_technique = '' 
     for i in np.arange(len(AORC_met_vars)):
-        if AORC_met_vars[i] == 'APCP_surface':
-            avg_variable_technique += ' -s "sum('+AORC_met_vars[i]+')"' 
-        else:
-            avg_variable_technique += ' -s "mean('+AORC_met_vars[i]+')"' 
+        avg_variable_technique += ' -s "mean('+AORC_met_vars[i]+')"' 
 
 
 
