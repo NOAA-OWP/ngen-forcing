@@ -1,9 +1,9 @@
 # Testing BMI Python modules.
- - AORC_model.py: This file is the " AORC model ExactExtract Manual Regridding Method", which will directly download AORC data for user-specified start time and yields regridded meteorological forcings as output. 
+ - AORC_model.py: This file is the " AORC model ExactExtract Manual Regridding Method", which will directly download AORC data for user-specified start time and yields regridded meteorological forcings as output. This AORC model will directly use coverage fractions and raster indices from a user specifed ExactExtract "weights" file to manually calculate aerial weighted averages for AORC forcings data based on a given NextGen hydrofabric. 
  - AORC_bmi_model.py: This is the Basic Model Interface that talks with the model. We've integrated the AORC forcing initalization phase to ingest AORC ExactExtract weights and load up the NextGen hydrofabric and a AORC forcing file to initalize BMI arrays. 
  - AORC_run_bmi_model.py: This is a file that mimics the framework, in the sense that it initializes the model with the BMI function. Then it runs the model with the BMI Update function, etc.
  - AORC_run_bmi_unit_test.py: This is a file that runs each BMI unit test to make sure that the BMI is complete and functioning as expected.
- - config.yml: This is a configuration file that the BMI reads to set inital_time (initial value of current_model_time) and time_step_seconds (time_step_size), the NextGen hydrofabric file (hyfabfile), and the user specified ExactExtract weights file stating coverage fraction weights for the NextGen hydrofabric (EE_weights). 
+ - config.yml: This is a configuration file that the BMI reads to set inital_time (initial value of current_model_time) and time_step_seconds (time_step_size), a user specified timestamp string indication the start time of the AORC BMI model (start_time), the NextGen hydrofabric file (hyfabfile), and the user specified ExactExtract weights file stating coverage fraction weights for the NextGen hydrofabric (EE_weights). 
  - environment.yml: Environment file with the required Python libraries needed to run the model with BMI. Create the environment with this command: `conda env create -f environment.yml`, then activate it with `conda activate bmi_test`
 
 # About
