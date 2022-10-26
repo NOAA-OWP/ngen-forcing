@@ -1,4 +1,4 @@
-# Testing BMI Python modules.
+# Testing AORC BMI Python modules.
  - AORC_model.py: This file is the " AORC model ExactExtract Python Bindings Method", which will directly download AORC data for user-specified start time and yields regridded meteorological forcings as output. The ExactExtract Python Bindings method requires user to install ExactExtract bindings and will use python functions to directly regrid AORC meteorological forcings using python wrapped C+ ExactExtract functions based on a given NextGen hydrofabric. 
  - AORC_bmi_model.py: This is the Basic Model Interface that talks with the model. We've integrated the AORC forcing initalization phase to ingest AORC ExactExtract weights and load up the NextGen hydrofabric and a AORC forcing file to initalize BMI arrays. 
  - AORC_run_bmi_model.py: This is a file that mimics the framework, in the sense that it initializes the model with the BMI function. Then it runs the model with the BMI Update function, etc.
