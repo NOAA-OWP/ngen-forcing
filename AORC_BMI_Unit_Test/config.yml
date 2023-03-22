@@ -1,0 +1,9 @@
+start_time : 2011-01-01 00:00:00
+time_step_seconds: 3600
+initial_time: 0
+ERRDAP_data : "true"
+aorc_beg : "AORC-OWP_"
+aorc_end : "z.nc4"
+aorc_new_end : ".nc4"
+base_url : 'https/pathway/to/errdap/aorc/url/directory'
+AORC_data : "/path/to/AORC_forcings"

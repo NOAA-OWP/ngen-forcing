@@ -1,0 +1,9 @@
+pathlib
+numpy
+pandas
+pyyaml
+bmipy
+netCDF4
+wget
+ssl
+os
