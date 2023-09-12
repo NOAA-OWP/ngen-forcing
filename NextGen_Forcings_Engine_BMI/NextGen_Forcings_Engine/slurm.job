@@ -1,0 +1,79 @@
+#!/bin/sh -l
+#SBATCH -A ohd            # -A, --account=name          charge job to specified account
+##SBATCH -q debug              # coastal group can only submit to this Q
+#SBATCH -e slurm.error        # -e, --error=err             file for batch script's standard error
+#SBATCH --ignore-pbs          # --ignore-pbs            Ignore #PBS options in the batch script
+#SBATCH -J BMI_Forcing_Engine              # -J, --job-name=jobname      name of job
+                              # (type = block|cyclic|arbitrary)
+#SBATCH --mail-user=Jason.Ducker@noaa.gov   # --mail-user=user        who to send email notification for job state
+                              # changes
+##SBATCH --ntasks-per-node=24   # --ntasks-per-node=n     number of tasks to invoke on each node
+##SBATCH -N 1                # -N, --nodes=N           number of nodes on which to run (N = min[-max])
+#SBATCH -n 1
+##SBATCH --exclusive
+##SBATCH --parsable            # --parsable              outputs only the jobid and cluster name (if present),
+##SBATCH --mem-per-cpu=9G
+##SBATCH --nodes=1
+##SBATCH --ntasks-per-node=10
+##SBATCH --cpus-per-task=10
+##SBATCH -n 36
+#SBATCH --exclusive
+#SBATCH --partition=bigmem
+                              # separated by semicolon, only on successful submission.
+#SBATCH -t 480              # -t, --time=minutes          time limit
+
+############################### main - to run: $sbatch nsem.job ##########################
+set -x
+echo $SLURM_SUBMIT_DIR            # (in Slurm, jobs start in "current dir")       
+echo $SLURM_JOBID                                                      
+echo $SLURM_JOB_NAME
+echo $SLURM_NNODES                                                     
+echo $SLURM_TASKS_PER_NODE
+
+# PBS_NODEFILE:  There is not a direct equivalent for this, but 
+echo $SLURM_NODELIST              # give you the list of assigned nodes.
+
+# cd $SLURM_SUBMIT_DIR
+echo "STARTING THE JOB AT"
+date
+
+#export OMP_NUM_THREADS=10
+module use /home/emc.nemspara/SOFT-hera/modulefiles
+module load intel/18.0.5.274
+module load impi/2018.0.4
+module load netcdf_parallel/4.7.4.release
+
+export FC=mpiifort
+export CXX=mpiicpc
+export CC=mpiicc
+
+export ESMFMKFILE=/scratch2/NCEPDEV/ohd/Jason.Ducker/esmf-release-8.1.0/lib/libO/Linux.intel.64.intelmpi.default/esmf.mk
+
+#module load wgrib2/2.0.8
+
+#export WGRIB2=/apps/wgrib2/2.0.8/intel/18.0.3.222/bin/wgrib2
+export WGRIB2=/scratch2/NCEPDEV/ohd/Jason.Ducker/grib2/wgrib2/wgrib2
+export PATH=/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/ngen_engine/bin/:$PATH
+
+mpiexec python3 run_bmi_model.py
+#mpiexec python3 run_bmi_unit_test.py
+
+######### For Ziya ##########
+#mpiexec python3 -E genForcing.py ./Config/Hera/v3.0/template_forcing_engine_Medium_Blend.config "v3.0" "Medium_range_blend"
+#############################
+
+
+################# CONUS RUNS ###################
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/esmpy/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcings_Engine/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcings_Engine/Config/Hera/v3.0/template_forcing_engine_Medium.config "v3.0" "Medium_Range"
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/esmpy/bin/mpirun -np ${SLURM_NTASKS} /scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/esmpy/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcings_Engine/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcings_Engine/Config/Hera/v3.0/template_forcing_engine_Medium.config "v3.0" "Medium_Range"
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_Medium_Blend.config "v3.0" "Medium_range_blend"
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_Long.config "v3.0" "Long_Range"
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_Analysis.config "v3.0" "AnA"
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_Short.config "v3.0" "Short_range"
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_AORC.config "v3.0" "Retrospective"
+##############################################
+############# Non-CONUS RUNS ###################
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_Alaska_Medium.config "v3.0" "Alaska_Medium_range"
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_Hawaii_Analysis.config "v3.0" "Hawaii_AnA"
+#mpiexec python3 -E /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/genForcing.py /scratch2/NCEPDEV/ohd/Jason.Ducker/forcing_test/WrfHydroForcing-main/Config/Hera/v3.0/template_forcing_engine_PuertoRico_Short.config "v3.0" "Puerto_Rico_Short"
+date
