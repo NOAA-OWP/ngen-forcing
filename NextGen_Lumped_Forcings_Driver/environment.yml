@@ -1,0 +1,23 @@
+name: NextGen_lumped_forcings_driver
+channels:
+  - defaults
+  - anaconda
+  - conda-forge
+dependencies:
+  - xarray
+  - dask
+  - pandas
+  - python=3.7
+  - netCDF4
+  - pybind11
+  - geopandas
+  - gdal
+  - re
+  - numpy
+  - ssl
+  - wget
+  - pathlib
+  - os
+  - shapely
+  - scipy
+  - multiprocessing
