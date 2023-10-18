@@ -1,1 +1,0 @@
-from AORC_bmi_model import AORC_bmi_model

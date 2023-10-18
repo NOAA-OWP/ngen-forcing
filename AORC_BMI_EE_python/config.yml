@@ -1,4 +1,0 @@
-hyfabfile : /home/jason.ducker/hydrofabric/CONUS/v1.2/final/nextgen_01/catchment_data.json
-start_time : 2012-10-01 00:00:00
-time_step_seconds: 3600
-initial_time: 0
