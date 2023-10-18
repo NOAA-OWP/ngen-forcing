@@ -1,8 +1,0 @@
-numpy
-pandas
-pyyaml
-bmipy
-netCDF4
-osgeo
-wget
-exactextract
