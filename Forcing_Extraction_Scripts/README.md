@@ -2,7 +2,7 @@
 This directory contains a series of scripts for each NWM domain subdirectory (CONUS, Alaska, Puerto Rico, Hawaii) that encompasses the required meteorological forcing data products needed for each regional NWMv3.0 operational configuration setup. Each script is a particular meteorlogical forcing data product that is available to download off the NOMADS server. Availability of each meteorlogical forcing data product varies, but a user can generally extract at least the last 24 hours of previous data products or forecast cycles available. 
 
 # Required Python packages to execute scripts
-datetime, urllib, http, os, sys, shutil, beautifulsoup4, time, argparse
+datetime, urllib, http, os, sys, shutil, beautifulsoup4, time, requests, argparse
 
 # Script Execution Example and Argument Descriptions
 
