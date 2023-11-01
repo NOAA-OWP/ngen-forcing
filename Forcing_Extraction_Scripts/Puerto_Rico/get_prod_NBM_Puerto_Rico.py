@@ -13,13 +13,10 @@ from http import cookiejar
 import os
 import sys
 import shutil
-import smtplib
-from email.mime.text import MIMEText
 import time
 import requests
 from bs4 import BeautifulSoup
 import argparse
-import pathlib
 
 def get_url_paths(url, ext='', params={}):
     response = requests.get(url, params=params)
