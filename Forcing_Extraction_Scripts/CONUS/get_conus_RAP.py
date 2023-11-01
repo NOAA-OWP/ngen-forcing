@@ -13,11 +13,8 @@ from http import cookiejar
 import os
 import sys
 import shutil
-import smtplib
-from email.mime.text import MIMEText
 import time
 import argparse
-import pathlib
 
 def main(args):
     outDir = args.outDir
