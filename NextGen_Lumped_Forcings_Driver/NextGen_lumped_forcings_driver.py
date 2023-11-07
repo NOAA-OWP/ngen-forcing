@@ -13,7 +13,7 @@ from NextGen_CFS_forcings_module import NextGen_Forcings_CFS #NextGen_CFS_forcin
 
 
 ###### NextGen lumped forcings driver #######
-def NextGen_lumped_forcings_driver(output_root, start_time, end_time, met_dataset, hyfabfile, met_dataset_pathway=None, weights_file=None, netcdf=True, csv=False, bias_calibration = False, downscaling = False, CONUS=False, AnA=False, num_processes=1):
+def NextGen_lumped_forcings_driver(output_root, start_time, end_time, met_dataset, hyfabfile, hyfabfile_parquet=None, met_dataset_pathway=None, weights_file=None, netcdf=True, csv=False, bias_calibration = False, downscaling = False, CONUS=False, AnA=False, num_processes=1):
 
     # provide checks on user input arguements to ensure they will work with script
     if(os.path.isdir(output_root) == False):
@@ -22,6 +22,10 @@ def NextGen_lumped_forcings_driver(output_root, start_time, end_time, met_datase
     if(os.path.isfile(hyfabfile) == False):
         raise TypeError("The specified hydrofabric file pathway is not an actual file. Module is exiting.")
 
+    if(hyfabfile_parquet != None and os.path.isfile(hyfabfile_parquet) == False and met_dataset.lower() != "aorc"):
+        if(downscaling == True or bias_calibration == True):
+            raise TypeError("The user has specified downscaling and/or bias calibration functions to be implemented without supplying the hydrofabric parquet file to supplement forcing metadata needed for that functionality. Please speciify hydrofabric parquet file pathway. Module is exiting.")
+    
     if(weights_file != None and os.path.isfile(weights_file) == False):
         raise TypeError("The specified ExactExtract coverage fraction weights file pathway is not an actual file. Module is exiting.")
 
@@ -51,14 +55,22 @@ def NextGen_lumped_forcings_driver(output_root, start_time, end_time, met_datase
     # is that we will create the NextGen forcing file for the entire 
     # forecast cycle, otherwise we need to check the validity of the
     # user start and end time for pulling AORC data
-    if(met_dataset.lower() == "aorc"):
+    if(met_dataset.lower() == "aorc" and met_dataset_pathway == None):
         # Check to see if pandas datetime accepts AORC start and end time
         # format, otherwise, throw error and quit module
         try:
             test = pd.period_range(start=start_time,end=end_time,freq='H')
             if(test.year.min() < 1997 or test.year.max() > 2021):
                 raise ValueError("The NWC ERRDAP server only holds AORC data from 1997-02-01 to 2021-08-31. The user must specify a start and end date between this range. Module is exiting")
-               
+            elif( test.year.min() == 1997):
+                test2 = pd.period_range(start=start_time,end="1997-04-01 00:00:00",freq='H')
+                if(test2.month.min() == 1):
+                    raise ValueError("The NWC ERRDAP server only holds AORC data from 1997-02-01 to 2021-08-31. The user must specify a start and end date between this range. Module is exiting")
+            elif( test.year.max() == 2021):
+                test2 = pd.period_range(start="2021-01-01 00:00:00",end=end_time,freq='H')
+                if(8 in test2.month):
+                    raise ValueError("The NWC ERRDAP server only holds AORC data from 1997-02-01 to 2021-08-31. The user must specify a start and end date between this range. Module is exiting")
+                    
         except:
             raise TypeError("Start and/or End time syntax was in an incorrect format. The accepted format is 'YYYY-MM-DD HH:00:00'. Please redo the format for these variables. Module is exiting")
 
@@ -72,9 +84,9 @@ def NextGen_lumped_forcings_driver(output_root, start_time, end_time, met_datase
     if(met_dataset.lower() == "aorc"):
         NextGen_Forcings_AORC(output_root, met_dataset_pathway, start_time, end_time, netcdf, csv, CONUS, hyfabfile, weights_file, num_processes)
     elif(met_dataset.lower() == "gfs"):
-        NextGen_Forcings_GFS(output_root, met_dataset_pathway, netcdf, csv, hyfabfile, weights_file, bias_calibration, downscaling, num_processes)
+        NextGen_Forcings_GFS(output_root, met_dataset_pathway, netcdf, csv, hyfabfile, hyfabfile_parquet, weights_file, bias_calibration, downscaling, num_processes)
     elif(met_dataset.lower() == "cfs"):
-        NextGen_Forcings_CFS(output_root, met_dataset_pathway, netcdf, csv, hyfabfile, weights_file, bias_calibration, downscaling, num_processes)
+        NextGen_Forcings_CFS(output_root, met_dataset_pathway, netcdf, csv, hyfabfile, hyfabfile_parquet, weights_file, bias_calibration, downscaling, num_processes)
     elif(met_dataset.lower() == "hrrr"):
-        NextGen_Forcings_HRRR(output_root, met_dataset_pathway, start_time, AnA, netcdf, csv, hyfabfile, weights_file, bias_calibration, downscaling, num_processes)
+        NextGen_Forcings_HRRR(output_root, met_dataset_pathway, start_time, AnA, netcdf, csv, hyfabfile, hyfabfile_parquet, weights_file, bias_calibration, downscaling, num_processes)
 
