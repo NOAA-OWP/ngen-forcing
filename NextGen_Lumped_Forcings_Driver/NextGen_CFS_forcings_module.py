@@ -221,85 +221,6 @@ def process_csv_ids(data : dict, lock: Lock, num: int, csv_dir):
     # collect the garbage within the thread before sending results back to main
     # thread to maximize our RAM as much as possible
     gc.collect()
-
-# CFS bias correction function here not implemented in the lumped forcings module
-# because we are unsure if these bias correections can be translated to other domains
-# besides the WRF-Hydro domain it appears to have been constructed for previously.
-def CFS_bias_correction(dataset, hour, current_output_step, NextGen_catchment_features):
-
-    # Routine to run CDF/PDF bias correction parametric corrections
-    # SPECIFIC to the NWM long-range configuration.
-
-    # Create a dictionary that maps forcing numbers to the expected NetCDF variable names, etc.
-    nldas_param1_vars = {
-        2: 'UGRD10M_PARAM_1',
-        3: 'VGRD10M_PARAM_1',
-        6: 'LW_PARAM_1',
-        4: 'PRATE_PARAM_1',
-        0: 'T2M_PARAM_1',
-        1: 'Q2M_PARAM_1',
-        7: 'PSFC_PARAM_1',
-        5: 'SW_PARAM_1'
-    }
-
-    nldas_param2_vars = {
-        2: 'UGRD10M_PARAM_2',
-        3: 'VGRD10M_PARAM_2',
-        6: 'LW_PARAM_2',
-        4: 'PRATE_PARAM_2',
-        0: 'T2M_PARAM_2',
-        1: 'Q2M_PARAM_2',
-        7: 'PSFC_PARAM_2',
-        5: 'SW_PARAM_2'
-    }
-
-    cfs_param_path_vars = {
-        2: 'ugrd',
-        3: 'vgrd',
-        6: 'dlwsfc',
-        4: 'prate',
-        0: 'tmp2m',
-        1: 'q2m',
-        7: 'pressfc',
-        5: 'dswsfc'
-    }
-
-    # Specify the min/max ranges on CDF/PDF values for each variable
-    val_range1 = {
-        2: -50.0,
-        3: -50.0,
-        6: 1.0,
-        4: 0.01,
-        0: 200.0,
-        1: 0.01,
-        7: 50000.0,
-        5: 0.0
-    }
-
-    val_range2 = {
-        2: 50.0,
-        3: 50.0,
-        6: 800.0,
-        4: 100.0,
-        0: 330.0,
-        1: 40.0,
-        7: 1100000.0,
-        5: 0.0
-    }
-
-    val_bins = {
-        2: 1000,
-        3: 1000,
-        6: 4000,
-        4: 2000,
-        0: 1300,
-        1: 1000,
-        7: 3000,
-        5: 0
-    }
-
-    return dataset
-   
     
 def CFS_downscaling(csv_results,timestamp,NextGen_catchment_features):
     
@@ -349,7 +270,7 @@ def cfs_temp_downscaling_simple_lapse(tmp_in, elev,NextGen_catchment_features):
 
     tmp2m = tmp_in
 
-    elevDiff = elev - NextGen_catchment_features.elevation.values
+    elevDiff = elev - NextGen_catchment_features.elevation_mean.values
 
     # Apply single lapse rate value to the input 2-meter
     # temperature values.
@@ -368,7 +289,7 @@ def cfs_pres_downscaling_classic(pres_in, tmp2m, elev,NextGen_catchment_features
     :param NextGen_catchment_features:  globally available
     :return: pres_downscaled - downscaled surface air pressure
     """
-    elevDiff = elev - NextGen_catchment_features.elevation.values
+    elevDiff = elev - NextGen_catchment_features.elevation_mean.values
 
     pres_downscaled = pres_in + (pres_in*elevDiff*9.8)/(tmp2m*287.05)
 
@@ -460,9 +381,9 @@ def calc_coszen(declin,timestamp,NextGen_catchment_features):
            (0.014615 * math.cos(2 * da)) - (0.04089 * math.sin(2 * da))) * 229.18
     xtime = timestamp.hour * 60.0  # Minutes of day
     xt24 = int(xtime) % 1440 + eot
-    tloctm = NextGen_catchment_features.centroid_lon.values/15.0 + gmt + xt24/60.0
+    tloctm = NextGen_catchment_features.X.values/15.0 + gmt + xt24/60.0
     hrang = ((tloctm - 12.0) * degrad) * 15.0
-    xxlat = NextGen_catchment_features.centroid_lat.values * degrad
+    xxlat = NextGen_catchment_features.Y.values * degrad
     coszen = np.sin(xxlat) * math.sin(declin) + np.cos(xxlat) * math.cos(declin) * np.cos(hrang)
 
     # Reset temporary variables to free up memory.
@@ -492,7 +413,7 @@ def TOPO_RAD_ADJ_DRVR(dswr_in,COSZEN,declin,solcon,hrang2d,NextGen_catchment_fea
     ny = len(NextGen_catchment_features)
     nx = len(NextGen_catchment_features)
 
-    xxlat = NextGen_catchment_features.centroid_lat.values*degrad
+    xxlat = NextGen_catchment_features.Y.values*degrad
 
     # Sanity checking on incoming shortwave grid.
     SWDOWN = dswr_in
@@ -505,19 +426,19 @@ def TOPO_RAD_ADJ_DRVR(dswr_in,COSZEN,declin,solcon,hrang2d,NextGen_catchment_fea
     corr_frac[:] = 0
     diffuse_frac[:] = 0
 
-    indTmp = np.where((NextGen_catchment_features.slope_m_km.values == 0.0) &
+    indTmp = np.where((NextGen_catchment_features.slope_mean.values == 0.0) &
                       (SWDOWN <= 10.0))
     corr_frac[indTmp] = 1
 
     term1 = np.sin(xxlat) * np.cos(hrang2d)
-    term2 = ((0 - np.cos(NextGen_catchment_features.aspect.values)) *
-             np.sin(NextGen_catchment_features.slope_m_km.values))
-    term3 = np.sin(hrang2d) * (np.sin(NextGen_catchment_features.aspect.values) *
-                               np.sin(NextGen_catchment_features.slope_m_km.values))
-    term4 = (np.cos(xxlat) * np.cos(hrang2d)) * np.cos(NextGen_catchment_features.slope_m_km.values)
-    term5 = np.cos(xxlat) * (np.cos(NextGen_catchment_features.aspect.values) *
-                             np.sin(NextGen_catchment_features.slope_m_km.values))
-    term6 = np.sin(xxlat) * np.cos(NextGen_catchment_features.slope_m_km.values)
+    term2 = ((0 - np.cos(NextGen_catchment_features.aspect_c_mean.values)) *
+             np.sin(NextGen_catchment_features.slope_mean.values))
+    term3 = np.sin(hrang2d) * (np.sin(NextGen_catchment_features.aspect_c_mean.values) *
+                               np.sin(NextGen_catchment_features.slope_mean.values))
+    term4 = (np.cos(xxlat) * np.cos(hrang2d)) * np.cos(NextGen_catchment_features.slope_mean.values)
+    term5 = np.cos(xxlat) * (np.cos(NextGen_catchment_features.aspect_c_mean.values) *
+                             np.sin(NextGen_catchment_features.slope_mean.values))
+    term6 = np.sin(xxlat) * np.cos(NextGen_catchment_features.slope_mean.values)
 
     csza_slp = (term1 * term2 - term3 + term4) * math.cos(declin) + \
                (term5 + term6) * math.sin(declin)
@@ -594,7 +515,7 @@ def Python_ExactExtract_Coverage_Fraction_Weights(cfs_grib2_file, hyfab_file, tr
     # Return the pathway of the coverage fraction weight file
     return EE_coverage_fraction_csv
    
-def python_ExactExtract_Interp_weights(output_root,cfs_grib2_file,datafiles,forecast_hour,hyfabfile,NextGen_catchment_features,CFS_weights_copy,bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour):
+def python_ExactExtract_Interp_weights(output_root,cfs_grib2_file,datafiles,forecast_hour,hyfabfile,forcing_metadata,CFS_weights_copy,bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour):
 
     # Get timestamp of inital cfs grib2 file within thread
     cfs_grib2_file_init = "flxf" + cfs_grib2_file.split("flxf")[1].split(".")[0]
@@ -802,7 +723,7 @@ def python_ExactExtract_Interp_weights(output_root,cfs_grib2_file,datafiles,fore
 
         ############### This is where we call CFS downscaling function  #########
         if(downscaling):
-            results = CFS_downscaling(results,timestamps[i],NextGen_catchment_features)
+            results = CFS_downscaling(results,timestamps[i],forcing_metadata)
 
 
         ####################################################################
@@ -872,7 +793,7 @@ def gdal_grib2_transformation(grib2_file):
     return new_transform, srs, i1, j1, new_cols, new_rows
 
 
-def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, datafiles, hyfabfile, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus):
+def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, datafiles, hyfabfile, forcing_metadata, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus):
     # Get number of files to loop through for each thread
     num_files = len(data["forcing_files"])    
 
@@ -902,7 +823,7 @@ def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, 
         # 6 hourly output timestamps, while accounting whether
         # or not user requests weight calculation that are already
         # provided within NextGen hydrofabric file
-        EE_df = python_ExactExtract_Interp_weights(output_root,cfs_grib2_file,datafiles,file_index_id,hyfabfile,NextGen_catchment_features,weights.copy(),bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour)
+        EE_df = python_ExactExtract_Interp_weights(output_root,cfs_grib2_file,datafiles,file_index_id,hyfabfile,forcing_metadata,weights.copy(),bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour)
 
         # concatenate the regridded data to threads final dataframe
         EE_df_final = pd.concat([EE_df_final,EE_df])
@@ -917,7 +838,7 @@ def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, 
     # Put regridded results into thread queue to return to main thread
     EE_results.put(EE_df_final)
 
-def NextGen_Forcings_CFS(output_root, cfs_grib2, netcdf, csv, hyfabfile, weights_file, bias_calibration, downscaling, num_processes):
+def NextGen_Forcings_CFS(output_root, cfs_grib2, netcdf, csv, hyfabfile, hyfabfile_parquet, weights_file, bias_calibration, downscaling, num_processes):
 
     if(netcdf):
         netcdf_dir = join(output_root,"netcdf")
@@ -934,7 +855,7 @@ def NextGen_Forcings_CFS(output_root, cfs_grib2, netcdf, csv, hyfabfile, weights
         csv_dir = ''
 
     #generate catchment geometry from hydrofabric
-    cat_df_full = gpd.read_file(hyfabfile)
+    cat_df_full = gpd.read_file(hyfabfile,layer='divides')
     g = [i for i in cat_df_full.geometry]
     h = [i for i in cat_df_full.divide_id]
     n_cats = len(g)
@@ -979,7 +900,22 @@ def NextGen_Forcings_CFS(output_root, cfs_grib2, netcdf, csv, hyfabfile, weights
     hyfabfile_final = join(output_root,"hyfabfile_final.json")
     hyfab_data = gpd.read_file(hyfabfile,layer='divides')
     hyfab_data = hyfab_data.to_crs(projection.ExportToWkt())
+
+    # Now sort the catchment id values and save the geopackage file
+    # into a geojson file
+    hyfab_data = hyfab_data.sort_values('divide_id')
+    hyfab_data = hyfab_data.reset_index()
+    hyfab_data = hyfab_data.drop('index',axis=1)
     hyfab_data.to_file(hyfabfile_final,driver="GeoJSON")
+
+    # Flag to see if user has already provided the hydrofabric parquet
+    # file that is required to process forcing metadata for
+    # NCAR bias/calibration functionality if selected
+    if(hyfabfile_parquet != None):
+        forcing_metadata = pd.read_parquet(hyfabfile_parquet)
+        forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean','aspect_c_mean','X', 'Y']]
+        forcing_metadata = forcing_metadata.sort_values('divide_id')
+        forcing_metadata = forcing_metadata.reset_index()
     
     # Flag to see if user has already provided an ExactExtract
     # coverage weights file, otherwise go ahead and produce the file
@@ -1009,7 +945,7 @@ def NextGen_Forcings_CFS(output_root, cfs_grib2, netcdf, csv, hyfabfile, weights
         #append to the list
         process_data.append(data)
 
-        p = Process(target=process_sublist, args=(data, lock, i, EE_results, output_root, datafiles, hyfabfile_final, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus))
+        p = Process(target=process_sublist, args=(data, lock, i, EE_results, output_root, datafiles, hyfabfile_final, forcing_metadata, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus))
 
         process_list.append(p)
 
