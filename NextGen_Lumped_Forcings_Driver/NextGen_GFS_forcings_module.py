@@ -345,7 +345,7 @@ def gfs_temp_downscaling_simple_lapse(tmp_in, elev,NextGen_catchment_features):
 
     tmp2m = tmp_in
 
-    elevDiff = elev - NextGen_catchment_features.elevation.values
+    elevDiff = elev - NextGen_catchment_features.elevation_mean.values
 
     # Apply single lapse rate value to the input 2-meter
     # temperature values.
@@ -364,7 +364,7 @@ def gfs_pres_downscaling_classic(pres_in, tmp2m, elev,NextGen_catchment_features
     :param NextGen_catchment_features:  globally available
     :return: pres_downscaled - downscaled surface air pressure
     """
-    elevDiff = elev - NextGen_catchment_features.elevation.values
+    elevDiff = elev - NextGen_catchment_features.elevation_mean.values
     pres_downscaled = pres_in + (pres_in*elevDiff*9.8)/(tmp2m*287.05)
 
     return  pres_downscaled
@@ -455,9 +455,9 @@ def calc_coszen(declin,timestamp,NextGen_catchment_features):
            (0.014615 * math.cos(2 * da)) - (0.04089 * math.sin(2 * da))) * 229.18
     xtime = timestamp.hour * 60.0  # Minutes of day
     xt24 = int(xtime) % 1440 + eot
-    tloctm = NextGen_catchment_features.centroid_lon.values/15.0 + gmt + xt24/60.0
+    tloctm = NextGen_catchment_features.X.values/15.0 + gmt + xt24/60.0
     hrang = ((tloctm - 12.0) * degrad) * 15.0
-    xxlat = NextGen_catchment_features.centroid_lat.values * degrad
+    xxlat = NextGen_catchment_features.Y.values * degrad
     coszen = np.sin(xxlat) * math.sin(declin) + np.cos(xxlat) * math.cos(declin) * np.cos(hrang)
 
     # Reset temporary variables to free up memory.
@@ -487,7 +487,7 @@ def TOPO_RAD_ADJ_DRVR(dswr_in,COSZEN,declin,solcon,hrang2d,NextGen_catchment_fea
     ny = len(NextGen_catchment_features)
     nx = len(NextGen_catchment_features)
 
-    xxlat = NextGen_catchment_features.centroid_lat.values*degrad
+    xxlat = NextGen_catchment_features.Y.values*degrad
 
     # Sanity checking on incoming shortwave grid.
     SWDOWN = dswr_in
@@ -500,19 +500,19 @@ def TOPO_RAD_ADJ_DRVR(dswr_in,COSZEN,declin,solcon,hrang2d,NextGen_catchment_fea
     corr_frac[:] = 0
     diffuse_frac[:] = 0
 
-    indTmp = np.where((NextGen_catchment_features.slope_m_km.values == 0.0) &
+    indTmp = np.where((NextGen_catchment_features.slope_mean.values == 0.0) &
                       (SWDOWN <= 10.0))
     corr_frac[indTmp] = 1
 
     term1 = np.sin(xxlat) * np.cos(hrang2d)
-    term2 = ((0 - np.cos(NextGen_catchment_features.aspect.values)) *
-             np.sin(NextGen_catchment_features.slope_m_km.values))
-    term3 = np.sin(hrang2d) * (np.sin(NextGen_catchment_features.aspect.values) *
-                               np.sin(NextGen_catchment_features.slope_m_km.values))
-    term4 = (np.cos(xxlat) * np.cos(hrang2d)) * np.cos(NextGen_catchment_features.slope_m_km.values)
-    term5 = np.cos(xxlat) * (np.cos(NextGen_catchment_features.aspect.values) *
-                             np.sin(NextGen_catchment_features.slope_m_km.values))
-    term6 = np.sin(xxlat) * np.cos(NextGen_catchment_features.slope_m_km.values)
+    term2 = ((0 - np.cos(NextGen_catchment_features.aspect_c_mean.values)) *
+             np.sin(NextGen_catchment_features.slope_mean.values))
+    term3 = np.sin(hrang2d) * (np.sin(NextGen_catchment_features.aspect_c_mean.values) *
+                               np.sin(NextGen_catchment_features.slope_mean.values))
+    term4 = (np.cos(xxlat) * np.cos(hrang2d)) * np.cos(NextGen_catchment_features.slope_mean.values)
+    term5 = np.cos(xxlat) * (np.cos(NextGen_catchment_features.aspect_c_mean.values) *
+                             np.sin(NextGen_catchment_features.slope_mean.values))
+    term6 = np.sin(xxlat) * np.cos(NextGen_catchment_features.slope_mean.values)
 
     csza_slp = (term1 * term2 - term3 + term4) * math.cos(declin) + \
                (term5 + term6) * math.sin(declin)
@@ -540,7 +540,7 @@ def TOPO_RAD_ADJ_DRVR(dswr_in,COSZEN,declin,solcon,hrang2d,NextGen_catchment_fea
 
     return SWDOWN_OUT
 
-def python_ExactExtract_Interp_weights(file_index_id,output_root,gfs_grib2_files,forecast_hour,hyfabfile,NextGen_catchment_features,GFS_weights_copy,bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour):
+def python_ExactExtract_Interp_weights(file_index_id,output_root,gfs_grib2_files,forecast_hour,hyfabfile,forcing_metadata,GFS_weights_copy,bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour):
 
     # get current and next 3hr forecast cycle within
     # block in order to interpolate between cycles
@@ -728,7 +728,7 @@ def python_ExactExtract_Interp_weights(file_index_id,output_root,gfs_grib2_files
 
         ############### This is where we call GFS downscaling function  #########
         if(bias_calibration):
-            gfs_results = GFS_downscaling(gfs_results,timestamps[i],NextGen_catchment_features)
+            gfs_results = GFS_downscaling(gfs_results,timestamps[i],forcing_metadata)
 
         ####################################################################
 
@@ -737,7 +737,7 @@ def python_ExactExtract_Interp_weights(file_index_id,output_root,gfs_grib2_files
     return csv_results
 
 
-def python_ExactExtract_weights(gfs_grib2_file,file_index_id,output_root,gfs_grib2_files,hyfabfile,NextGen_catchment_features,GFS_weights,bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus):
+def python_ExactExtract_weights(gfs_grib2_file,file_index_id,output_root,gfs_grib2_files,hyfabfile,forcing_metadata,GFS_weights,bias_calibration, downscaling,transform, projection, i1_conus, j1_conus, cols_conus, rows_conus):
 
     # Initalize pandas dataframe to save results to csv file
     csv_results = pd.DataFrame([])
@@ -874,7 +874,7 @@ def python_ExactExtract_weights(gfs_grib2_file,file_index_id,output_root,gfs_gri
 
     ############### This is where we call GFS downscaling function  #########
     if(downscaling):
-        csv_results = GFS_downscaling(csv_results,timestamp[0],NextGen_catchment_features)
+        csv_results = GFS_downscaling(csv_results,timestamp[0],forcing_metadata)
 
     ####################################################################
 
@@ -1024,15 +1024,8 @@ def gdal_grib2_transformation(grib2_file):
     return new_transform, srs, i1, j1, new_cols, new_rows
 
 
-def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, datafiles, hyfabfile, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus):
+def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, datafiles, hyfabfile, forcing_metadata, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus):
     num_files = len(data["forcing_files"])    
-
-    # Read in hydrofabric file for forcing metadata
-    # to utilize bias calibration and dowscaling function
-    # and sort by divide values since that is the way the
-    # coverage fraction weights sorts the data by
-    NextGen_catchment_features = gpd.read_file(hyfabfile)
-    NextGen_catchment_features = NextGen_catchment_features.sort_values(by='divide_id')
 
     # Read in ExactExtract coverage fraction weights file
     weights = pd.read_csv(weights)
@@ -1055,14 +1048,14 @@ def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, 
             # 3 hourly output timestamps, while accounting whether
             # or not user requests weight calculation that are already
             # provided within NextGen hydrofabric file
-            EE_df = python_ExactExtract_Interp_weights(file_index_id,output_root,datafiles,forecast_hour,hyfabfile,NextGen_catchment_features,weights.copy(), bias_calibration, downscaling, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour)
+            EE_df = python_ExactExtract_Interp_weights(file_index_id,output_root,datafiles,forecast_hour,hyfabfile,forcing_metadata,weights.copy(), bias_calibration, downscaling, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus,max_forecast_hour)
         else:
 
             # Call python ExactExtract routine to directly extract 
             # GFS regridded results to global GFS variables, while
             # accouting whether or not user requests weight calculation
             # that are alreadt provided within NextGen hydrofabric file
-            EE_df = python_ExactExtract_weights(gfs_grib_file,file_index_id,output_root,datafiles,hyfabfile,NextGen_catchment_features,weights.copy(), bias_calibration, downscaling, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus)
+            EE_df = python_ExactExtract_weights(gfs_grib_file,file_index_id,output_root,datafiles,hyfabfile,forcing_metadata,weights.copy(), bias_calibration, downscaling, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus)
 
         # concatenate the regridded data to threads final dataframe
         EE_df_final = pd.concat([EE_df_final,EE_df])
@@ -1077,7 +1070,7 @@ def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, 
     # Put regridded results into thread queue to return to main thread
     EE_results.put(EE_df_final)
 
-def NextGen_Forcings_GFS(output_root, gfs_grib2, netcdf, csv, hyfabfile, weights_file, bias_calibration, downscaling, num_processes):
+def NextGen_Forcings_GFS(output_root, gfs_grib2, netcdf, csv, hyfabfile, hyfabfile_parquet, weights_file, bias_calibration, downscaling, num_processes):
 
     if(netcdf):
         netcdf_dir = join(output_root,"netcdf")
@@ -1094,7 +1087,7 @@ def NextGen_Forcings_GFS(output_root, gfs_grib2, netcdf, csv, hyfabfile, weights
         csv_dir = ''
 
     #generate catchment geometry from hydrofabric
-    cat_df_full = gpd.read_file(hyfabfile)
+    cat_df_full = gpd.read_file(hyfabfile,layer='divides')
     g = [i for i in cat_df_full.geometry]
     h = [i for i in cat_df_full.divide_id]
     n_cats = len(g)
@@ -1144,7 +1137,23 @@ def NextGen_Forcings_GFS(output_root, gfs_grib2, netcdf, csv, hyfabfile, weights
     hyfabfile_final = join(output_root,"hyfabfile_final.json")
     hyfab_data = gpd.read_file(hyfabfile,layer='divides')
     hyfab_data = hyfab_data.to_crs(projection.ExportToWkt())
+
+    # Now sort the catchment id values and save the geopackage file
+    # into a geojson file
+    hyfab_data = hyfab_data.sort_values('divide_id')
+    hyfab_data = hyfab_data.reset_index()
+    hyfab_data = hyfab_data.drop('index',axis=1)    
     hyfab_data.to_file(hyfabfile_final,driver="GeoJSON")
+
+    # Flag to see if user has already provided the hydrofabric parquet
+    # file that is required to process forcing metadata for
+    # NCAR bias/calibration functionality if selected
+    if(hyfabfile_parquet != None):
+        forcing_metadata = pd.read_parquet(hyfabfile_parquet)
+        forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean','aspect_c_mean','X', 'Y']]
+        forcing_metadata = forcing_metadata.sort_values('divide_id')
+        forcing_metadata = forcing_metadata.reset_index()
+
 
     # Flag to see if user has already provided an ExactExtract
     # coverage weights file, otherwise go ahead and produce the file
@@ -1174,7 +1183,7 @@ def NextGen_Forcings_GFS(output_root, gfs_grib2, netcdf, csv, hyfabfile, weights
         #append to the list
         process_data.append(data)
 
-        p = Process(target=process_sublist, args=(data, lock, i, EE_results, output_root, datafiles, hyfabfile_final, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus))
+        p = Process(target=process_sublist, args=(data, lock, i, EE_results, output_root, datafiles, hyfabfile_final, forcing_metadata, weights, bias_calibration, downscaling, max_forecast_hour, transform, projection, i1_conus, j1_conus, cols_conus, rows_conus))
 
         process_list.append(p)
 
