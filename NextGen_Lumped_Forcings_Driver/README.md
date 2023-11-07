@@ -1,19 +1,19 @@
 Required Python packages to execute lumped forcings driver:
 
-pybind11
-xarray
-dask
-netCDF4
-numpy
-gdal
-re
-geopandas
-pandas
-multiprocessing
-wget
-scipy
-shapely
-ssl
+-pybind11
+-xarray
+-dask
+-netCDF4
+-numpy
+-gdal
+-re
+-geopandas
+-pandas
+-multiprocessing
+-wget
+-scipy
+-shapely
+-ssl
 exactextract (python bindings can be install by downloading python packages and following instructions on GitHub https://github.com/jdalrym2/exactextract/tree/coverage-fraction-pybindings to directly link the ExactExtract python bindings to your python executable or anaconda environment)
 
 ###################### Python executable sample code for executing lumped forcings driver #############################
