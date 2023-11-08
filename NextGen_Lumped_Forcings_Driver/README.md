@@ -19,7 +19,8 @@ Required Python packages to execute lumped forcings driver:
 
 ###################### Python executable sample code for executing lumped forcings driver #############################
 from NextGen_lumped_forcings_driver import NextGen_lumped_forcings_driver
-NextGen_lumped_forcings_driver("/pathway/to/lumped_forcings/output",start_time=None, end_time=None, met_dataset="HRRR",hyfabfile="/pathway/to/NextGen_hydrofabric_geopackage",hyfabfile_parquet=None, met_dataset_pathway="/pathway/to/data/source",weights_file=None,netcdf=False,csv=True,bias_calibration=False,downscaling=False,CONUS=False,AnA=False,num_processes=1)
+
+NextGen_lumped_forcings_driver("/pathway/to/lumped_forcings/output",start_time="2010-01-01 00:00:00", end_time="2010-02-01 00:00:00", met_dataset="AORC",hyfabfile="/pathway/to/NextGen_hydrofabric_geopackage",hyfabfile_parquet=None, met_dataset_pathway="/pathway/to/data/source",weights_file=None,netcdf=False,csv=True,bias_calibration=False,downscaling=False,CONUS=False,AnA=False,num_processes=1)
 ######################################################################################################################
 
 The NextGen lumped forcings driver takes the following inputs:
