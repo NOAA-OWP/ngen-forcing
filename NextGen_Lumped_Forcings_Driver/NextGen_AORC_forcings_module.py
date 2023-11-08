@@ -32,13 +32,13 @@ def generate_nearest_neighbor_correction_table(NextGen_hyfabfile, AORC_file, add
         # Find missing values for catchments in VPU
         idx = EE_df.APCP_surface.isnull()
         missing_data_ids = EE_df.loc[idx,'cat-id'].values
-        missing_NextGen_hyfabfile = NextGen_hyfabfile.loc[NextGen_hyfabfile['id'].isin(missing_data_ids)]
+        missing_NextGen_hyfabfile = NextGen_hyfabfile.loc[NextGen_hyfabfile['divide_id'].isin(missing_data_ids)]
 
         # Find catchments with available AORC data
         available_data_ids = EE_df.loc[idx==False,'cat-id'].values
-        available_NextGen_hyfabfile = NextGen_hyfabfile.loc[NextGen_hyfabfile['id'].isin(available_data_ids)]
+        available_NextGen_hyfabfile = NextGen_hyfabfile.loc[NextGen_hyfabfile['divide_id'].isin(available_data_ids)]
 
-        missing_NextGen_hyfabfile['nearest_neighbor_id'] = missing_NextGen_hyfabfile.id
+        missing_NextGen_hyfabfile['nearest_neighbor_id'] = missing_NextGen_hyfabfile.divide_id
 
         # Using the geometries of the missing catchment ids, find the closest geometries for each missing AORC catchment
         missing_points_x, missing_points_y = missing_NextGen_hyfabfile.geometry.centroid.x.values, missing_NextGen_hyfabfile.geometry.centroid.y.values
@@ -46,12 +46,12 @@ def generate_nearest_neighbor_correction_table(NextGen_hyfabfile, AORC_file, add
         for index, row in missing_NextGen_hyfabfile.iterrows():
             missing_point = Point(missing_points_x[point_loop],missing_points_y[point_loop])
             polygon_index = available_NextGen_hyfabfile.distance(missing_point).sort_values().index[0]
-            missing_NextGen_hyfabfile.at[index,'nearest_neighbor_id'] = available_NextGen_hyfabfile.loc[polygon_index,'id']
+            missing_NextGen_hyfabfile.at[index,'nearest_neighbor_id'] = available_NextGen_hyfabfile.loc[polygon_index,'divide_id']
             point_loop += 1
 
         # Generate nearest neighbor table for missing catchment ids to gapfill AORC data
         NN_df = pd.DataFrame([])
-        NN_df['cat-id'] = missing_NextGen_hyfabfile['id'].values
+        NN_df['cat-id'] = missing_NextGen_hyfabfile['divide_id'].values
         NN_df['nearest_neighbor_id'] = missing_NextGen_hyfabfile['nearest_neighbor_id'].values
 
         return NN_df
@@ -611,12 +611,9 @@ def python_ExactExtract_Manual_Weights(aorc_file, AORC_weights, add_offset, scal
     # Add coverage fraction that accounted for only available data
     # to the dataframe before grouping by catchment ids
     AORC_weights['EE_coverage_fraction'] = EE_coverage_fraction_sum[:]
-    # Hydrofabric file may have two different "id" names to account for here
-    try:
-        AORC_weights = AORC_weights.groupby('id').sum()
-    except:
-        AORC_weights = AORC_weights.groupby('id').sum()
-
+    # Groupby the catchment ids and sum up the values as part of the aerial
+    # weighted calculation used here
+    AORC_weights = AORC_weights.groupby('divide_id').sum()
     AORC_weights['cat-id'] = np.array(AORC_weights.index.values)
     # get seconds since AORC reference date for time array in
     # pandas dataframe
@@ -1030,8 +1027,8 @@ def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AOR
         os.system('rm ' + join(output_root,'AORC-*.nc*'))
 
     # get number of catchments and their ids from hydrofabric
-    cat_df_full = gpd.read_file(hyfabfile)
-    nextgen_cat_ids = [i for i in cat_df_full.id]
+    cat_df_full = gpd.read_file(hyfabfile,layer='divides')
+    nextgen_cat_ids = [i for i in cat_df_full.divide_id]
     num_catchments = len(nextgen_cat_ids)
     print("number of catchments = {}".format(num_catchments))
     # Now delete instance of hydrofabric file
@@ -1117,11 +1114,9 @@ def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AOR
     #Get AORC missing value
     AORC_missing_value = nc_file.variables[AORC_met_vars[0]].missing_value
 
-    # Flag for either geopackage or geojson file to be read into module
-    try:
-        hyfab_data = gpd.read_file(hyfabfile,layer='divides')
-    except:
-        hyfab_data = gpd.read_file(hyfabfile)
+    # Read in divides layer of the hydrofabric geopackage file
+    # that is used to calculate lumped forcings
+    hyfab_data = gpd.read_file(hyfabfile,layer='divides')
 
     # Need to reproject the hydrofabric crs to the meteorological forcing
     # dataset crs for ExactExtract to properly regrid the data and save the
