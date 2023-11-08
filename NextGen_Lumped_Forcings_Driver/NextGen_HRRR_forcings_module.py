@@ -287,7 +287,7 @@ def HRRR_swdown_bias_correction(swdown_data, timestamp, current_output_step, Nex
 
     # Create temporary grids for calculating the solar zenith angle, which will be used in the bias correction.
     # time offset in minutes from the prime meridian
-    time_offset = eqtime + 4.0 * NextGen_catchment_features.centroid_lon.values
+    time_offset = eqtime + 4.0 * NextGen_catchment_features.X.values
 
     # tst is the true solar time: the number of minutes since solar midnight
     tst = hh * 60.0 + mm + ss / 60.0 + time_offset
@@ -298,7 +298,7 @@ def HRRR_swdown_bias_correction(swdown_data, timestamp, current_output_step, Nex
     # solar zenith angle is the angle between straight up and the center of the sun's disc
     # the cosine of the sol_zen_ang is proportional to the solar intensity
     # (not accounting for humidity or cloud cover)
-    sol_cos = np.sin(NextGen_catchment_features.centroid_lat.values * d2r) * math.sin(decl) + np.cos(NextGen_catchment_features.centroid_lat.values * d2r) * math.cos(decl) * np.cos(ha)
+    sol_cos = np.sin(NextGen_catchment_features.Y.values * d2r) * math.sin(decl) + np.cos(NextGen_catchment_features.Y.values * d2r) * math.cos(decl) * np.cos(ha)
 
     # Check for any values outside of [-1,1] (this can happen due to floating point rounding)
     sol_cos[np.where(sol_cos < -1.0)] = -1.0
@@ -465,7 +465,7 @@ def HRRR_temp_downscaling_simple_lapse(tmp_in, elev,NextGen_catchment_features):
 
     tmp2m = tmp_in
 
-    elevDiff = elev - NextGen_catchment_features.elevation.values
+    elevDiff = elev - NextGen_catchment_features.elevation_mean.values
 
     # Apply single lapse rate value to the input 2-meter
     # temperature values.
@@ -484,7 +484,7 @@ def HRRR_pres_downscaling_classic(pres_in, tmp2m, elev,NextGen_catchment_feature
     :param NextGen_catchment_features:  globally available
     :return: pres_downscaled - downscaled surface air pressure
     """
-    elevDiff = elev - NextGen_catchment_features.elevation.values
+    elevDiff = elev - NextGen_catchment_features.elevation_mean.values
 
     pres_downscaled = pres_in + (pres_in*elevDiff*9.8)/(tmp2m*287.05)
 
@@ -576,9 +576,9 @@ def calc_coszen(declin,timestamp,NextGen_catchment_features):
            (0.014615 * math.cos(2 * da)) - (0.04089 * math.sin(2 * da))) * 229.18
     xtime = timestamp.hour * 60.0  # Minutes of day
     xt24 = int(xtime) % 1440 + eot
-    tloctm = NextGen_catchment_features.centroid_lon.values/15.0 + gmt + xt24/60.0
+    tloctm = NextGen_catchment_features.X.values/15.0 + gmt + xt24/60.0
     hrang = ((tloctm - 12.0) * degrad) * 15.0
-    xxlat = NextGen_catchment_features.centroid_lat.values * degrad
+    xxlat = NextGen_catchment_features.Y.values * degrad
     coszen = np.sin(xxlat) * math.sin(declin) + np.cos(xxlat) * math.cos(declin) * np.cos(hrang)
 
     # Reset temporary variables to free up memory.
@@ -608,7 +608,7 @@ def TOPO_RAD_ADJ_DRVR(dswr_in,COSZEN,declin,solcon,hrang2d,NextGen_catchment_fea
     ny = len(NextGen_catchment_features)
     nx = len(NextGen_catchment_features)
 
-    xxlat = NextGen_catchment_features.centroid_lat.values*degrad
+    xxlat = NextGen_catchment_features.Y.values*degrad
 
     # Sanity checking on incoming shortwave grid.
     SWDOWN = dswr_in
@@ -621,19 +621,19 @@ def TOPO_RAD_ADJ_DRVR(dswr_in,COSZEN,declin,solcon,hrang2d,NextGen_catchment_fea
     corr_frac[:] = 0
     diffuse_frac[:] = 0
 
-    indTmp = np.where((NextGen_catchment_features.slope_m_km.values == 0.0) &
+    indTmp = np.where((NextGen_catchment_features.slope_mean.values == 0.0) &
                       (SWDOWN <= 10.0))
     corr_frac[indTmp] = 1
 
     term1 = np.sin(xxlat) * np.cos(hrang2d)
-    term2 = ((0 - np.cos(NextGen_catchment_features.aspect.values)) *
-             np.sin(NextGen_catchment_features.slope_m_km.values))
-    term3 = np.sin(hrang2d) * (np.sin(NextGen_catchment_features.aspect.values) *
-                               np.sin(NextGen_catchment_features.slope_m_km.values))
-    term4 = (np.cos(xxlat) * np.cos(hrang2d)) * np.cos(NextGen_catchment_features.slope_m_km.values)
-    term5 = np.cos(xxlat) * (np.cos(NextGen_catchment_features.aspect.values) *
-                             np.sin(NextGen_catchment_features.slope_m_km.values))
-    term6 = np.sin(xxlat) * np.cos(NextGen_catchment_features.slope_m_km.values)
+    term2 = ((0 - np.cos(NextGen_catchment_features.aspect_c_mean.values)) *
+             np.sin(NextGen_catchment_features.slope_mean.values))
+    term3 = np.sin(hrang2d) * (np.sin(NextGen_catchment_features.aspect_c_mean.values) *
+                               np.sin(NextGen_catchment_features.slope_mean.values))
+    term4 = (np.cos(xxlat) * np.cos(hrang2d)) * np.cos(NextGen_catchment_features.slope_mean.values)
+    term5 = np.cos(xxlat) * (np.cos(NextGen_catchment_features.aspect_c_mean.values) *
+                             np.sin(NextGen_catchment_features.slope_mean.values))
+    term6 = np.sin(xxlat) * np.cos(NextGen_catchment_features.slope_mean.values)
 
     csza_slp = (term1 * term2 - term3 + term4) * math.cos(declin) + \
                (term5 + term6) * math.sin(declin)
@@ -728,7 +728,7 @@ def Python_ExactExtract_Coverage_Fraction_Weights(HRRR_grib2_file, hyfab_file, o
     # Return the pathway of the coverage fraction weight file
     return EE_coverage_fraction_csv
 
-def python_ExactExtract_weights(HRRR_grib2_file,file_index_id,output_root,hyfabfile,bias_calibration,downscaling,AnA,NextGen_catchment_features,HRRR_weights):
+def python_ExactExtract_weights(HRRR_grib2_file,file_index_id,output_root,hyfabfile,forcing_metadata,bias_calibration,downscaling,AnA,HRRR_weights):
 
     # Initalize pandas dataframe to save results to csv file
     csv_results = pd.DataFrame([])
@@ -872,11 +872,11 @@ def python_ExactExtract_weights(HRRR_grib2_file,file_index_id,output_root,hyfabf
 
     ############### This is where we call HRRR bias correction function  #########
     if(bias_calibration):
-        csv_results = HRRR_bias_correction(csv_results,timestamp[0],current_output_step,NextGen_catchment_features,n_fcst_hr,AnA)
+        csv_results = HRRR_bias_correction(csv_results,timestamp[0],current_output_step,forcing_metadata,n_fcst_hr,AnA)
 
     ############### This is where we call HRRR downscaling function  #########
     if(downscaling):
-        csv_results = HRRR_downscaling(csv_results,timestamp[0],NextGen_catchment_features)
+        csv_results = HRRR_downscaling(csv_results,timestamp[0],forcing_metadata)
 
     ####################################################################
 
@@ -886,16 +886,9 @@ def python_ExactExtract_weights(HRRR_grib2_file,file_index_id,output_root,hyfabf
     return csv_results
 
 
-def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, hyfabfile, weights, bias_calibration, downscaling, AnA):
+def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, hyfabfile, forcing_metadata, weights, bias_calibration, downscaling, AnA):
     num_files = len(data["forcing_files"])    
-
-    # Read in hydrofabric file for forcing metadata
-    # to utilize bias calibration and dowscaling function
-    # and sort by divide values since that is the way the
-    # coverage fraction weights sorts the data by
-    NextGen_catchment_features = gpd.read_file(hyfabfile)
-    NextGen_catchment_features = NextGen_catchment_features.sort_values(by='divide_id')
-
+    
     # Read in ExactExtract coverage fraction weights file
     HRRR_weights = pd.read_csv(weights)
 
@@ -911,8 +904,8 @@ def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, 
 
         # Call python ExactExtract routine to directly extract 
         # HRRR regridded results to global HRRR variables from the
-    # pregenerated weights file calculated from NextGen hydrofabric
-        EE_df = python_ExactExtract_weights(HRRR_grib_file,file_index_id,output_root,hyfabfile,bias_calibration, downscaling,AnA,NextGen_catchment_features,HRRR_weights.copy())
+        # pregenerated weights file calculated from NextGen hydrofabric
+        EE_df = python_ExactExtract_weights(HRRR_grib_file,file_index_id,output_root,hyfabfile,forcing_metadata,bias_calibration,downscaling,AnA,HRRR_weights.copy())
       
         # concatenate the regridded data to threads final dataframe
         EE_df_final = pd.concat([EE_df_final,EE_df])
@@ -927,7 +920,7 @@ def process_sublist(data : dict, lock: Lock, num: int, EE_results, output_root, 
     # Put regridded results into thread queue to return to main thread
     EE_results.put(EE_df_final)
 
-def NextGen_Forcings_HRRR(output_root, HRRR_directory, forecast_start_time, AnA, netcdf, csv, hyfabfile, weights_file, bias_calibration, downscaling, num_processes):
+def NextGen_Forcings_HRRR(output_root, HRRR_directory, forecast_start_time, AnA, netcdf, csv, hyfabfile, hyfabfile_parquet, weights_file, bias_calibration, downscaling, num_processes):
 
     if(netcdf):
         netcdf_dir = join(output_root,"netcdf")
@@ -944,7 +937,7 @@ def NextGen_Forcings_HRRR(output_root, HRRR_directory, forecast_start_time, AnA,
         csv_dir = ''
 
     #generate catchment geometry from hydrofabric
-    cat_df_full = gpd.read_file(hyfabfile)
+    cat_df_full = gpd.read_file(hyfabfile,layer='divides')
     g = [i for i in cat_df_full.geometry]
     h = [i for i in cat_df_full.divide_id]
     n_cats = len(g)
@@ -999,7 +992,22 @@ def NextGen_Forcings_HRRR(output_root, HRRR_directory, forecast_start_time, AnA,
     hyfabfile_final = join(output_root,"hyfabfile_final.json")
     hyfab_data = gpd.read_file(hyfabfile,layer='divides')
     hyfab_data = hyfab_data.to_crs(projection)
+
+    # Now sort the catchment id values and save the geopackage file
+    # into a geojson file
+    hyfab_data = hyfab_data.sort_values('divide_id')
+    hyfab_data = hyfab_data.reset_index()
+    hyfab_data = hyfab_data.drop('index',axis=1)    
     hyfab_data.to_file(hyfabfile_final,driver="GeoJSON")
+
+    # Flag to see if user has already provided the hydrofabric parquet
+    # file that is required to process forcing metadata for
+    # NCAR bias/calibration functionality if selected
+    if(hyfabfile_parquet != None):
+        forcing_metadata = pd.read_parquet(hyfabfile_parquet)
+        forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean','aspect_c_mean','X', 'Y']]
+        forcing_metadata = forcing_metadata.sort_values('divide_id')
+        forcing_metadata = forcing_metadata.reset_index()        
 
     # Flag to see if user has already provided an ExactExtract
     # coverage weights file, otherwise go ahead and produce the file
@@ -1029,7 +1037,7 @@ def NextGen_Forcings_HRRR(output_root, HRRR_directory, forecast_start_time, AnA,
         #append to the list
         process_data.append(data)
 
-        p = Process(target=process_sublist, args=(data, lock, i, EE_results, output_root, hyfabfile_final, weights, bias_calibration, downscaling, AnA))
+        p = Process(target=process_sublist, args=(data, lock, i, EE_results, output_root, hyfabfile_final, forcing_metadata, weights, bias_calibration, downscaling, AnA))
 
         process_list.append(p)
 
