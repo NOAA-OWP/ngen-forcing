@@ -29,6 +29,9 @@ def generate_nearest_neighbor_correction_table(NextGen_hyfabfile, AORC_file, add
     # See if there is any missing catchment data for given hydrofabric file user specified 
     try:
 
+        # Read the hydrofabric file for analysis
+        NextGen_hyfabfile = gpd.read_file(NextGen_hyfabfile)
+        
         # Find missing values for catchments in VPU
         idx = EE_df.APCP_surface.isnull()
         missing_data_ids = EE_df.loc[idx,'cat-id'].values
@@ -1142,7 +1145,7 @@ def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AOR
     NN_table = generate_nearest_neighbor_correction_table(hyfabfile_final, aorc_ncfile, add_offset, scale_factor, AORC_met_vars)
 
     # Boolean flag to indicate if we need to gapfill missing AORC catchment data
-    if(NN_table == None):
+    if(type(NN_table) == type(None)):    
         gapfill = False
     else:
         gapfill = True
