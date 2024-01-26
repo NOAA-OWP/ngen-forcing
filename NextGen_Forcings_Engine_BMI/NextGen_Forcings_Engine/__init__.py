@@ -1,1 +1,1 @@
-from .bmi_model import bmi_model
+__version__ = '0.0.1'
