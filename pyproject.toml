@@ -1,0 +1,31 @@
+[project]
+name = "ngen-forcings"
+authors = [
+    { name = "Jason Ducker", email = "jason.ducker@noaa.gov" }
+]
+description = "NextGen Forcings Engine"
+readme = "README.md"
+requires-python = ">= 3.8"
+dependencies = [
+    "bmipy",
+    "bokeh",
+    "pandas>=1.15",
+    "netCDF4",
+    "mpi4py>=3.1.4",
+    "esmpy>=8.1.0",
+    "numpy>=1.20.1"
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/NOAA-OWP/ngen-forcing"
+Issues = "https://github.com/NOAA-OWP/ngen-forcing/issues"
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["NextGen_Forcings_Engine_BMI"]
+include = ["NextGen_Forcings_Engine*"]
+namespaces = false
