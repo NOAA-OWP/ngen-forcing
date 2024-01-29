@@ -7,7 +7,11 @@ import sys
 import traceback
 import time
 
-import ESMF
+try:
+    import esmpy as ESMF
+except ImportError:
+    import ESMF
+
 import numpy as np
 
 from . import err_handler

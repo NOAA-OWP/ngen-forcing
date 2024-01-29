@@ -19,7 +19,11 @@ from .bmi_grid import Grid, GridType
 from .model import NWMv3_Forcing_Engine_model
 
 ###### NWMv3.0 Forcings Engine modules ######
-import ESMF
+try:
+    import esmpy as ESMF
+except ImportError:
+    import ESMF
+
 
 from .core import config
 from .core import err_handler

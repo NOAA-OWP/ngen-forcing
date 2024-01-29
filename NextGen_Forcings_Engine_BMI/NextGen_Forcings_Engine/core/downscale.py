@@ -1074,18 +1074,18 @@ def TOPO_RAD_ADJ_DRVR(GeoMetaWrfHydro,ConfigOptions,input_forcings,COSZEN,declin
     COSZEN[np.where(COSZEN < 1E-4)] = 1E-4
 
     if(ConfigOptions.grid_type == "gridded"):
-        corr_frac = np.empty([ny, nx], np.int)
-        # shadow_mask = np.empty([ny,nx],np.int)
-        diffuse_frac = np.empty([ny, nx], np.int)
+        corr_frac = np.empty([ny, nx], int)
+        # shadow_mask = np.empty([ny,nx],int)
+        diffuse_frac = np.empty([ny, nx], int)
         corr_frac[:, :] = 0
         diffuse_frac[:, :] = 0
         # shadow_mask[:,:] = 0
         indTmp = np.where((GeoMetaWrfHydro.slope[:,:] == 0.0) &
                           (SWDOWN <= 10.0))
     else:
-        corr_frac = np.empty([ny], np.int)
-        # shadow_mask = np.empty([ny],np.int)
-        diffuse_frac = np.empty([ny], np.int)
+        corr_frac = np.empty([ny], int)
+        # shadow_mask = np.empty([ny],int)
+        diffuse_frac = np.empty([ny], int)
         corr_frac[:] = 0
         diffuse_frac[:] = 0
         # shadow_mask[:] = 0
@@ -1172,10 +1172,10 @@ def TOPO_RAD_ADJ_DRVR_unstructured(GeoMetaWrfHydro,input_forcings,COSZEN,COSZEN_
     COSZEN[np.where(COSZEN < 1E-4)] = 1E-4
     COSZEN_elem[np.where(COSZEN_elem < 1E-4)] = 1E-4
 
-    corr_frac = np.empty([ny], np.int)
-    corr_frac_elem = np.empty([ny_elem], np.int)
-    diffuse_frac = np.empty([ny], np.int)
-    diffuse_frac_elem = np.empty([ny_elem], np.int)
+    corr_frac = np.empty([ny], int)
+    corr_frac_elem = np.empty([ny_elem], int)
+    diffuse_frac = np.empty([ny], int)
+    diffuse_frac_elem = np.empty([ny_elem], int)
     corr_frac[:] = 0
     corr_frac_elem[:] = 0
     diffuse_frac[:] = 0
