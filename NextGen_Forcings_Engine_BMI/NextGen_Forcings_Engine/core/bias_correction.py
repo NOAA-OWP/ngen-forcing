@@ -12,7 +12,7 @@ import time
 import numpy as np
 from netCDF4 import Dataset
 
-from core import err_handler
+from . import err_handler
 
 PARAM_NX = 384
 PARAM_NY = 190

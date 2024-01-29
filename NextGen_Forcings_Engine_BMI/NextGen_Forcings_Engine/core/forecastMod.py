@@ -1,11 +1,11 @@
 import datetime
 import os
 
-from core import bias_correction
-from core import downscale
-from core import err_handler
-from core import layeringMod
-from core import disaggregateMod
+from . import bias_correction
+from . import downscale
+from . import err_handler
+from . import layeringMod
+from . import disaggregateMod
 
 
 def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMod, MpiConfig, OutputObj):

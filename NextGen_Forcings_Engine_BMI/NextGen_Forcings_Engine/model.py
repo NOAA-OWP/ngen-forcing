@@ -3,11 +3,11 @@ import os
 import pandas as pd
 import numpy as np
 
-from core import bias_correction
-from core import downscale
-from core import err_handler
-from core import layeringMod
-from core import disaggregateMod
+from .core import bias_correction
+from .core import downscale
+from .core import err_handler
+from .core import layeringMod
+from .core import disaggregateMod
 
 class NWMv3_Forcing_Engine_model():
     # TODO: refactor the bmi_model.py file and this to have this type maintain its own state.

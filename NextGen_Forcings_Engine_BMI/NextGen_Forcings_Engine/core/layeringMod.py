@@ -3,7 +3,7 @@ Layering module for implementing various layering schemes in the WRF-Hydro forci
 Future functionality may include blenidng, etc.
 """
 import numpy as np
-from core import err_handler
+from . import err_handler
 
 def layer_final_forcings(OutputObj,input_forcings,ConfigOptions,MpiConfig):
     """

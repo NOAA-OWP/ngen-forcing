@@ -3,7 +3,7 @@ import mpi4py
 mpi4py.rc.threaded = False
 from mpi4py import MPI
 
-from core import err_handler
+from . import err_handler
 
 
 class MpiConfig:

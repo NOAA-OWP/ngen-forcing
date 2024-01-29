@@ -13,22 +13,22 @@ import yaml
 from bmipy import Bmi
 
 # Import BMI grid functions to advertise grid features
-from bmi_grid import Grid, GridType
+from .bmi_grid import Grid, GridType
 
 # Here is the model we want to run
-from model import NWMv3_Forcing_Engine_model
+from .model import NWMv3_Forcing_Engine_model
 
 ###### NWMv3.0 Forcings Engine modules ######
 import ESMF
 
-from core import config
-from core import err_handler
-from core import forcingInputMod
-from core import forecastMod
-from core import geoMod
-from core import ioMod
-from core import parallel
-from core import suppPrecipMod
+from .core import config
+from .core import err_handler
+from .core import forcingInputMod
+from .core import forecastMod
+from .core import geoMod
+from .core import ioMod
+from .core import parallel
+from .core import suppPrecipMod
 
 class UnknownBMIVariable(RuntimeError):
     pass

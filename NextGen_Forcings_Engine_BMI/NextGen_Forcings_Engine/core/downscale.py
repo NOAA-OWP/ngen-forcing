@@ -10,7 +10,7 @@ import time
 import numpy as np
 from netCDF4 import Dataset
 
-from core import err_handler
+from . import err_handler
 
 
 def run_downscaling(input_forcings, config_options, geo_meta_wrf_hydro, mpi_config):

@@ -8,7 +8,7 @@ import os.path
 import numpy as np
 from netCDF4 import Dataset
 
-from core import err_handler
+from . import err_handler
 
 test_enabled = True
 

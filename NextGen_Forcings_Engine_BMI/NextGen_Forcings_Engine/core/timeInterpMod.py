@@ -3,7 +3,7 @@ Temporal interpolation input forcings to the current output timestep.
 """
 import numpy as np
 
-from core import err_handler
+from . import err_handler
 
 
 def no_interpolation(input_forcings,ConfigOptions,MpiConfig):

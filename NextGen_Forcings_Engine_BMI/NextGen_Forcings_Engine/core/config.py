@@ -5,8 +5,8 @@ import os
 
 import numpy as np
 
-from core import time_handling
-from core import err_handler
+from . import time_handling
+from . import err_handler
 
 
 class ConfigOptions:
