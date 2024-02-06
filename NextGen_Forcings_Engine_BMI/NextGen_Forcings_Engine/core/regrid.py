@@ -7,12 +7,16 @@ import sys
 import traceback
 import time
 
-import ESMF
+try:
+    import esmpy as ESMF
+except ImportError:
+    import ESMF
+
 import numpy as np
 
-from core import err_handler
-from core import ioMod
-from core import timeInterpMod
+from . import err_handler
+from . import ioMod
+from . import timeInterpMod
 
 NETCDF = "NETCDF"
 GRIB2 = "GRIB2"

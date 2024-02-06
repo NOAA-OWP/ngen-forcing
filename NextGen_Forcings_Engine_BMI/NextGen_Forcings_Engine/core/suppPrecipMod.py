@@ -4,9 +4,9 @@ that will replace precipitation in the final output files.
 """
 import numpy as np
 
-from core import time_handling
-from core import regrid
-from core import timeInterpMod
+from . import time_handling
+from . import regrid
+from . import timeInterpMod
 
 
 class supplemental_precip:

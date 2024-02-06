@@ -1,6 +1,10 @@
 import math
 
-import ESMF
+try:
+    import esmpy as ESMF
+except ImportError:
+    import ESMF
+
 import numpy as np
 from netCDF4 import Dataset
 from scipy import spatial

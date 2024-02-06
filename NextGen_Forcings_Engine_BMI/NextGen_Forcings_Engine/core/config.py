@@ -5,8 +5,8 @@ import os
 
 import numpy as np
 
-from core import time_handling
-from core import err_handler
+from . import time_handling
+from . import err_handler
 
 
 class ConfigOptions:
@@ -827,7 +827,7 @@ class ConfigOptions:
 
         # Read in the temperature downscaling options.
         # Create temporary array to hold flags of if we need input parameter files.
-        param_flag = np.empty([len(self.input_forcings)], np.int)
+        param_flag = np.empty([len(self.input_forcings)], int)
         param_flag[:] = 0
         try:
             self.t2dDownscaleOpt = cfg['TemperatureDownscaling']
