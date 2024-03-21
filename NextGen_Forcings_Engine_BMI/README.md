@@ -24,7 +24,7 @@
   c.	export ESMF_COMPILER=intel
   d.	export ESMF_COMM=intelmpi
   e.	export ESMF_OPENMP=ON
-  f.	export netcdf variables to force ESMF to build with netcdf capabilities (export ESMF_NETCDF=”split”, export ESMF_NETCDF_INCLUDE=$NETCDF_INCLUDE, export ESMF_NETCDF_LIBPATH=$NETCDF_LIB”)
+  f.	export netcdf variables to force ESMF to build with netcdf capabilities (export ESMF_NETCDF=”split”, export ESMF_NETCDF_INCLUDE=$NETCDF_INCLUDE, export ESMF_NETCDF_LIBPATH=$NETCDF_LIB”,export ESMF_NETCDF_LIBS="-lnetcdff -lnetcdf")
   g.	gmake
   h.	gmake install
   i.	gmake installcheck
