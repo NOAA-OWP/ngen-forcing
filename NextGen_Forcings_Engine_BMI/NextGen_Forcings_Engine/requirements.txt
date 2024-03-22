@@ -1,0 +1,9 @@
+numpy
+pandas
+pyyaml
+bmipy
+netCDF4
+os
+pathlib
+esmpy
+scipy

@@ -1,105 +1,12 @@
-#### OWP Open Source Project Template Instructions
+# NextGen Forcings Engine Repository Overview
+Welcome to the NextGen Forcings Engine GitHub repository. This repository currently contains Python tools that allows the NextGen Water Resources Modeling Framework to be provide meteorological forcings data to NextGen formulations through either (1) csv catchment/netcdf files or (2) a Basic Model Interface (BMI) Forcings Engine. This repository also contains Forcings Extraction script repository that will allow a given user to extract all meteorological forcing data products required for National Water Model (NWM) version 3.0 operational configurations. Future endeavors for this repository will also evenetually provide users more Python tools that will implement various data assimilation techniques (dyanmic data, oceanic/freshwater circuluation models) for NextGen formulations within the framework. 
 
-1. Create a new project.
-2. [Copy these files into the new project](#installation)
-3. Update the README, replacing the contents below as prescribed.
-4. Add any libraries, assets, or hard dependencies whose source code will be included
-   in the project's repository to the _Exceptions_ section in the [TERMS](TERMS.md).
-  - If no exceptions are needed, remove that section from TERMS.
-5. If working with an existing code base, answer the questions on the [open source checklist](opensource-checklist.md)
-6. Delete these instructions and everything up to the _Project Title_ from the README.
-7. Write some great software and tell people about it.
+# NextGen Lumped Forcings Driver Directory
+This directory contains Python modules and a driver script that will provide users lumped meteorological forcings for catchments within the NextGen hydrofabric. Users will be able to create NextGen formatted csv catchment files or a single netcdf file that can be ingested by the default NextGen Forcings Provider. Current Python modules can support Analaysis of Record and Calibration (AORC) data, GFS data, CFS data, and HRRR data products that are needed for standard NWM operational configurations (Reanlysis, Analysis and Assimilation, Short range, Medium range, and long range). Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
 
-> Keep the README fresh! It's the first thing people see and will make the initial impression.
+# NextGen Forcings Engine BMI Directory
+This directory contains a BMI application that essentially streamlines the WRF-Hydro Forcings Engine into a BMI compliant data pipeline with universal regridding capabilites. This Python BMI tool can directly provide the NextGen model engine regridded meteorological forcings that are required for all NWMv3.0 operational configurations. BMI realization configuration files have already been constructed for all NWMv3.0 operational configurations to support gridded domains, unstructured meshes, and the NextGen hydrofabric. Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
 
-## Installation
+# Forcing Extraction Scripts Directory
+This directory contains a series of scripts for each NWM domain subdirectory (CONUS, Alaska, Puerto Rico, Hawaii) that encompasses the required meteorological forcing data products needed for each regional NWMv3.0 operational configuration setup. Each script is a particular meteorlogical forcing data product that is available to download off the NOMADS server. Availability of each meteorlogical forcing data product varies, but a user can generally extract at least the last 24 hours of previous data products or forecast cycles available. Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
 
-To install all of the template files, run the following script from the root of your project's directory:
-
-```
-bash -c "$(curl -s https://raw.githubusercontent.com/NOAA-OWP/owp-open-source-project-template/open_source_template.sh)"
-```
-
-----
-
-# Project Title
-
-**Description**:  Put a meaningful, short, plain-language description of what
-this project is trying to accomplish and why it matters.
-Describe the problem(s) this project solves.
-Describe how this software can improve the lives of its audience.
-
-Other things to include:
-
-  - **Technology stack**: Indicate the technological nature of the software, including primary programming language(s) and whether the software is intended as standalone or as a module in a framework or other ecosystem.
-  - **Status**:  Alpha, Beta, 1.1, etc. It's OK to write a sentence, too. The goal is to let interested people know where this project is at. This is also a good place to link to the [CHANGELOG](CHANGELOG.md).
-  - **Links to production or demo instances**
-  - Describe what sets this apart from related-projects. Linking to another doc or page is OK if this can't be expressed in a sentence or two.
-
-
-**Screenshot**: If the software has visual components, place a screenshot after the description; e.g.,
-
-![](https://raw.githubusercontent.com/NOAA-OWP/owp-open-source-project-template/master/doc/Screenshot.png)
-
-
-## Dependencies
-
-Describe any dependencies that must be installed for this software to work.
-This includes programming languages, databases or other storage mechanisms, build tools, frameworks, and so forth.
-If specific versions of other software are required, or known not to work, call that out.
-
-## Installation
-
-Detailed instructions on how to install, configure, and get the project running.
-This should be frequently tested to ensure reliability. Alternatively, link to
-a separate [INSTALL](INSTALL.md) document.
-
-## Configuration
-
-If the software is configurable, describe it in detail, either here or in other documentation to which you link.
-
-## Usage
-
-Show users how to use the software.
-Be specific.
-Use appropriate formatting when showing code snippets.
-
-## How to test the software
-
-If the software includes automated tests, detail how to run those tests.
-
-## Known issues
-
-Document any known significant shortcomings with the software.
-
-## Getting help
-
-Instruct users how to get help with this software; this might include links to an issue tracker, wiki, mailing list, etc.
-
-**Example**
-
-If you have questions, concerns, bug reports, etc, please file an issue in this repository's Issue Tracker.
-
-## Getting involved
-
-This section should detail why people should get involved and describe key areas you are
-currently focusing on; e.g., trying to get feedback on features, fixing certain bugs, building
-important pieces, etc.
-
-General instructions on _how_ to contribute should be stated with a link to [CONTRIBUTING](CONTRIBUTING.md).
-
-
-----
-
-## Open source licensing info
-1. [TERMS](TERMS.md)
-2. [LICENSE](LICENSE)
-
-
-----
-
-## Credits and references
-
-1. Projects that inspired you
-2. Related projects
-3. Books, papers, talks, or other sources that have meaningful impact or influence on this project
