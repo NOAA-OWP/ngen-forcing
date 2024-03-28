@@ -1,3 +1,5 @@
+NextGen Forcings Engine BMI License
+
 “Software code created by U.S. Government employees is not subject to copyright
 in the United States (17 U.S.C. §105). The United States/Department of Commerce
 reserve all rights to seek and obtain copyright protection in countries other
@@ -5,3 +7,40 @@ than the United States for Software authored in its entirety by the Department
 of Commerce. To this end, the Department of Commerce hereby grants to Recipient
 a royalty-free, nonexclusive license to use, copy, and create derivative works
 of the Software outside of the United States.”
+
+
+Development of the NextGen Forcings Engine has been centered around the foundational pieces of the WRF-Hydro Forcings Engine developed by NCAR. The NOAA Office of Water Prediction (OWP) has take the original WRF-Hydro Forcings Engine used for the National Water Model (NWM) and extended it's data processing pipeline to accomodate the following capabilites for the original WRF-Hydro Forcings Engine: (1) Redevelop it's driver script into a compliant Basic Model Interface framework, (2) extend it's original regridding tools to streamline universal regridding capabilites to any domain configuration (e.g. gridded, mesh) besides the original WRF-Hydro domain it was intended for, (3) extend more regridding modules for different meteorological forcing datasets to supply the scientific community with a vast array of forecast or hindcast models that the Forcings Engine can supply to any hydrology domain configuration. NCAR's WRF-Hydro Forcing Engine repository also had Python modules to extract a subset of NWM operational configuration forecast model datasets from the NOMADS operational server. Here, we've also taken their initial subset of Python module NOMADS forcing extraction scripts and extended more Python modules to encompass all NWM v3.0 operational configurations currently be utilized by OWP. As NCAR continues to further develop the WRF-Hydro Forcings Engine and it's complimentary Python tools, we intend to continue extending it's features into the NextGen Forcings Engine BMI, while remaining compliant with it's own licensing as highlighted further below:
+
+BSD 3-Clause License
+
+Applied for the following Python modules with the repository:
+"ngen-forcings/Forcing_Extraction_Scripts"
+"ngen-forcings/NextGen_Forcings_Engine_BMI/NextGen_Forcings_Engine/core"
+
+Copyright (c) 2020, University Corporation for Atmospheric Research (UCAR) All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
