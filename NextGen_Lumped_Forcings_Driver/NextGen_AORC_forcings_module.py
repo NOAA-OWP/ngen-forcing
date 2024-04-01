@@ -396,7 +396,7 @@ def create_ngen_netcdf_CONUS(aorc_ncfile, netcdf_dir):
         # Define netcdf compression encoding for variables
         # when saving final netcdf file
         comp = dict(zlib=True, complevel=1, shuffle=True, _FillValue=-99999.)
-        encoding = {var: comp for var in ['Time','APCP_surface','T2D','U2D','Q2D','U2D','V2D','PSFC','SWDOWN','LWDOWN']}
+        encoding = {var: comp for var in ['Time','APCP_surface','precip_rate','T2D','U2D','Q2D','U2D','V2D','PSFC','SWDOWN','LWDOWN']}
         print("Saving combined netcdf xarray dataset to netcdf file")
         ds.to_netcdf(output_path,encoding=encoding)
         del(ds)
@@ -442,6 +442,8 @@ def create_ngen_netcdf(aorc_ncfile, final_df, netcdf_dir, num_files, num_catchme
         chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     APCP_surface_out = ncfile_out.createVariable('APCP_surface', 'f4', ('catchment-id', 'time',), fill_value=-99999,
         chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
+    precip_rate_out = ncfile_out.createVariable('precip_rate', 'f4', ('catchment-id', 'time',), fill_value=-99999,
+        chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)    
     TMP_2maboveground_out = ncfile_out.createVariable('T2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
         chunksizes=(num_catchments,1), zlib=True, complevel=1, shuffle=True)
     SPFH_2maboveground_out = ncfile_out.createVariable('Q2D', 'f4', ('catchment-id', 'time',), fill_value=-99999,
@@ -495,6 +497,12 @@ def create_ngen_netcdf(aorc_ncfile, final_df, netcdf_dir, num_files, num_catchme
 
     #####################################################################
 
+    # set attributes manually for precipitation rate
+    setattr(precip_rate_out, 'long_name', 'Precipitation Rate')
+    setattr(precip_rate_out, 'short_name', 'RAINRATE')
+    setattr(precip_rate_out, 'units', 'mm s-1')
+    setattr(precip_rate_out, 'level', 'surface')
+    
     #set attributes for additional variables
     setattr(cat_id_out, 'description', 'catchment_id')
    
@@ -511,7 +519,9 @@ def create_ngen_netcdf(aorc_ncfile, final_df, netcdf_dir, num_files, num_catchme
     time5 = datetime.datetime.now()
     time_out[:,:] = np.reshape(final_df['time'].values,(num_cats,num_files))
     APCP_surface_out[:,:] = np.reshape(final_df['APCP_surface'].values,(num_cats,num_files))
+    precip_rate_out[:,:] = np.reshape(final_df['APCP_surface'].values/3600,(num_cats,num_files))    
     DLWRF_surface_out[:,:] = np.reshape(final_df['DLWRF_surface'].values,(num_cats,num_files))
+    DSWRF_surface_out[:,:] = np.reshape(final_df['DSWRF_surface'].values,(num_cats,num_files))    
     PRES_surface_out[:,:] = np.reshape(final_df['PRES_surface'].values,(num_cats,num_files))
     SPFH_2maboveground_out[:,:] = np.reshape(final_df['SPFH_2maboveground'].values,(num_cats,num_files))
     TMP_2maboveground_out[:,:] = np.reshape(final_df['TMP_2maboveground'].values,(num_cats,num_files))
@@ -924,7 +934,7 @@ def CONUS_NGen_files(pr, met_dataset_pathway, datafiles, aorc_filenames, output_
         create_ngen_cat_csv_CONUS(csv_dir, nextgen_cat_ids, num_processes) 
 
     time5=datetime.datetime.now()
-    if (netcdf and os.listdir(netcdf_dir) > 1):
+    if (netcdf and len(os.listdir(netcdf_dir)) > 1):
         # generate NextGen netcdf file from aggregated regridded data
         print('Now Combining monthly NextGen netcdf file for CONUS')
         create_ngen_netcdf_CONUS(aorc_ncfile, netcdf_dir)
