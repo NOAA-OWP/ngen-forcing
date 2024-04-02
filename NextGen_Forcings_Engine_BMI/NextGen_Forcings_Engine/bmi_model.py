@@ -24,6 +24,10 @@ try:
 except ImportError:
     import ESMF
 
+# If less than 0, then ESMF.__version__ is greater than 8.6.0
+if ESMF.version_compare('8.6.0', ESMF.__version__) < 0:
+    manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
+
 
 from .core import config
 from .core import err_handler
@@ -414,6 +418,11 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                     os.remove(file_path)
                 elif(os.path.isdir(file_path)):
                     os.rmdir(file_path)
+
+        # Force destruction of ESMF objects
+        del self._WrfHydroGeoMeta
+        del self._inputForcingMod
+        del self._suppPcpMod
 
         self._model = None
 
