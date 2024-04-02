@@ -14,6 +14,7 @@ except ImportError:
 
 import numpy as np
 
+from .config import ConfigOptions
 from . import err_handler
 from . import ioMod
 from . import timeInterpMod
