@@ -8,7 +8,7 @@ mpi4py.rc.threaded = False
 
 # If MPI was initialized outside of python,
 # disable initialization/finalization behavior
-if MPI.Is_Initialize():
+if MPI.Is_initialized():
     mpi4py.rc.initialize = False
     mpi4py.rc.finalize = False
 
