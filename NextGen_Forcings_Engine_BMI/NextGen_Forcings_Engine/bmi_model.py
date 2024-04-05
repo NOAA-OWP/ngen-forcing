@@ -420,9 +420,20 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                     os.rmdir(file_path)
 
         # Force destruction of ESMF objects
-        del self._WrfHydroGeoMeta
-        del self._inputForcingMod
-        del self._suppPcpMod
+        try:
+            del self._WrfHydroGeoMeta
+        except AttributeError:
+            pass
+
+        try:
+            del self._inputForcingMod
+        except AttributeError:
+            pass
+
+        try:
+            del self._suppPcpMod
+        except AttributeError:
+            pass
 
         self._model = None
 

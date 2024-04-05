@@ -1,10 +1,16 @@
 import numpy as np
 import mpi4py
-mpi4py.rc.threaded = False
 from mpi4py import MPI
 
 from . import err_handler
 
+mpi4py.rc.threaded = False
+
+# If MPI was initialized outside of python,
+# disable initialization/finalization behavior
+if MPI.Is_Initialize():
+    mpi4py.rc.initialize = False
+    mpi4py.rc.finalize = False
 
 class MpiConfig:
     """
