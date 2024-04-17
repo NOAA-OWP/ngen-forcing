@@ -124,7 +124,8 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         # Initialize our MPI communication
         self._mpi_meta = parallel.MpiConfig()
         try:
-            self._mpi_meta.initialize_comm(self._job_meta, comm=self._comm)
+            comm = MPI.Comm.f2py(self._comm) if self._comm is not None else None
+            self._mpi_meta.initialize_comm(self._job_meta, comm=comm)
         except:
             err_handler.err_out_screen(self._job_meta.errMsg)
         print("Finished initializing MPI communicator")
@@ -662,7 +663,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         """ 
 
         if var_name == 'bmi_mpi_comm':
-            self._comm = MPI.Comm.f2py(values[0])
+            self._comm = values[0]
         else:
             self._values[var_name][:] = values
 
