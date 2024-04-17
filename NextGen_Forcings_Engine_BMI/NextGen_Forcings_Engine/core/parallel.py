@@ -27,7 +27,7 @@ class MpiConfig:
         :return:
         """
         try:
-            self.comm = MPI.COMM_WORLD if comm is None else comm
+            self.comm = comm if comm is not None else MPI.COMM_WORLD
             self.comm.Set_errhandler(MPI.ERRORS_ARE_FATAL)
         except AttributeError as ae:
             config_options.errMsg = "Unable to initialize the MPI Communicator object"
