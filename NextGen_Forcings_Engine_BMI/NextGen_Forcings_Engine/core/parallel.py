@@ -21,13 +21,13 @@ class MpiConfig:
         self.rank = None
         self.size = None 
 
-    def initialize_comm(self, config_options):
+    def initialize_comm(self, config_options, comm = None):
         """
         Initial function to initialize MPI.
         :return:
         """
         try:
-            self.comm = MPI.COMM_WORLD
+            self.comm = comm if comm is not None else MPI.COMM_WORLD
             self.comm.Set_errhandler(MPI.ERRORS_ARE_FATAL)
         except AttributeError as ae:
             config_options.errMsg = "Unable to initialize the MPI Communicator object"

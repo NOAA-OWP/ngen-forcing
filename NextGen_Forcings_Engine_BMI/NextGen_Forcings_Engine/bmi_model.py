@@ -24,7 +24,6 @@ try:
 except ImportError:
     import ESMF
 
-
 from .core import config
 from .core import err_handler
 from .core import forcingInputMod
@@ -33,6 +32,8 @@ from .core import geoMod
 from .core import ioMod
 from .core import parallel
 from .core import suppPrecipMod
+
+from mpi4py import MPI
 
 class UnknownBMIVariable(RuntimeError):
     pass
@@ -46,6 +47,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         self._start_time = 0.0
         self._end_time = np.finfo(float).max
         self._model = None
+        self._comm = None
         self.var_array_lengths = 1
 
     #----------------------------------------------
@@ -122,7 +124,8 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         # Initialize our MPI communication
         self._mpi_meta = parallel.MpiConfig()
         try:
-            self._mpi_meta.initialize_comm(self._job_meta)
+            comm = MPI.Comm.f2py(self._comm) if self._comm is not None else None
+            self._mpi_meta.initialize_comm(self._job_meta, comm=comm)
         except:
             err_handler.err_out_screen(self._job_meta.errMsg)
         print("Finished initializing MPI communicator")
@@ -658,7 +661,11 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         values : np.ndarray
               Array of new values.
         """ 
-        self._values[var_name][:] = values
+
+        if var_name == 'bmi_mpi_comm':
+            self._comm = values[0]
+        else:
+            self._values[var_name][:] = values
 
     #------------------------------------------------------------ 
     def set_value_at_indices(self, var_name: str, indices: np.ndarray, src: np.ndarray):
