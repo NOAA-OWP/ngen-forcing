@@ -23,7 +23,7 @@ try:
     import esmpy as ESMF
 except ImportError:
     import ESMF
-
+    
 from .core import config
 from .core import err_handler
 from .core import forcingInputMod
@@ -35,6 +35,12 @@ from .core import suppPrecipMod
 
 from mpi4py import MPI
 
+
+# If less than 0, then ESMF.__version__ is greater than 8.6.0
+if ESMF.version_compare('8.6.0', ESMF.__version__) < 0:
+    manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
+    
+    
 class UnknownBMIVariable(RuntimeError):
     pass
 
@@ -417,6 +423,22 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                     os.remove(file_path)
                 elif(os.path.isdir(file_path)):
                     os.rmdir(file_path)
+
+        # Force destruction of ESMF objects
+        try:
+            del self._WrfHydroGeoMeta
+        except AttributeError:
+            pass
+
+        try:
+            del self._inputForcingMod
+        except AttributeError:
+            pass
+
+        try:
+            del self._suppPcpMod
+        except AttributeError:
+            pass
 
         self._model = None
 

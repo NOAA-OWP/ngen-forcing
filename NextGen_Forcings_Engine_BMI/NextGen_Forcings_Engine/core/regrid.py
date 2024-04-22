@@ -128,8 +128,8 @@ def regrid_ak_ext_ana(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
             err_handler.check_program_status(config_options, mpi_config)
         elif(config_options.grid_type == "unstructured"):
             try:
-                input_forcings.esmf_grid_in = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
-                input_forcings.esmf_grid_in_elem = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
+                input_forcings.esmf_grid_in = ESMF.Mesh(filename=config_options.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
+                input_forcings.esmf_grid_in_elem = ESMF.Mesh(filename=config_options.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
             except ESMF.ESMPyException as esmf_error:
                 config_options.errMsg = f"Unable to create source ESMF Mesh from netCDF file: {input_forcings.file_in} ({str(esmf_error)})"
                 err_handler.log_critical(config_options, mpi_config)
@@ -146,7 +146,7 @@ def regrid_ak_ext_ana(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
             err_handler.check_program_status(config_options, mpi_config)
         elif(config_options.grid_type == "hydrofabric"):
             try:
-                input_forcings.esmf_grid_in = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
+                input_forcings.esmf_grid_in = ESMF.Mesh(filename=config_options.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
             except ESMF.ESMPyException as esmf_error:
                 config_options.errMsg = f"Unable to create source ESMF Mesh from netCDF file: {input_forcings.file_in} ({str(esmf_error)})"
                 err_handler.log_critical(config_options, mpi_config)

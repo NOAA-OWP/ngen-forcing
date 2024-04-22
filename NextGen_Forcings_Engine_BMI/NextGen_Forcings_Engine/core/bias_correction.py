@@ -229,7 +229,7 @@ def ncar_tbl_correction(input_forcings, config_options, mpi_config, force_num):
 
         # Apply the bias correction adjustment based on the current forecast hour.
         try:
-            force_tmp_elem[ind_valid] = force_tmp_elem[ind_valid] + adj_tbl[force_num][int(input_forcings.fcst_hour2)]
+            force_tmp_elem[ind_valid_elem] = force_tmp_elem[ind_valid_elem] + adj_tbl[force_num][int(input_forcings.fcst_hour2)]
         except NumpyExceptions as npe:
             config_options.errMsg = "Unable to apply table bias correction for: " + \
                                     input_forcings.netcdf_var_names[force_num] + \
@@ -541,7 +541,7 @@ def ncar_sw_hrrr_bias_correct(input_forcings, geo_meta_wrf_hydro, config_options
     if(config_options.grid_type == "unstructured"):
         # Create temporary grids for calculating the solar zenith angle, which will be used in the bias correction.
         # time offset in minutes from the prime meridian
-        time_offset = eqtime + 4.0 * geo_meta_wrf_hydro.longitude_grid_elem
+        time_offset_elem = eqtime + 4.0 * geo_meta_wrf_hydro.longitude_grid_elem
 
         # tst is the true solar time: the number of minutes since solar midnight
         tst_elem = hh * 60.0 + mm + ss / 60.0 + time_offset_elem

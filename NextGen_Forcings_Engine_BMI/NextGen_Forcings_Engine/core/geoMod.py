@@ -10,9 +10,6 @@ from netCDF4 import Dataset
 from scipy import spatial
 from os import listdir
 from os.path import join
-import mpi4py
-mpi4py.rc.threaded = False
-from mpi4py import MPI
 
 class GeoMetaWrfHydro:
     """

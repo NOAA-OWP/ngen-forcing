@@ -761,7 +761,7 @@ class ConfigOptions:
             self.ignored_border_widths = [0.0]*self.number_inputs
         except json.decoder.JSONDecodeError:
             err_handler.err_out_screen('Improper IgnoredBorderWidths option specified in the configuration file.'
-                                       '({} was supplied'.format(config['Geospatial']['IgnoredBorderWidths']))
+                                       '({} was supplied'.format(cfg['Geospatial']['IgnoredBorderWidths']))
         if len(self.ignored_border_widths) != self.number_inputs:
             err_handler.err_out_screen('Please specify IgnoredBorderWidths values for each '
                                        'corresponding input forcings for SuppForcing.'
