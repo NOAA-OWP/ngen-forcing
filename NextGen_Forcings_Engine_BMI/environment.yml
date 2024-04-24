@@ -1,0 +1,18 @@
+name: bmi_test
+channels:
+  - defaults
+  - anaconda
+  - conda-forge
+dependencies:
+  - bmipy
+  - bokeh
+  - pandas=1.15
+  - python
+  - ruamel.yaml
+  - netCDF4
+  - mpi4py=3.1.4
+  - scipy
+  - os
+  - pathlib
+  - esmpy=8.1.0
+  - numpy=1.20.1
