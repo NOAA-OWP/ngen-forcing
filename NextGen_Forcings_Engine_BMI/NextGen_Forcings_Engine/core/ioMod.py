@@ -16,6 +16,12 @@ from netCDF4 import Dataset
 
 from . import err_handler
 
+if "WGRIB2" not in os.environ:
+    WGRIB2_env = False
+    import pywgrib2_s
+else:
+    WGRIB2_env = True
+
 
 class OutputObj:
     """
@@ -26,6 +32,7 @@ class OutputObj:
         self.output_local = None
         self.outPath = None
         self.outDate = None
+        self.idOut = None
         self.out_ndv = -9999
 
         # Create local "slabs" to hold final output grids. These
@@ -39,7 +46,7 @@ class OutputObj:
             self.output_local = np.empty([9, GeoMetaWrfHydro.ny_local])
         #self.output_local[:,:,:] = self.out_ndv
 
-    def output_final_ldasin(self,ConfigOptions,geoMetaWrfHydro,MpiConfig):
+    def init_forcing_file(self,ConfigOptions,geoMetaWrfHydro,MpiConfig):
         """
         Output routine to produce final LDASIN files for the WRF-Hydro
         modeling system. This function is assuming all regridding,
@@ -85,13 +92,11 @@ class OutputObj:
 
         # Ensure all processors are synced up before outputting.
         #MpiConfig.comm.barrier()
-
-        idOut = None
         if MpiConfig.rank == 0:
             while (True):
                 # Only output on the master processor.
                 try:
-                    idOut = Dataset(self.outPath,'w')
+                    self.idOut = Dataset(self.outPath,'w')
                 except Exception as e:
                     ConfigOptions.errMsg = "Unable to create output file: " + self.outPath + "\n" + str(e)
                     err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -99,33 +104,41 @@ class OutputObj:
 
                 # Create dimensions.
                 try:
-                    idOut.createDimension("time", None)
+                    self.idOut.createDimension("time", None)
                 except:
                     ConfigOptions.errMsg = "Unable to create time dimension in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
-                try:
-                    idOut.createDimension("y",geoMetaWrfHydro.ny_global)
-                except:
-                    ConfigOptions.errMsg = "Unable to create y dimension in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-                try:
-                    idOut.createDimension("x",geoMetaWrfHydro.nx_global)
-                except:
-                    ConfigOptions.errMsg = "Unable to create x dimension in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-                try:
-                    idOut.createDimension("reference_time", 1)
-                except:
-                    ConfigOptions.errMsg = "Unable to create reference_time dimension in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-
+                if(ConfigOptions.grid_type == "gridded"):
+                    try:
+                        self.idOut.createDimension("y",geoMetaWrfHydro.ny_global)
+                    except:
+                        ConfigOptions.errMsg = "Unable to create y dimension in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                    try:
+                        self.idOut.createDimension("x",geoMetaWrfHydro.nx_global)
+                    except:
+                        ConfigOptions.errMsg = "Unable to create x dimension in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                elif(ConfigOptions.grid_type == "hydrofabric"):
+                    try:
+                        self.idOut.createDimension("catchment_id",len(geoMetaWrfHydro.element_ids_global))
+                    except:
+                        ConfigOptions.errMsg = "Unable to create catchment id dimension in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                elif(ConfigOptions.grid_type == "unstructured"):
+                    try:
+                        self.idOut.createDimension("element_id",geoMetaWrfHydro.ny_global_elem)
+                    except:
+                        ConfigOptions.errMsg = "Unable to create element id dimension in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
                 # Set global attributes
                 try:
-                    idOut.model_output_valid_time = self.outDate.strftime("%Y-%m-%d_%H:%M:00")
+                    self.idOut.model_output_valid_time = ConfigOptions.b_date_proc.strftime("%Y-%m-%d_%H:%M:00")
                 except:
                     ConfigOptions.errMsg = "Unable to set the model_output_valid_time attribute in :" + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -134,8 +147,8 @@ class OutputObj:
                     if ConfigOptions.ana_flag:
                         model_init = ConfigOptions.b_date_proc - datetime.timedelta(minutes=ConfigOptions.output_freq)
                     else:
-                        model_init = ConfigOptions.current_fcst_cycle
-                    idOut.model_initialization_time = model_init.strftime("%Y-%m-%d_%H:%M:00")
+                        model_init = ConfigOptions.b_date_proc
+                    self.idOut.model_initialization_time = model_init.strftime("%Y-%m-%d_%H:%M:00")
                 except:
                     ConfigOptions.errMsg = "Unable to set the model_initialization_time global " \
                                            "attribute in: " + self.outPath
@@ -144,7 +157,7 @@ class OutputObj:
 
                 if ConfigOptions.nwmVersion is not None:
                     try:
-                        idOut.NWM_version_number = "v" + str(ConfigOptions.nwmVersion)
+                        self.idOut.NWM_version_number = "v" + str(ConfigOptions.nwmVersion)
                     except:
                         ConfigOptions.errMsg = "Unable to set the NWM_version_number global attribute in: " \
                                                + self.outPath
@@ -153,7 +166,7 @@ class OutputObj:
 
                 if ConfigOptions.nwmConfig is not None:
                     try:
-                        idOut.model_configuration = ConfigOptions.nwmConfig
+                        self.idOut.model_configuration = ConfigOptions.nwmConfig
                     except:
                         ConfigOptions.errMsg = "Unable to set the model_configuration global attribute in: " + \
                                                self.outPath
@@ -161,14 +174,14 @@ class OutputObj:
                         break
 
                 try:
-                    idOut.model_output_type = "forcing"
+                    self.idOut.model_output_type = "forcing"
                 except:
                     ConfigOptions.errMsg = "Unable to put model_output_type global attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
 
                 try:
-                    idOut.model_total_valid_times = float(ConfigOptions.actual_output_steps)
+                    self.idOut.model_total_valid_times = float(ConfigOptions.actual_output_steps)
                 except:
                     ConfigOptions.errMsg = "Unable to create total_valid_times global attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -176,78 +189,41 @@ class OutputObj:
 
                 # Create variables.
                 try:
-                    idOut.createVariable('time','i4',('time'))
+                    self.idOut.createVariable('time','i4',('time'))
                 except:
                     ConfigOptions.errMsg = "Unable to create time variable in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
-                try:
-                    idOut.createVariable('reference_time','i4',('reference_time'))
-                except:
-                    ConfigOptions.errMsg = "Unable to create reference_time variable in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-
                 # Populate time and reference time variables with appropriate attributes and time values.
                 try:
-                    idOut.variables['time'].units = "minutes since 1970-01-01 00:00:00 UTC"
+                    self.idOut.variables['time'].units = "minutes since 1970-01-01 00:00:00 UTC"
                 except:
                     ConfigOptions.errMsg = "Unable to create time units attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
                 try:
-                    idOut.variables['time'].standard_name = "time"
+                    self.idOut.variables['time'].standard_name = "time"
                 except:
                     ConfigOptions.errMsg = "Unable to create time standard_name attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
                 try:
-                    idOut.variables['time'].long_name = "valid output time"
+                    self.idOut.variables['time'].long_name = "valid output time"
                 except:
                     ConfigOptions.errMsg = "Unable to create time long_name attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
 
-                try:
-                    idOut.variables['reference_time'].units = "minutes since 1970-01-01 00:00:00 UTC"
-                except:
-                    ConfigOptions.errMsg = "Unable to create reference_time units attribute in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-                try:
-                    idOut.variables['reference_time'].standard_name = "forecast_reference_time"
-                except:
-                    ConfigOptions.errMsg = "Unable to create reference_time standard_name attribute in: " + \
-                                           self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-                try:
-                    idOut.variables['reference_time'].long_name = "model initialization time"
-                except:
-                    ConfigOptions.errMsg = "Unable to create reference_time long_name attribute in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-
-                # Populate time variables
-                dEpoch = datetime.datetime(1970, 1, 1)
-                dtValid = self.outDate - dEpoch
-                dtRef = ConfigOptions.current_fcst_cycle - dEpoch
-
-                try:
-                    idOut.variables['time'][0] = int(dtValid.days * 24.0 * 60.0) + \
-                                                 int(math.floor(dtValid.seconds / 60.0))
-                except:
-                    ConfigOptions.errMsg = "Unable to populate the time variable in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-
-                try:
-                    idOut.variables['reference_time'][0] = int(dtRef.days * 24.0 * 60.0) + \
-                                                           int(math.floor(dtRef.seconds / 60.0))
-                except:
-                    ConfigOptions.errMsg = "Unable to populate the time variable in: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
+                # Get dimension fields based on the varying domain configurations
+                if(ConfigOptions.grid_type == "gridded"):
+                    dim_x = 'x'
+                    dim_y = 'y'
+                elif(ConfigOptions.grid_type == "hydrofabric"):
+                    dim_x = "catchment_id"
+                    dim_y = "catchment_id"
+                elif(ConfigOptions.grid_type == "unstructured"):
+                    dim_x = "element_id"
+                    dim_y = "element_id"
 
                 # Create geospatial metadata coordinate variables if data was read in from an optional
                 # spatial metadata file.
@@ -255,21 +231,21 @@ class OutputObj:
                     # Create coordinate variables and populate with attributes read in.
                     try:
                         if ConfigOptions.useCompression == 1:
-                            idOut.createVariable('x', 'f8', ('x'), zlib=True, complevel=2)
+                            self.idOut.createVariable('x', 'f8', ('x'), zlib=True, complevel=2)
                         else:
-                            idOut.createVariable('x','f8', ('x'))
+                            self.idOut.createVariable('x','f8', ('x'))
                     except:
                         ConfigOptions.errMsg = "Unable to create x variable in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables['x'].setncatts(geoMetaWrfHydro.x_coord_atts)
+                        self.idOut.variables['x'].setncatts(geoMetaWrfHydro.x_coord_atts)
                     except:
                         ConfigOptions.errMsg = "Unable to establish x coordinate attributes in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables['x'][:] = geoMetaWrfHydro.x_coords
+                        self.idOut.variables['x'][:] = geoMetaWrfHydro.x_coords
                     except:
                         ConfigOptions.errMsg = "Unable to place x coordinate values into output variable " \
                                                "for output file: " + self.outPath
@@ -278,21 +254,21 @@ class OutputObj:
 
                     try:
                         if ConfigOptions.useCompression == 1:
-                            idOut.createVariable('y','f8',('y'), zlib=True, complevel=2)
+                            self.idOut.createVariable('y','f8',('y'), zlib=True, complevel=2)
                         else:
-                            idOut.createVariable('y', 'f8', ('y'))
+                            self.idOut.createVariable('y', 'f8', ('y'))
                     except:
                         ConfigOptions.errMsg = "Unable to create y variable in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables['y'].setncatts(geoMetaWrfHydro.y_coord_atts)
+                        self.idOut.variables['y'].setncatts(geoMetaWrfHydro.y_coord_atts)
                     except:
                         ConfigOptions.errMsg = "Unable to establish y coordinate attributes in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables['y'][:] = geoMetaWrfHydro.y_coords
+                        self.idOut.variables['y'][:] = geoMetaWrfHydro.y_coords
                     except:
                         ConfigOptions.errMsg = "Unable to place y coordinate values into output variable " \
                                                "for output file: " + self.outPath
@@ -300,17 +276,140 @@ class OutputObj:
                         break
 
                     try:
-                        idOut.createVariable('crs','S1')
+                        self.idOut.createVariable('crs','S1')
                     except:
                         ConfigOptions.errMsg = "Unable to create crs in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables['crs'].setncatts(geoMetaWrfHydro.crs_atts)
+                        self.idOut.variables['crs'].setncatts(geoMetaWrfHydro.crs_atts)
                     except:
                         ConfigOptions.errMsg = "Unable to establish crs attributes in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
+                # geospatial information must be coming from ESMF mesh/grid files, look for them and
+                # assign data accordingly 
+                else:
+                    # Spherical Degree coordinates in ESMF
+                    if(geoMetaWrfHydro.esmf_grid.coord_sys == None or geoMetaWrfHydro.esmf_grid.coord_sys.name == 'SPH_DEG'):
+                        transform_name = 'GCS_WGS_1984'
+                        proj = "+proj=latlong +datum=WGS84"
+                        units = 'degrees'
+                    else:
+                        # Cartesian coordinates in ESMF
+                        transform_name = 'GCS_WGS_1984'
+                        proj = "+proj=geocent +datum=WGS84"
+                        units = 'm'
+
+                    # Temporary open the geogrid file to assign geospatial data to netcdf file
+                    idTmp = Dataset(ConfigOptions.geogrid,'r')
+                    # Create coordinate variables and populate with attributes read in.
+                    try:
+                        if ConfigOptions.useCompression == 1:
+                            self.idOut.createVariable('x', 'f8', (dim_x), zlib=True, complevel=2)
+                        else:
+                            self.idOut.createVariable('x','f8', (dim_x))
+                    except:
+                        ConfigOptions.errMsg = "Unable to create x variable in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                    try:
+                        self.idOut.variables['x'].setncattr("standard_name", "Longtiude")
+                        self.idOut.variables['x'].setncattr("long_name", "x coordinate of projection")
+                        self.idOut.variables['x'].setncattr("units", units)                        
+                    except:
+                        ConfigOptions.errMsg = "Unable to establish x coordinate attributes in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                    if(ConfigOptions.grid_type != "gridded"):
+                        try:
+                            self.idOut.variables['x'][:] = idTmp.variables[ConfigOptions.elemcoords_var][:].data[:,0]
+                        except:
+                            ConfigOptions.errMsg = "Unable to place x coordinate values into output variable " \
+                                                   "for output file: " + self.outPath
+                            err_handler.log_critical(ConfigOptions, MpiConfig)
+                            break
+                    else:
+                        try:
+                            self.idOut.variables['x'][:] = idTmp.variables[ConfigOptions.lon_var][:].data
+                        except:
+                            ConfigOptions.errMsg = "Unable to place x coordinate values into output variable " \
+                                                   "for output file: " + self.outPath
+                            err_handler.log_critical(ConfigOptions, MpiConfig)
+                            break                        
+                    try:
+                        if ConfigOptions.useCompression == 1:
+                            self.idOut.createVariable('y','f8',(dim_y), zlib=True, complevel=2)
+                        else:
+                            self.idOut.createVariable('y', 'f8', (dim_y))
+                    except:
+                        ConfigOptions.errMsg = "Unable to create y variable in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                    try:
+                        self.idOut.variables['y'].setncattr("standard_name", "Latitude")
+                        self.idOut.variables['y'].setncattr("long_name", "y coordinate of projection")
+                        self.idOut.variables['y'].setncattr("units", units)
+                    except:
+                        ConfigOptions.errMsg = "Unable to establish y coordinate attributes in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                    if(ConfigOptions.grid_type != "gridded"):
+                        try:
+                            self.idOut.variables['y'][:] = idTmp.variables[ConfigOptions.elemcoords_var][:].data[:,1]
+                        except:
+                            ConfigOptions.errMsg = "Unable to place y coordinate values into output variable " \
+                                                   "for output file: " + self.outPath
+                            err_handler.log_critical(ConfigOptions, MpiConfig)
+                            break
+                    else:
+                        try:
+                            self.idOut.variables['y'][:] = idTmp.variables[ConfigOptions.lat_var][:].data
+                        except:
+                            ConfigOptions.errMsg = "Unable to place y coordinate values into output variable " \
+                                                   "for output file: " + self.outPath
+                            err_handler.log_critical(ConfigOptions, MpiConfig)
+                            break
+
+                    if(ConfigOptions.grid_type == "hydrofabric"):
+                        try:
+                            self.idOut.createVariable('catchment_id', 'i4', (dim_y))
+                        except:
+                            ConfigOptions.errMsg = "Unable to create catchment id variable in: " + self.outPath
+                            err_handler.log_critical(ConfigOptions, MpiConfig)
+                            break
+                        try:
+                            self.idOut.variables['catchment_id'].setncattr("standard_name", "Catchment ID")
+                            self.idOut.variables['catchment_id'].setncattr("long_name", "Catchment ID for NextGen hydrofabric")
+                        except:
+                            ConfigOptions.errMsg = "Unable to establish catchment id attributes in: " + self.outPath
+                            err_handler.log_critical(ConfigOptions, MpiConfig)
+                            break
+                        try:
+                            self.idOut.variables['catchment_id'][:] = geoMetaWrfHydro.element_ids_global
+                        except:
+                            ConfigOptions.errMsg = "Unable to place y coordinate values into output variable " \
+                                                   "for output file: " + self.outPath
+                            err_handler.log_critical(ConfigOptions, MpiConfig)
+                            break
+
+                    try:
+                        self.idOut.createVariable('crs','S1')
+                    except:
+                        ConfigOptions.errMsg = "Unable to create crs in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break                        
+                    try:
+                        self.idOut.variables['crs'].setncattr("transform_name", transform_name)
+                        self.idOut.variables['crs'].setncattr("grid_mapping_name", transform_name)
+                        self.idOut.variables['crs'].setncattr("esri_pe_string", proj)
+                    except:
+                        ConfigOptions.errMsg = "Unable to establish crs attributes in: " + self.outPath
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+
+                    # close the geogrid netcdf file 
+                    idTmp.close()
 
                 # Loop through and create each variable, along with expected attributes.
                 for varTmp in output_variable_attribute_dict:
@@ -334,25 +433,32 @@ class OutputObj:
                             #                 output_variable_attribute_dict[varTmp][5])
                             dtype = 'i4'
 
-                        idOut.createVariable(varTmp, dtype, ('time', 'y', 'x'),
-                                             fill_value=fill_value,
-                                             zlib=zlib,
-                                             complevel=complevel,
-                                             least_significant_digit=least_significant_digit)
+                        if(ConfigOptions.grid_type == "gridded"):
+                            self.idOut.createVariable(varTmp, dtype, ('time', dim_y, dim_x),
+                                                 fill_value=fill_value,
+                                                 zlib=zlib,
+                                                 complevel=complevel,
+                                                 least_significant_digit=least_significant_digit)
+                        else:
+                            self.idOut.createVariable(varTmp, dtype, ('time', dim_y),
+                                                 fill_value=fill_value,
+                                                 zlib=zlib,
+                                                 complevel=complevel,
+                                                 least_significant_digit=least_significant_digit)
 
                     except:
                         ConfigOptions.errMsg = "Unable to create " + varTmp + " variable in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables[varTmp].cell_methods = output_variable_attribute_dict[varTmp][4]
+                        self.idOut.variables[varTmp].cell_methods = output_variable_attribute_dict[varTmp][4]
                     except:
                         ConfigOptions.errMsg = "Unable to create cell_methods attribute for: " + varTmp + \
                             " in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables[varTmp].remap = regrid_att
+                        self.idOut.variables[varTmp].remap = regrid_att
                     except:
                         ConfigOptions.errMsg = "Unable to create remap attribute for: " + varTmp + \
                             " in: " + self.outPath
@@ -361,7 +467,7 @@ class OutputObj:
                     # Place geospatial metadata attributes in if we have them.
                     if ConfigOptions.spatial_meta is not None:
                         try:
-                            idOut.variables[varTmp].grid_mapping = 'crs'
+                            self.idOut.variables[varTmp].grid_mapping = 'crs'
                         except:
                             ConfigOptions.errMsg = "Unable to create grid_mapping attribute for: " + \
                                                    varTmp + " in: " + self.outPath
@@ -369,7 +475,7 @@ class OutputObj:
                             break
                         if 'esri_pe_string' in geoMetaWrfHydro.crs_atts.keys():
                             try:
-                                idOut.variables[varTmp].esri_pe_string = geoMetaWrfHydro.crs_atts['esri_pe_string']
+                                self.idOut.variables[varTmp].esri_pe_string = geoMetaWrfHydro.crs_atts['esri_pe_string']
                             except:
                                 ConfigOptions.errMsg = "Unable to create esri_pe_string attribute for: " + \
                                                        varTmp + " in: " + self.outPath
@@ -377,7 +483,7 @@ class OutputObj:
                                 break
                         if 'proj4' in geoMetaWrfHydro.spatial_global_atts.keys():
                             try:
-                                idOut.variables[varTmp].proj4 = geoMetaWrfHydro.spatial_global_atts['proj4']
+                                self.idOut.variables[varTmp].proj4 = geoMetaWrfHydro.spatial_global_atts['proj4']
                             except:
                                 ConfigOptions.errMsg = "Unable to create proj4 attribute for: " + varTmp + \
                                     " in: " + self.outPath
@@ -385,21 +491,21 @@ class OutputObj:
                                 break
 
                     try:
-                        idOut.variables[varTmp].units = output_variable_attribute_dict[varTmp][1]
+                        self.idOut.variables[varTmp].units = output_variable_attribute_dict[varTmp][1]
                     except:
                         ConfigOptions.errMsg = "Unable to create units attribute for: " + varTmp + " in: " + \
                             self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables[varTmp].standard_name = output_variable_attribute_dict[varTmp][2]
+                        self.idOut.variables[varTmp].standard_name = output_variable_attribute_dict[varTmp][2]
                     except:
                         ConfigOptions.errMsg = "Unable to create standard_name attribute for: " + varTmp + \
                             " in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
                     try:
-                        idOut.variables[varTmp].long_name = output_variable_attribute_dict[varTmp][3]
+                        self.idOut.variables[varTmp].long_name = output_variable_attribute_dict[varTmp][3]
                     except:
                         ConfigOptions.errMsg = "Unable to create long_name attribute for: " + varTmp + \
                             " in: " + self.outPath
@@ -409,39 +515,86 @@ class OutputObj:
                     if not ConfigOptions.useFloats:
                         if varTmp != 'RAINRATE':
                             try:
-                                idOut.variables[varTmp].scale_factor = output_variable_attribute_dict[varTmp][5]
+                                self.idOut.variables[varTmp].scale_factor = output_variable_attribute_dict[varTmp][5]
                             except (ValueError, IOError):
                                 ConfigOptions.errMsg = "Unable to create scale_factor attribute for: " + varTmp + \
                                                        " in: " + self.outPath
                                 err_handler.log_critical(ConfigOptions, MpiConfig)
                                 break
                             try:
-                                idOut.variables[varTmp].add_offset = output_variable_attribute_dict[varTmp][6]
+                                self.idOut.variables[varTmp].add_offset = output_variable_attribute_dict[varTmp][6]
                             except (ValueError, IOError):
                                 ConfigOptions.errMsg = "Unable to create add_offset attribute for: " + varTmp + \
                                                        " in: " + self.outPath
                                 err_handler.log_critical(ConfigOptions, MpiConfig)
                                 break
+
+                # Close the NetCDF file
+                try:
+                    self.idOut.close()
+                except (ValueError, IOError):
+                    ConfigOptions.errMsg = "Unable to close output file: " + self.outPath
+                    err_handler.log_critical(ConfigOptions, MpiConfig)
+                    break
+
                 break
 
+        
         err_handler.check_program_status(ConfigOptions, MpiConfig)
+
+
+    def update_forcing_file_output(self,ConfigOptions,geoMetaWrfHydro,MpiConfig,BMI_time):
+
+        output_variable_attribute_dict = {
+            'U2D': [0,'m s-1','x_wind','10-m U-component of wind','time: point',0.001,0.0,3],
+            'V2D': [1,'m s-1','y_wind','10-m V-component of wind','time: point',0.001,0.0,3],
+            'LWDOWN': [2,'W m-2','surface_downward_longwave_flux',
+                       'Surface downward long-wave radiation flux','time: point',0.001,0.0,3],
+            'RAINRATE': [3,'mm s^-1','precipitation_flux','Surface Precipitation Rate','time: mean',1.0,0.0,0],
+            'T2D': [4,'K','air_temperature','2-m Air Temperature','time: point',0.01,100.0,2],
+            'Q2D': [5,'kg kg-1','surface_specific_humidity','2-m Specific Humidity','time: point',0.000001,0.0,6],
+            'PSFC': [6,'Pa','air_pressure','Surface Pressure','time: point',0.1,0.0,1],
+            'SWDOWN': [7,'W m-2','surface_downward_shortwave_flux',
+                       'Surface downward short-wave radiation flux','time: point',0.001,0.0,3]
+        }
+
+        if ConfigOptions.include_lqfraq:
+            output_variable_attribute_dict['LQFRAQ'] = [8, '%', 'liquid_water_fraction',
+                                                        'Fraction of precipitation that is liquid vs. frozen',
+                                                        'time: point', 0.1, 0.0, 3]
+
+        if MpiConfig.rank == 0:    
+
+            # Only output on the master processor.
+            try:
+                idOut = Dataset(self.outPath,'a')
+            except Exception as e:
+                ConfigOptions.errMsg = "Unable to create output file: " + self.outPath + "\n" + str(e)
+                err_handler.log_critical(ConfigOptions, MpiConfig)
+
+            # Populate time variables
+            dEpoch = datetime.datetime(1970, 1, 1)
+            dtValid = BMI_time - dEpoch
+
+            try:
+                idOut.variables['time'][int(ConfigOptions.bmi_time_index)] = int(dtValid.days * 24.0 * 60) + int(math.floor(dtValid.seconds / 60.0))
+            except:
+                ConfigOptions.errMsg = "Unable to populate the time variable in: " + self.outPath
+                err_handler.log_critical(ConfigOptions, MpiConfig)
+        
 
         # Now loop through each variable, collect the data (call on each processor), assemble into the final
         # output grid, and place into the output file (if on processor 0).
         for varTmp in output_variable_attribute_dict:
-            # First run a check for missing values. There should be none at this point.
-            # err_handler.check_missing_final(self.outPath, ConfigOptions, self.output_local[output_variable_attribute_dict[varTmp][0], :, :],
-            #                                 varTmp, MpiConfig)
-            # if ConfigOptions.errFlag == 1:
-            #     continue
 
             # Collect data from the various processors, and place into the output file.
             try:
-                # TODO change communication call from comm.gather() to comm.Gather for efficency
-                # final = MpiConfig.comm.gather(self.output_local[output_variable_attribute_dict[varTmp][0],:,:],root=0)
-
-                # Use gatherv to merge the data slabs
-                dataOutTmp = MpiConfig.merge_slabs_gatherv(self.output_local[output_variable_attribute_dict[varTmp][0],:,:], ConfigOptions)
+                if(ConfigOptions.grid_type == "gridded"):
+                    dataOutTmp = MpiConfig.merge_slabs_gatherv(self.output_local[output_variable_attribute_dict[varTmp][0],:,:], ConfigOptions)
+                elif(ConfigOptions.grid_type == "hydrofabric"):
+                    dataOutTmp = MpiConfig.merge_slabs_gatherv(self.output_local[output_variable_attribute_dict[varTmp][0],:], ConfigOptions)
+                elif(ConfigOptions.grid_type == "unstructured"):
+                    dataOutTmp = MpiConfig.merge_slabs_gatherv(self.output_local_elem[output_variable_attribute_dict[varTmp][0],:], ConfigOptions)
             except Exception as e:
                 print(e)
                 ConfigOptions.errMsg = "Unable to gather final grids for: " + varTmp
@@ -449,35 +602,39 @@ class OutputObj:
                 continue
 
             if MpiConfig.rank == 0:
-                try:
-                    idOut.variables[varTmp][0, :, :] = dataOutTmp
-                except (ValueError, IOError):
-                    ConfigOptions.errMsg = "Unable to place final output grid for: " + varTmp
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
+                if(ConfigOptions.grid_type == "gridded"):
+                    try:
+                        idOut.variables[varTmp][int(ConfigOptions.bmi_time_index), :, :] = dataOutTmp
+                    except (ValueError, IOError):
+                        ConfigOptions.errMsg = "Unable to place final output grid for: " + varTmp
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                else:
+                    try:
+                        idOut.variables[varTmp][int(ConfigOptions.bmi_time_index), :] = dataOutTmp
+                    except (ValueError, IOError):
+                        ConfigOptions.errMsg = "Unable to place final output grid for: " + varTmp
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
                 # Reset temporary data objects to keep memory usage down.
                 del dataOutTmp
-
-            # Reset temporary data objects to keep memory usage down.
-            final = None
 
             err_handler.check_program_status(ConfigOptions, MpiConfig)
 
         if MpiConfig.rank == 0:
-            while (True):
-                # Close the NetCDF file
-                try:
-                    idOut.close()
-                except (ValueError, IOError):
-                    ConfigOptions.errMsg = "Unable to close output file: " + self.outPath
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
-                break
+            # Close the NetCDF file
+            try:
+                idOut.close()
+            except (ValueError, IOError):
+                ConfigOptions.errMsg = "Unable to close output file: " + self.outPath
+                err_handler.log_critical(ConfigOptions, MpiConfig)
+
+            # Reset memory
+            del idOut
 
         err_handler.check_program_status(ConfigOptions, MpiConfig)
 
 
 def open_grib2(GribFileIn,NetCdfFileOut,Wgrib2Cmd,ConfigOptions,MpiConfig,
-               inputVar):
+               inputVar,special_case):
     """
     Generic function to convert a GRIB2 file into a NetCDF file. Function
     will also open the NetCDF file, and ensure all necessary inputs are
@@ -516,14 +673,18 @@ def open_grib2(GribFileIn,NetCdfFileOut,Wgrib2Cmd,ConfigOptions,MpiConfig,
                     )
                 os.environ['GRIB2TABLE'] = g2path
 
-            exitcode = subprocess.call(Wgrib2Cmd, shell=True)
-
-            #print("exitcode: " + str(exitcode))
-            # Call WGRIB2 with subprocess.Popen
-            #cmdOutput = subprocess.Popen([Wgrib2Cmd], stdout=subprocess.PIPE,
-            #                             stderr=subprocess.PIPE, shell=True)
-            #out, err = cmdOutput.communicate()
-            #exitcode = cmdOutput.returncode
+            if(WGRIB2_env):
+                exitcode = subprocess.call(Wgrib2Cmd, shell=True)
+            else:
+                if(special_case):
+                    # National Blended Model Supplementary precipitation
+                    if(len(Wgrib2Cmd) == 3):
+                        exitcode = pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-match',Wgrib2Cmd[0], '-match',Wgrib2Cmd[1], '-not',Wgrib2Cmd[2],'-netcdf',NetCdfFileOut])
+                    # Just specify the entire grib2 file to be converted
+                    else:
+                        exitcode = pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-netcdf',NetCdfFileOut])
+                else:
+                    print(pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-match',Wgrib2Cmd,'-netcdf',NetCdfFileOut]))
         except:
             ConfigOptions.errMsg = "Unable to convert: " + GribFileIn + " to " + \
                                    NetCdfFileOut

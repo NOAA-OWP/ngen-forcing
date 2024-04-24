@@ -1668,6 +1668,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
         # Open the NetCDF file.
         try:
             id_nldas_param = Dataset(nldas_param_file, 'r')
+            id_nldas_param.set_auto_mask(False)                 # don't mask missing since it won't survive broadcast
         except OSError as err:
             config_options.errMsg = "Unable to open parameter file: " + nldas_param_file + " (" + str(err) + ")"
             err_handler.log_critical(config_options, mpi_config)
@@ -2240,7 +2241,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
 
     try:
         input_forcings.final_forcings[input_forcings.input_map_output[force_num], :, :] = \
-            input_forcings.esmf_field_out.data
+                input_forcings.esmf_field_out.data
     except NumpyExceptions as npe:
         config_options.errMsg = "Unable to extract ESMF field data for CFSv2: " + str(npe)
         err_handler.log_critical(config_options, mpi_config)

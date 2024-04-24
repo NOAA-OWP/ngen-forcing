@@ -216,8 +216,8 @@ class supplemental_precip:
             5: time_handling.find_hourly_mrms_radar_neighbors,
             6: time_handling.find_hourly_mrms_radar_neighbors,
             7: time_handling.find_sbcv2_lwf_neighbors,
-            8: time_handling.find_hourly_nbm_apcp_neighbors,
-            9: time_handling.find_hourly_nbm_apcp_neighbors,
+            8: time_handling.find_hourly_nbm_neighbors,
+            9: time_handling.find_hourly_nbm_neighbors,
             10: time_handling.find_hourly_mrms_radar_neighbors,
             11: time_handling.find_ak_ext_ana_precip_neighbors,
             12: time_handling.find_conus_ext_ana_precip_neighbors
@@ -253,8 +253,8 @@ class supplemental_precip:
             5: regrid.regrid_mrms_hourly,
             6: regrid.regrid_mrms_hourly,
             7: regrid.regrid_sbcv2_liquid_water_fraction,
-            8: regrid.regrid_hourly_nbm_apcp,
-            9: regrid.regrid_hourly_nbm_apcp,
+            8: regrid.regrid_hourly_nbm,
+            9: regrid.regrid_hourly_nbm,
             10: regrid.regrid_mrms_hourly, 
             11: regrid.regrid_ak_ext_ana_pcp,  
             12: regrid.regrid_conus_ext_ana_pcp

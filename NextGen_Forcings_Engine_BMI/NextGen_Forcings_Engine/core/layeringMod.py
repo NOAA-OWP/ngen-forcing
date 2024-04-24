@@ -34,32 +34,50 @@ def layer_final_forcings(OutputObj,input_forcings,ConfigOptions,MpiConfig):
             if(ConfigOptions.grid_type == "gridded"):
                 outLayerCurrent = OutputObj.output_local[force_idx,:,:]
                 layerIn = input_forcings.final_forcings[force_idx,:,:]
-                indSet = np.where(layerIn != ConfigOptions.globalNdv)
-                outLayerCurrent[indSet] = layerIn[indSet]
-                OutputObj.output_local[force_idx, :, :] = outLayerCurrent
+                if(input_forcings.productName == 'ERA5' and 12 in ConfigOptions.input_forcings or 21 in ConfigOptions.input_forcings):
+                    outLayerCurrent[np.where(input_forcings.regridded_mask_AORC==0)] = layerIn[np.where(input_forcings.regridded_mask_AORC==0)]
+                    OutputObj.output_local[force_idx, :, :] = outLayerCurrent
+                else:
+                    indSet = np.where(layerIn != ConfigOptions.globalNdv)
+                    outLayerCurrent[indSet] = layerIn[indSet]
+                    OutputObj.output_local[force_idx, :, :] = outLayerCurrent
+
                 # Reset for next iteration and memory efficiency.
                 indSet = None
             elif(ConfigOptions.grid_type == "unstructured"):
                 outLayerCurrent = OutputObj.output_local[force_idx,:]
                 layerIn = input_forcings.final_forcings[force_idx,:]
-                indSet = np.where(layerIn != ConfigOptions.globalNdv)
-                outLayerCurrent[indSet] = layerIn[indSet]
-                OutputObj.output_local[force_idx, :] = outLayerCurrent
+                if(input_forcings.productName == 'ERA5' and 12 in ConfigOptions.input_forcings or 21 in ConfigOptions.input_forcings):
+                    outLayerCurrent[np.where(input_forcings.regridded_mask_AORC==0)] = layerIn[np.where(input_forcings.regridded_mask_AORC==0)]
+                    OutputObj.output_local[force_idx, :] = outLayerCurrent
+                else:
+                    indSet = np.where(layerIn != ConfigOptions.globalNdv)
+                    outLayerCurrent[indSet] = layerIn[indSet]
+                    OutputObj.output_local[force_idx, :] = outLayerCurrent
 
                 outLayerCurrent_elem = OutputObj.output_local_elem[force_idx,:]
                 layerIn_elem = input_forcings.final_forcings_elem[force_idx,:]
-                indSet_elem = np.where(layerIn_elem != ConfigOptions.globalNdv)
-                outLayerCurrent_elem[indSet_elem] = layerIn_elem[indSet_elem]
-                OutputObj.output_local_elem[force_idx, :] = outLayerCurrent_elem
+                if(input_forcings.productName == 'ERA5' and 12 in ConfigOptions.input_forcings or 21 in ConfigOptions.input_forcings):
+                    outLayerCurrent_elem[np.where(input_forcings.regridded_mask_elem_AORC==0)] = layerIn_elem[np.where(input_forcings.regridded_mask_elem_AORC==0)]
+                    OutputObj.output_local_elem[force_idx, :] = outLayerCurrent_elem
+                else:
+                    indSet_elem = np.where(layerIn_elem != ConfigOptions.globalNdv)
+                    outLayerCurrent_elem[indSet_elem] = layerIn_elem[indSet_elem]
+                    OutputObj.output_local_elem[force_idx, :] = outLayerCurrent_elem
+
                 # Reset for next iteration and memory efficiency.
                 indSet = None
                 indSet_elem = None
             elif(ConfigOptions.grid_type == "hydrofabric"):
                 outLayerCurrent = OutputObj.output_local[force_idx,:]
                 layerIn = input_forcings.final_forcings[force_idx,:]
-                indSet = np.where(layerIn != ConfigOptions.globalNdv)
-                outLayerCurrent[indSet] = layerIn[indSet]
-                OutputObj.output_local[force_idx, :] = outLayerCurrent
+                if(input_forcings.productName == 'ERA5' and 12 in ConfigOptions.input_forcings or 21 in ConfigOptions.input_forcings):
+                    outLayerCurrent[np.where(input_forcings.regridded_mask_AORC==0)] = layerIn[np.where(input_forcings.regridded_mask_AORC==0)]
+                    OutputObj.output_local[force_idx, :] = outLayerCurrent
+                else:
+                    indSet = np.where(layerIn != ConfigOptions.globalNdv)
+                    outLayerCurrent[indSet] = layerIn[indSet]
+                    OutputObj.output_local[force_idx, :] = outLayerCurrent
                 # Reset for next iteration and memory efficiency.
                 indSet = None
 

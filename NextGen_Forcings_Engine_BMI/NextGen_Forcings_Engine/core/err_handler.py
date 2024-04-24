@@ -5,6 +5,7 @@ import traceback
 
 import numpy as np
 from mpi4py import MPI
+from scipy import spatial
 
 
 def err_out_screen(err_msg):
@@ -320,7 +321,7 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
     indCheck = None
     return
 
-def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig):
+def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig, GeoMeta):
     """
     Function for running a reasonable value check on supplemental precipitation
     values. This is one check type with the other checking for final missing
@@ -335,28 +336,70 @@ def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig):
     if supplemental_precip.regridded_precip2 is None:
         return
 
-    # First check to see if we have any data that is not missing.
-    # indCheck = np.where(supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv)
-
-    # if len(indCheck[0]) == 0:
-    #     ConfigOptions.errMsg = "No valid supplemental precip found in " + supplemental_precip.file_in2
-    #     log_critical(ConfigOptions, MpiConfig)
-    #     indCheck = None
-    #     return
-
     # Check to see if any pixel cells are below the minimum value.
     indCheck = np.where((supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv) &
                         (supplemental_precip.regridded_precip2 < 0.0))
+    indCheck_valid = np.where((supplemental_precip.regridded_precip2 > 0.0) & (supplemental_precip.regridded_precip2 < 100.0))
     numCells = len(indCheck[0])
     if numCells > 0:
         ConfigOptions.errMsg = "Supplemental precip data below minimum threshold for in " + \
                                supplemental_precip.file_in2 + \
                                " for " + str(numCells) + " regridded pixel cells."
-        log_critical(ConfigOptions, MpiConfig)
+        valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]),2),dtype=float)
+        invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]),2),dtype=float)
+        valid_coords[:,0] = GeoMeta.longitude_grid[indCheck_valid[0]]
+        valid_coords[:,0] = GeoMeta.latitude_grid[indCheck_valid[0]]
+        invalid_coords[:,0] = GeoMeta.longitude_grid[indCheck[0]]
+        invalid_coords[:,0] = GeoMeta.latitude_grid[indCheck[0]]
+        distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
+        supplemental_precip.regridded_precip2[indCheck[0]] = supplemental_precip.regridded_precip2[pet_inds]
+        del(valid_coords)
+        del(invalid_coords)
+        del(distance)
+        del(pet_inds)
         indCheck = None
+        indCheck_valid = None
         return
 
-    print(supplemental_precip.regridded_precip2.max())
+    # Check to see if any pixel cells are above the maximum value.
+    indCheck = np.where((supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv) &
+                        (supplemental_precip.regridded_precip2 > 100.0))
+    indCheck_valid = np.where((supplemental_precip.regridded_precip2 > 0.0) & (supplemental_precip.regridded_precip2 < 100.0))
+    numCells = len(indCheck[0])
+    if numCells > 0:
+        ConfigOptions.errMsg = "Supplemental precip data above maximum threshold for in " + \
+                               supplemental_precip.file_in2 + \
+                               " for " + str(numCells) + " regridded pixel cells."
+        valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]),2),dtype=float)
+        invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]),2),dtype=float)
+        valid_coords[:,0] = GeoMeta.longitude_grid[indCheck_valid[0]]
+        valid_coords[:,0] = GeoMeta.latitude_grid[indCheck_valid[0]]
+        invalid_coords[:,0] = GeoMeta.longitude_grid[indCheck[0]]
+        invalid_coords[:,0] = GeoMeta.latitude_grid[indCheck[0]]
+        distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
+        #log_critical(ConfigOptions, MpiConfig)
+        supplemental_precip.regridded_precip2[indCheck[0]] = supplemental_precip.regridded_precip2[pet_inds]
+      
+        indCheck = np.where((supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv) &
+                            (supplemental_precip.regridded_precip2 > 100.0))
+        indCheck_valid = np.where((supplemental_precip.regridded_precip2 > 0.0) & (supplemental_precip.regridded_precip2 < 100.0))
+        if(len(indCheck[0]) > 0):
+            valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]),2),dtype=float)
+            invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]),2),dtype=float)
+            valid_coords[:,0] = GeoMeta.longitude_grid[indCheck_valid[0]]
+            valid_coords[:,0] = GeoMeta.latitude_grid[indCheck_valid[0]]
+            invalid_coords[:,0] = GeoMeta.longitude_grid[indCheck[0]]
+            invalid_coords[:,0] = GeoMeta.latitude_grid[indCheck[0]]
+            distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
+            supplemental_precip.regridded_precip2[indCheck[0]] = supplemental_precip.regridded_precip2[pet_inds]
+        del(valid_coords)
+        del(invalid_coords)
+        del(distance)
+        del(pet_inds)
+        indCheck = None
+        indCheck_valid = None
+        return
+
     # Check to see if any pixel cells are above the maximum value.
     indCheck = np.where((supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv) &
                         (supplemental_precip.regridded_precip2 > 100.0))
@@ -366,10 +409,7 @@ def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig):
                                supplemental_precip.file_in2 + \
                                " for " + str(numCells) + " regridded pixel cells."
         log_critical(ConfigOptions, MpiConfig)
-        indCheck = None
-        return
 
-    indCheck = None
     return
 
 def check_missing_final(outPath, ConfigOptions, output_grid, var_name, MpiConfig):

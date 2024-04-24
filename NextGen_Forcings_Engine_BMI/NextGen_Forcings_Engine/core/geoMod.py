@@ -19,6 +19,8 @@ class GeoMetaWrfHydro:
     def __init__(self):
         self.nx_global = None
         self.ny_global = None
+        self.nx_global_elem = None
+        self.ny_global_elem = None
         self.dx_meters = None
         self.dy_meters = None
         self.nx_local = None
@@ -32,6 +34,7 @@ class GeoMetaWrfHydro:
         self.latitude_grid = None
         self.longitude_grid = None
         self.element_ids = None
+        self.element_ids_global = None
         self.latitude_grid_elem = None
         self.longitude_grid_elem = None
         self.mesh_inds = None
@@ -178,20 +181,26 @@ class GeoMetaWrfHydro:
                     ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
                                            "from latitude in: " + ConfigOptions.geogrid
                     raise Exception
+                if(ConfigOptions.input_forcings[0] != 23):
+                    try:
+                        self.dx_meters = idTmp.variables[ConfigOptions.lon_var].dx
+                    except:
+                        ConfigOptions.errMsg = "Unable to extract dx metadata attribute " + \
+                                               " in: " + ConfigOptions.geogrid
+                        raise Exception
 
-                try:
-                    self.dx_meters = idTmp.variables[ConfigOptions.lon_var].dx
-                except:
-                    ConfigOptions.errMsg = "Unable to extract dx metadata attribute " + \
-                                           " in: " + ConfigOptions.geogrid
-                    raise Exception
+                    try:
+                        self.dy_meters = idTmp.variables[ConfigOptions.lat_var].dy
+                    except:
+                        ConfigOptions.errMsg = "Unable to extract dy metadata attribute " + \
+                                               " in: " + ConfigOptions.geogrid
+                        raise Exception
+                else:
+                    # Manually input the grid spacing since ERA5-Interim does not 
+                    # internally have this geospatial information within the netcdf file
+                    self.dx_meters = 31000
+                    self.dy_meters = 31000
 
-                try:
-                    self.dy_meters = idTmp.variables[ConfigOptions.lat_var].dy
-                except:
-                    ConfigOptions.errMsg = "Unable to extract dy metadata attribute " + \
-                                           " in: " + ConfigOptions.geogrid
-                    raise Exception
 
         #MpiConfig.comm.barrier()
 
@@ -704,11 +713,26 @@ class GeoMetaWrfHydro:
                                        "in " + ConfigOptions.geogrid
                 raise Exception
 
+            try:
+                self.nx_global_elem = idTmp.variables[ConfigOptions.elemcoords_var].shape[0]
+            except:
+                ConfigOptions.errMsg = "Unable to extract X dimension size " + \
+                                       "in " + ConfigOptions.geogrid
+                raise Exception
+
+            try:
+                self.ny_global_elem = idTmp.variables[ConfigOptions.elemcoords_var].shape[0]
+            except:
+                ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
+                                       "in " + ConfigOptions.geogrid
+                raise Exception
         #MpiConfig.comm.barrier()
 
         # Broadcast global dimensions to the other processors.
         self.nx_global = MpiConfig.broadcast_parameter(self.nx_global,ConfigOptions, param_type=int)
         self.ny_global = MpiConfig.broadcast_parameter(self.ny_global,ConfigOptions, param_type=int)
+        self.nx_global_elem = MpiConfig.broadcast_parameter(self.nx_global_elem,ConfigOptions, param_type=int)
+        self.ny_global_elem = MpiConfig.broadcast_parameter(self.ny_global_elem,ConfigOptions, param_type=int)
 
         #MpiConfig.comm.barrier()
 
@@ -721,7 +745,7 @@ class GeoMetaWrfHydro:
                 raise Exception
 
         try:
-            self.esmf_grid = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
+            self.esmf_grid = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH,coord_sys=ESMF.CoordSys.SPH_DEG)
         except:
             ConfigOptions.errMsg = "Unable to create ESMF Mesh from " \
                                    "geogrid file: " + ConfigOptions.geogrid
@@ -957,7 +981,7 @@ class GeoMetaWrfHydro:
                     raise Exception
 
             try:
-                self.esmf_grid = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH)
+                self.esmf_grid = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH,coord_sys=ESMF.CoordSys.SPH_DEG)
             except:
                 ConfigOptions.errMsg = "Unable to create ESMF Mesh from " \
                                        "geogrid file: " + ConfigOptions.geogrid
@@ -1002,6 +1026,8 @@ class GeoMetaWrfHydro:
             pet_elementcoords = None
             distance = None
 
+            u, c = np.unique(pet_element_inds,return_counts=True)
+
             # Read in a scatter the mesh node elevation, which is used for downscaling
             self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_element_inds]
 
@@ -1010,6 +1036,8 @@ class GeoMetaWrfHydro:
             self.slp_azi = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data[pet_element_inds]
 
             self.element_ids = idTmp.variables[ConfigOptions.element_id_var][:].data[pet_element_inds]
+
+            self.element_ids_global = idTmp.variables[ConfigOptions.element_id_var][:].data
 
             # save indices where mesh was partition for future scatter functions
             self.mesh_inds = pet_element_inds

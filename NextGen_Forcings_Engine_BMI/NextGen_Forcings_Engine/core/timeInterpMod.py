@@ -39,8 +39,6 @@ def no_interpolation(input_forcings,ConfigOptions,MpiConfig):
         else:
             input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings2[:,:]
 
-
-
 def no_interpolation_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
     """
     Function for simply setting the final regridded supplemental precipitation

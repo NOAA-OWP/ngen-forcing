@@ -13,10 +13,17 @@ except ImportError:
     import ESMF
 
 import numpy as np
+import netCDF4 as nc
+import pandas as pd
 
 from . import err_handler
 from . import ioMod
 from . import timeInterpMod
+
+if "WGRIB2" not in os.environ:
+    WGRIB2_env = False
+else:
+    WGRIB2_env = True
 
 NETCDF = "NETCDF"
 GRIB2 = "GRIB2"
@@ -306,12 +313,16 @@ def _regrid_ak_ext_ana_pcp_stage4(supplemental_precip, config_options, wrf_hydro
         err_handler.check_program_status(config_options, mpi_config)
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = f'$WGRIB2 -match "APCP:surface:0-6 hour acc fcst" {supplemental_precip.file_in2} -netcdf {stage4_tmp_nc}'
+        if(WGRIB2_env):
+            cmd = f'$WGRIB2 -match "APCP:surface:0-6 hour acc fcst" {supplemental_precip.file_in2} -netcdf {stage4_tmp_nc}'
+        else:
+            cmd = "APCP:surface:0-6 hour acc fcst"
+
         if mpi_config.rank == 0:
             config_options.statusMsg = f"WGRIB2 command: {cmd}"
             err_handler.log_msg(config_options, mpi_config)
         id_tmp = ioMod.open_grib2(supplemental_precip.file_in2, stage4_tmp_nc, cmd,
-                                  config_options, mpi_config, inputVar=None)
+                                  config_options, mpi_config, inputVar=None, special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("STAGEIV-PCP", supplemental_precip.file_in2, stage4_tmp_nc, config_options, mpi_config)
@@ -665,12 +676,16 @@ def _regrid_conus_ext_ana_pcp_stage4(supplemental_precip, config_options, wrf_hy
         err_handler.check_program_status(config_options, mpi_config)
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = f'$WGRIB2 -match "APCP:surface:0-1 hour acc fcst" {supplemental_precip.file_in2} -netcdf {stage4_tmp_nc}'
+        if(WGRIB2_env):
+            cmd = f'$WGRIB2 -match "APCP:surface:0-1 hour acc fcst" {supplemental_precip.file_in2} -netcdf {stage4_tmp_nc}'
+        else:
+            cmd = "APCP:surface:0-1 hour acc fcst"
+
         if mpi_config.rank == 0:
             config_options.statusMsg = f"WGRIB2 command: {cmd}"
             err_handler.log_msg(config_options, mpi_config)
         id_tmp = ioMod.open_grib2(supplemental_precip.file_in2, stage4_tmp_nc, cmd,
-                                  config_options, mpi_config, inputVar=None)
+                                  config_options, mpi_config, inputVar=None, special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("STAGEIV-PCP", supplemental_precip.file_in2, stage4_tmp_nc, config_options, mpi_config)
@@ -923,17 +938,15 @@ def _regrid_conus_ext_ana_pcp_stage4(supplemental_precip, config_options, wrf_hy
 
         supplemental_precip.regridded_precip2[:] = supplemental_precip.esmf_field_out.data
         err_handler.check_program_status(config_options, mpi_config)
-
         # Convert the 6-hourly precipitation total to a rate of mm/s
         try:
-            ind_valid = np.where(supplemental_precip.regridded_precip2 != config_options.globalNdv)
+            ind_valid = np.where(supplemental_precip.regridded_precip2 != 9.999e+20)#config_options.globalNdv)
             supplemental_precip.regridded_precip2[ind_valid] = supplemental_precip.regridded_precip2[ind_valid] / 3600.0
             del ind_valid
         except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
             config_options.errMsg = "Unable to run NDV search on STAGE IV supplemental precipitation: " + str(npe)
             err_handler.log_critical(config_options, mpi_config)
         err_handler.check_program_status(config_options, mpi_config)
-
         # If we are on the first timestep, set the previous regridded field to be
         # the latest as there are no states for time 0.
         if config_options.current_output_step == 1:
@@ -1035,10 +1048,14 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
         fields.append(":(HGT):(surface):")
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
-              " -netcdf " + input_forcings.tmpFile
+        if(WGRIB2_env):
+            cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
+                  " -netcdf " + input_forcings.tmpFile
+        else:
+            cmd = '(' + '|'.join(fields) + ')'
+
         id_tmp = ioMod.open_grib2(input_forcings.file_in2, input_forcings.tmpFile, cmd,
-                                  config_options, mpi_config, inputVar=None)
+                                  config_options, mpi_config, inputVar=None, special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("HRRR", input_forcings.file_in2, input_forcings.tmpFile, config_options, mpi_config)
@@ -1598,10 +1615,14 @@ def regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con
         fields.append(":(HGT):(surface):")
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
-              " -netcdf " + input_forcings.tmpFile
+        if(WGRIB2_env):
+            cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
+                  " -netcdf " + input_forcings.tmpFile
+        else:
+            cmd = '(' + '|'.join(fields) + ')'
+
         id_tmp = ioMod.open_grib2(input_forcings.file_in2, input_forcings.tmpFile, cmd,
-                                  config_options, mpi_config, inputVar=None)
+                                  config_options, mpi_config, inputVar=None, special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("RAP", input_forcings.file_in2, input_forcings.tmpFile, config_options, mpi_config)
@@ -2163,10 +2184,14 @@ def regrid_cfsv2(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config)
         fields.append(":(HGT):(surface):")
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
-              " -netcdf " + input_forcings.tmpFile
+        if(WGRIB2_env):
+            cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
+                  " -netcdf " + input_forcings.tmpFile
+        else:
+            cmd = '(' + '|'.join(fields) + ')'
+
         id_tmp = ioMod.open_grib2(input_forcings.file_in2, input_forcings.tmpFile, cmd,
-                                  config_options, mpi_config, inputVar=None)
+                                  config_options, mpi_config, inputVar=None, special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("CFSv2", input_forcings.file_in2, input_forcings.tmpFile, config_options, mpi_config)
@@ -2897,9 +2922,15 @@ def regrid_custom_hourly_netcdf(input_forcings, config_options, wrf_hydro_geo_me
             err_handler.log_msg(config_options, mpi_config)
         calc_regrid_flag = check_regrid_status(id_tmp, force_count, input_forcings,
                                                config_options, wrf_hydro_geo_meta, mpi_config)
-
+            
         if calc_regrid_flag:
             calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_config, wrf_hydro_geo_meta)
+
+            # Flag to set regridded mask for AORC to overlay with ERA5-Interim blend
+            if(23 in config_options.input_forcings):
+                input_forcings.regridded_mask_AORC = input_forcings.regridded_mask
+                if(config_options.grid_type == "unstructured"):
+                    input_forcings.regridded_mask_elem_AORC = input_forcings.regridded_mask_elem
 
             # Read in the RAP height field, which is used for downscaling purposes.
             if 'HGT_surface' in id_tmp.variables.keys():
@@ -3153,6 +3184,7 @@ def regrid_custom_hourly_netcdf(input_forcings, config_options, wrf_hydro_geo_me
             if nc_var == 'APCP_surface':
                 try:
                     ind_valid = np.where(input_forcings.esmf_field_out.data != fill)
+                            # Flag to set regridded mask for AORC to overlay with ERA5-Interim blend
                     input_forcings.esmf_field_out.data[ind_valid] = input_forcings.esmf_field_out.data[
                                                                         ind_valid] / 3600.0
                     del ind_valid
@@ -3387,8 +3419,389 @@ def regrid_custom_hourly_netcdf(input_forcings, config_options, wrf_hydro_geo_me
                 input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :] = \
                     input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :]
             err_handler.check_program_status(config_options, mpi_config)
+    # Close the NetCDF file
+    if mpi_config.rank == 0:
+        try:
+            id_tmp.close()
+        except OSError:
+            config_options.errMsg = "Unable to close NetCDF file: " + input_forcings.tmpFile
+            err_handler.err_out(config_options)
 
 
+def regrid_era5(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
+    """
+    Function for handling regridding of a single ERA5 netcdf custom file.
+    :param input_forcings:
+    :param config_options:
+    :param wrf_hydro_geo_meta:
+    :param mpi_config:
+    :return:
+    """
+    # If the expected file is missing, this means we are allowing missing files, simply
+    # exit out of this routine as the regridded fields have already been set to NDV.
+    if not os.path.isfile(input_forcings.file_in1):
+        return
+
+    # Check to see if the regrid complete flag for this
+    # output time step is true. This entails the necessary
+    # inputs have already been regridded and we can move on.
+    if input_forcings.regridComplete:
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "No ERA5-Interim regridding required for this timestep."
+            err_handler.log_msg(config_options, mpi_config)
+        return
+
+    # Open the input NetCDF file containing necessary data.
+    id_tmp = ioMod.open_netcdf_forcing(input_forcings.file_in2, config_options, mpi_config, open_on_all_procs=True)
+
+    # create netcdf time stamp
+    time = nc.num2date(id_tmp.variables['time'][:].data,units=id_tmp.variables['time'].units,only_use_cftime_datetimes=False)
+    # Find the timestamp index based on latest timestamp requested
+    # by the forcings engine
+    seconds_index = np.abs((pd.to_datetime(time) - pd.to_datetime(input_forcings.fcst_date1)).total_seconds())
+    ind = np.where(seconds_index == np.min(seconds_index))[0][0]
+
+    for force_count, nc_var in enumerate(input_forcings.netcdf_var_names):
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "Processing ERA-5 Interim Forcing Variable: " + nc_var
+            err_handler.log_msg(config_options, mpi_config)
+        calc_regrid_flag = check_regrid_status(id_tmp, force_count, input_forcings,
+                                               config_options, wrf_hydro_geo_meta, mpi_config)
+        if calc_regrid_flag:
+            calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_config, wrf_hydro_geo_meta)
+
+            # Read in the ERA5-Interim height field, which is used for downscaling purposes.
+            if 'Geopotential' in id_tmp.variables.keys():
+                print('Found geopotential height in ERA5-Interim data')
+            # To Do, see if NCAR downscaling methods are applicable
+            # for reanalysis datasets with coarser resolution
+            else:
+                input_forcings.height = None
+                if mpi_config.rank == 0:
+                    config_options.statusMsg = f"Unable to locate Geopoential height in: {input_forcings.file_in2}. " \
+                                               f"Downscaling will not be available."
+                    err_handler.log_msg(config_options, mpi_config)
+
+            # close netCDF file on non-root ranks
+            if mpi_config.rank != 0:
+                id_tmp.close()
+
+        if(config_options.grid_type == "gridded"):
+            # Regrid the input variables.
+            var_tmp = None
+
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding ERA5-Interim input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    config_options.statusMsg = f"Using -9999. to replace missing values in input"
+                    err_handler.log_msg(config_options, mpi_config)
+                    var_tmp = id_tmp.variables[nc_var][:].filled(-9999.)[ind, :, :]
+                    # Since ERA5-Interim only supplies dew points
+                    # we will need to calculate the specific humidity
+                    if(nc_var == "d2m"):
+                        var_tmp = var_tmp -273.15
+                        e = 6.112*np.exp((17.67*var_tmp)/(var_tmp+243.5))
+                        pres = id_tmp.variables['sp'][:].filled(-9999.)[ind, :, :]/100
+                        var_tmp = (0.622*e)/(pres-(0.378*e))
+                        del e
+                        del pres
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input ERA5-Interim forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value.
+            try:
+                input_forcings.esmf_field_out.data[np.where(input_forcings.regridded_mask == 0)] = -9999.
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to calculate mask from input ERA5-Interim regridded forcings: " + str(
+                    npe)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Convert the hourly precipitation total to a rate of mm/s
+            if nc_var == 'mtpr':
+                try:
+                    ind_valid = np.where(input_forcings.esmf_field_out.data != -9999.)
+                    input_forcings.esmf_field_out.data[ind_valid] = input_forcings.esmf_field_out.data[
+                                                                        ind_valid] / 3600.0
+                    del ind_valid
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on ERA5-Interim precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :, :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+        elif(config_options.grid_type == "unstructured"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding ERA5-Interim input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    config_options.statusMsg = f"Using -9999. to replace missing values in input"
+                    err_handler.log_msg(config_options, mpi_config)
+                    var_tmp = id_tmp.variables[nc_var][:].filled(-9999.)[ind, :, :]
+                    # Since ERA5-Interim only supplies dew points
+                    # we will need to calculate the specific humidity
+                    if(nc_var == "d2m"):
+                        var_tmp = var_tmp -273.15
+                        e = 6.112*np.exp((17.67*var_tmp)/(var_tmp+243.5))
+                        pres = id_tmp.variables['sp'][:].filled(-9999.)[ind, :, :]/100
+                        var_tmp = (0.622*e)/(pres-(0.378*e))
+                        del e
+                        del pres
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input ERA5-Interim forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value.
+            try:
+                input_forcings.esmf_field_out.data[np.where(input_forcings.regridded_mask == 0)] = -9999.
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to calculate mask from input ERA5-Interim regridded forcings: " + str(
+                    npe)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Convert the hourly precipitation total to a rate of mm/s
+            if nc_var == 'mtpr':
+                try:
+                    ind_valid = np.where(input_forcings.esmf_field_out.data != -9999.)
+                    input_forcings.esmf_field_out.data[ind_valid] = input_forcings.esmf_field_out.data[
+                                                                        ind_valid] / 3600.0
+                    del ind_valid
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on ERA5-Interim precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count],:] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Regrid the input variables.
+            var_tmp_elem = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding ERA5-Interim input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    config_options.statusMsg = f"Using -9999. to replace missing values in input"
+                    err_handler.log_msg(config_options, mpi_config)
+                    var_tmp_elem = id_tmp.variables[nc_var][:].filled(-9999.)[ind, :, :]
+                    # Since ERA5-Interim only supplies dew points
+                    # we will need to calculate the specific humidity
+                    if(nc_var == "d2m"):
+                        var_tmp_elem = var_tmp_elem -273.15
+                        e = 6.112*np.exp((17.67*var_tmp_elem)/(var_tmp_elem+243.5))
+                        pres = id_tmp.variables['sp'][:].filled(-9999.)[ind, :, :]/100
+                        var_tmp = (0.622*e)/(pres-(0.378*e))
+                        del e
+                        del pres
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp_elem = mpi_config.scatter_array(input_forcings, var_tmp_elem, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out_elem = input_forcings.regridObj_elem(input_forcings.esmf_field_in_elem,
+                                                                         input_forcings.esmf_field_out_elem)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input ERA5-Interim forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value.
+            try:
+                input_forcings.esmf_field_out_elem.data[np.where(input_forcings.regridded_mask_elem == 0)] = -9999.
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to calculate mask from input Custom netCDF regridded forcings: " + str(
+                    npe)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Convert the hourly precipitation total to a rate of mm/s
+            if nc_var == 'mtpr':
+                try:
+                    ind_valid_elem = np.where(input_forcings.esmf_field_out_elem.data != -9999.)
+                    input_forcings.esmf_field_out_elem.data[ind_valid_elem] = input_forcings.esmf_field_out_elem.data[
+                                                                        ind_valid_elem] / 3600.0
+                    del ind_valid_elem
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on ERA5-Interim precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2_elem[input_forcings.input_map_output[force_count],:] = \
+                    input_forcings.esmf_field_out_elem.data
+
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1_elem[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2_elem[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+        elif(config_options.grid_type == "hydrofabric"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding ERA5-Interim input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    config_options.statusMsg = f"Using -9999. to replace missing values in input"
+                    err_handler.log_msg(config_options, mpi_config)
+                    var_tmp = id_tmp.variables[nc_var][:].filled(-9999.)[ind, :, :]
+                    # Since ERA5-Interim only supplies dew points
+                    # we will need to calculate the specific humidity
+                    if(nc_var == "d2m"):
+                        var_tmp = var_tmp -273.15
+                        e = 6.112*np.exp((17.67*var_tmp)/(var_tmp+243.5))
+                        pres = id_tmp.variables['sp'][:].filled(-9999.)[ind, :, :]/100
+                        var_tmp = (0.622*e)/(pres-(0.378*e))
+                        del e
+                        del pres
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input ERA5-Interim forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value.
+            try:
+                input_forcings.esmf_field_out.data[np.where(input_forcings.regridded_mask == 0)] = -9999.
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to calculate mask from input ERA5-Interim regridded forcings: " + str(
+                    npe)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Convert the hourly precipitation total to a rate of mm/s
+            if nc_var == 'mtpr':
+                try:
+                    ind_valid = np.where(input_forcings.esmf_field_out.data != -9999.)
+                    input_forcings.esmf_field_out.data[ind_valid] = input_forcings.esmf_field_out.data[
+                                                                        ind_valid] / 3600.0
+                    del ind_valid
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on ERA5-Interim precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count],:] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
 
     # Close the NetCDF file
     if mpi_config.rank == 0:
@@ -3490,10 +3903,14 @@ def regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
 
             # if calc_regrid_flag:
             fields.append(":(HGT):(surface):")
-            cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
-                  " -netcdf " + input_forcings.tmpFile
+            if(WGRIB2_env):
+                cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
+                      " -netcdf " + input_forcings.tmpFile
+            else:
+                cmd = '(' + '|'.join(fields) + ')'
+
             id_tmp = ioMod.open_grib2(input_forcings.file_in2, input_forcings.tmpFile, cmd,
-                                      config_options, mpi_config, inputVar=None)
+                                      config_options, mpi_config, inputVar=None, special_case=False)
             err_handler.check_program_status(config_options, mpi_config)
         else:
             create_link("GFS", input_forcings.file_in2, input_forcings.tmpFile, config_options, mpi_config)
@@ -4058,10 +4475,14 @@ def regrid_nam_nest(input_forcings, config_options, wrf_hydro_geo_meta, mpi_conf
         fields.append(":(HGT):(surface):")
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
-              " -netcdf " + input_forcings.tmpFile
+        if(WGRIB2_env):
+            cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
+                  " -netcdf " + input_forcings.tmpFile
+        else:
+            cmd = '(' + '|'.join(fields) + ')'
+
         id_tmp = ioMod.open_grib2(input_forcings.file_in2, input_forcings.tmpFile, cmd,
-                                  config_options, mpi_config, inputVar=None)
+                                  config_options, mpi_config, inputVar=None, special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("NAM-Nest", input_forcings.file_in2, input_forcings.tmpFile, config_options, mpi_config)
@@ -4671,15 +5092,23 @@ def regrid_mrms_hourly(supplemental_precip, config_options, wrf_hydro_geo_meta, 
             err_handler.check_program_status(config_options, mpi_config)
 
         # Perform a GRIB dump to NetCDF for the MRMS precip and RQI data.
-        cmd1 = "$WGRIB2 " + mrms_tmp_grib2 + " -netcdf " + mrms_tmp_nc
+        if(WGRIB2_env):
+            cmd1 = "$WGRIB2 " + mrms_tmp_grib2 + " -netcdf " + mrms_tmp_nc
+        else:
+            cmd1 = mrms_tmp_grib2
+
         id_mrms = ioMod.open_grib2(mrms_tmp_grib2, mrms_tmp_nc, cmd1, config_options,
-                                   mpi_config, supplemental_precip.netcdf_var_names[0])
+                                   mpi_config, supplemental_precip.netcdf_var_names[0],special_case=True)
         err_handler.check_program_status(config_options, mpi_config)
 
         if supplemental_precip.rqiMethod == 1:
-            cmd2 = "$WGRIB2 " + mrms_tmp_rqi_grib2 + " -netcdf " + mrms_tmp_rqi_nc
+            if(WGRIB2_env):
+                cmd2 = "$WGRIB2 " + mrms_tmp_rqi_grib2 + " -netcdf " + mrms_tmp_rqi_nc
+            else:
+                cmd2 = mrms_tmp_rqi_grib2
+
             id_mrms_rqi = ioMod.open_grib2(mrms_tmp_rqi_grib2, mrms_tmp_rqi_nc, cmd2, config_options,
-                                           mpi_config, supplemental_precip.rqi_netcdf_var_names[0])
+                                           mpi_config, supplemental_precip.rqi_netcdf_var_names[0], special_case=True)
             err_handler.check_program_status(config_options, mpi_config)
         else:
             id_mrms_rqi = None
@@ -4936,9 +5365,12 @@ def regrid_mrms_hourly(supplemental_precip, config_options, wrf_hydro_geo_meta, 
 
         # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
         try:
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = \
-                config_options.globalNdv
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.esmf_field_out.data < 0)] = 0
+            if len(np.argwhere(supplemental_precip.esmf_field_out.data < 0)) > 0:
+                supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.esmf_field_out.data < 0)] = config_options.globalNdv
+                #config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                #err_handler.log_warning(config_options, mpi_config)
+
+            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = config_options.globalNdv
 
         except (ValueError, ArithmeticError) as npe:
             config_options.errMsg = "Unable to run mask search on MRMS supplemental precip: " + str(npe)
@@ -5014,9 +5446,12 @@ def regrid_mrms_hourly(supplemental_precip, config_options, wrf_hydro_geo_meta, 
 
         # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
         try:
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = \
-                config_options.globalNdv
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.esmf_field_out.data < 0)] = 0
+            if len(np.argwhere(supplemental_precip.esmf_field_out.data < 0)) > 0:
+                supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.esmf_field_out.data < 0)] = config_options.globalNdv
+                #config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                #err_handler.log_warning(config_options, mpi_config)
+
+            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = config_options.globalNdv
 
         except (ValueError, ArithmeticError) as npe:
             config_options.errMsg = "Unable to run mask search on MRMS supplemental precip: " + str(npe)
@@ -5091,9 +5526,12 @@ def regrid_mrms_hourly(supplemental_precip, config_options, wrf_hydro_geo_meta, 
 
         # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
         try:
-            supplemental_precip.esmf_field_out_elem.data[np.where(supplemental_precip.regridded_mask_elem == 0)] = \
-                config_options.globalNdv
-            supplemental_precip.esmf_field_out_elem.data[np.where(supplemental_precip.esmf_field_out_elem.data < 0)] = 0
+            supplemental_precip.esmf_field_out_elem.data[np.where(supplemental_precip.regridded_mask_elem == 0)] = config_options.globalNdv
+            
+            if len(np.argwhere(supplemental_precip.esmf_field_out_elem.data < 0)) > 0:
+                supplemental_precip.esmf_field_out_elem.data[np.where(supplemental_precip.esmf_field_out_elem.data < 0)] = config_options.globalNdv
+                #config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                #err_handler.log_warning(config_options, mpi_config)
 
         except (ValueError, ArithmeticError) as npe:
             config_options.errMsg = "Unable to run mask search on MRMS supplemental precip: " + str(npe)
@@ -5169,9 +5607,12 @@ def regrid_mrms_hourly(supplemental_precip, config_options, wrf_hydro_geo_meta, 
 
         # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
         try:
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = \
-                config_options.globalNdv
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.esmf_field_out.data < 0)] = 0
+            if len(np.argwhere(supplemental_precip.esmf_field_out.data < 0)) > 0:
+                supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.esmf_field_out.data < 0)] = config_options.globalNdv
+                #config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                #err_handler.log_warning(config_options, mpi_config)
+
+            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = config_options.globalNdv
 
         except (ValueError, ArithmeticError) as npe:
             config_options.errMsg = "Unable to run mask search on MRMS supplemental precip: " + str(npe)
@@ -5287,10 +5728,14 @@ def regrid_hourly_wrf_arw(input_forcings, config_options, wrf_hydro_geo_meta, mp
         fields.append(":(HGT):(surface):")
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
-              " -netcdf " + input_forcings.tmpFile
+        if(WGRIB2_env):
+            cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" ' + input_forcings.file_in2 + \
+                  " -netcdf " + input_forcings.tmpFile
+        else:
+            cmd = '(' + '|'.join(fields) + ')'
+
         id_tmp = ioMod.open_grib2(input_forcings.file_in2, input_forcings.tmpFile, cmd,
-                                  config_options, mpi_config, inputVar=None)
+                                  config_options, mpi_config, inputVar=None, special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("WRF-ARW", input_forcings.file_in2, input_forcings.tmpFile, config_options, mpi_config)
@@ -5869,13 +6314,16 @@ def regrid_hourly_wrf_arw_hi_res_pcp(supplemental_precip, config_options, wrf_hy
         # errMod.check_program_status(ConfigOptions, MpiConfig)
 
         # Create a temporary NetCDF file from the GRIB2 file.
-        cmd = "$WGRIB2 " + supplemental_precip.file_in1 + " -match \":(" + \
-              "APCP):(surface):(" + str(supplemental_precip.fcst_hour1 - 1) + \
-              "-" + str(supplemental_precip.fcst_hour1) + " hour acc fcst):\"" + \
-              " -netcdf " + arw_tmp_nc
+        if(WGRIB2_env):
+            cmd = "$WGRIB2 " + supplemental_precip.file_in1 + " -match \":(" + \
+                  "APCP):(surface):(" + str(supplemental_precip.fcst_hour1 - 1) + \
+                  "-" + str(supplemental_precip.fcst_hour1) + " hour acc fcst):\"" + \
+                  " -netcdf " + arw_tmp_nc
+        else:
+            cmd = "(APCP):(surface):(" + str(supplemental_precip.fcst_hour1 - 1) + "-" + str(supplemental_precip.fcst_hour1) + " hour acc fcst)"
 
         id_tmp = ioMod.open_grib2(supplemental_precip.file_in1, arw_tmp_nc, cmd,
-                                  config_options, mpi_config, "APCP_surface")
+                                  config_options, mpi_config, "APCP_surface", special_case=False)
         err_handler.check_program_status(config_options, mpi_config)
     else:
         create_link("ARW-PCP", supplemental_precip.file_in1, arw_tmp_nc, config_options, mpi_config)
@@ -6407,10 +6855,10 @@ def regrid_sbcv2_liquid_water_fraction(supplemental_forcings, config_options, wr
     err_handler.check_program_status(config_options, mpi_config)
 
 
-def regrid_hourly_nbm_apcp(supplemental_precip, config_options, wrf_hydro_geo_meta, mpi_config):
+def regrid_hourly_nbm(forcings_or_precip, config_options, wrf_hydro_geo_meta, mpi_config):
     """
     Function for handling regridding hourly forecasted NBM precipitation.
-    :param supplemental_precip:
+    :param forcings_or_precip:
     :param config_options:
     :param wrf_hydro_geo_meta:
     :param mpi_config:
@@ -6419,7 +6867,7 @@ def regrid_hourly_nbm_apcp(supplemental_precip, config_options, wrf_hydro_geo_me
     # Do we want to use NBM data at this timestep? If not, log and continue
     if not config_options.use_data_at_current_time:
         if mpi_config.rank == 0:
-            config_options.statusMsg = "Exceeded max hours for NBM precipitation, will not use NBM in final layering."
+            config_options.statusMsg = "Exceeded max hours for NBM data, will not use NBM in final layering."
             err_handler.log_msg(config_options, mpi_config)
         return
         
@@ -6431,7 +6879,7 @@ def regrid_hourly_nbm_apcp(supplemental_precip, config_options, wrf_hydro_geo_me
     # Check to see if the regrid complete flag for this
     # output time step is true. This entails the necessary
     # inputs have already been regridded and we can move on.
-    if supplemental_precip.regridComplete:
+    if forcings_or_precip.regridComplete:
         return
 
     nbm_tmp_nc = config_options.scratch_dir + "/NBM_PCP_TMP-{}.nc".format(mkfilename())
@@ -6447,291 +6895,560 @@ def regrid_hourly_nbm_apcp(supplemental_precip, config_options, wrf_hydro_geo_me
                 err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
-    # Perform a GRIB dump to NetCDF for the precip data.
-    fieldnbm_match1 = "\":APCP:\""
-    fieldnbm_match2 = "\"" + str(supplemental_precip.fcst_hour1) + "-" + str(supplemental_precip.fcst_hour2) + "\""
-    fieldnbm_notmatch1 = "\"prob\"" #We don't want the probabilistic QPF layers
-    cmd1 = "$WGRIB2 " + supplemental_precip.file_in1 + " -match " + fieldnbm_match1 \
-                                                     + " -match " + fieldnbm_match2 \
-                                                     + " -not " + fieldnbm_notmatch1 \
-                                                     + " -netcdf " + nbm_tmp_nc
-    id_tmp = ioMod.open_grib2(supplemental_precip.file_in1, nbm_tmp_nc, cmd1, config_options,
-                               mpi_config, supplemental_precip.netcdf_var_names[0])
+    if forcings_or_precip.grib_vars is not None:
+        fields = []
+        for force_count, grib_var in enumerate(forcings_or_precip.grib_vars):
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Converting NBM Variable: " + grib_var
+                err_handler.log_msg(config_options, mpi_config)
+            time_str = "{}-{} hour acc fcst".format(forcings_or_precip.fcst_hour1, forcings_or_precip.fcst_hour2) \
+                if grib_var == 'APCP' else str(forcings_or_precip.fcst_hour2) + " hour fcst"
+            fields.append(':' + grib_var + ':' +
+                          forcings_or_precip.grib_levels[force_count] + ':'
+                          + time_str + ":")
+        # fields.append(":(HGT):(surface):")
+        # Create a temporary NetCDF file from the GRIB2 file.
+        cmd = '$WGRIB2 -match "(' + '|'.join(fields) + ')" -not "prob" -not "ens" ' + \
+              forcings_or_precip.file_in1 + " -netcdf " + nbm_tmp_nc
+    else:
+        # Perform a GRIB dump to NetCDF for the precip data.
+        fieldnbm_match1 = "\":APCP:\""
+        fieldnbm_match2 = "\"" + str(forcings_or_precip.fcst_hour1) + "-" + str(forcings_or_precip.fcst_hour2) + "\""
+        fieldnbm_notmatch1 = "\"prob\""  # We don't want the probabilistic QPF layers
+        cmd = "$WGRIB2 " + forcings_or_precip.file_in1 + " -match " + fieldnbm_match1 \
+                                                       + " -match " + fieldnbm_match2 \
+                                                       + " -not " + fieldnbm_notmatch1 \
+                                                       + " -netcdf " + nbm_tmp_nc
+
+    id_tmp = ioMod.open_grib2(forcings_or_precip.file_in1, nbm_tmp_nc, cmd, config_options,
+                              mpi_config, forcings_or_precip.netcdf_var_names[0])
+
     err_handler.check_program_status(config_options, mpi_config)
 
-    # Check to see if we need to calculate regridding weights.
-    calc_regrid_flag = check_supp_pcp_regrid_status(id_tmp, supplemental_precip, config_options,
-                                                    wrf_hydro_geo_meta, mpi_config)
-    err_handler.check_program_status(config_options, mpi_config)
-
-    if calc_regrid_flag:
+    for force_count, nc_var in enumerate(forcings_or_precip.netcdf_var_names):
         if mpi_config.rank == 0:
-            config_options.statusMsg = "Calculating NBM regridding weights."
+            config_options.statusMsg = "Processing NBM Variable: " + nc_var
             err_handler.log_msg(config_options, mpi_config)
-        calculate_supp_pcp_weights(supplemental_precip, id_tmp, supplemental_precip.file_in1, config_options, mpi_config)
+
+        # Check to see if we need to calculate regridding weights.
+        is_supp = forcings_or_precip.grib_vars is None
+        if is_supp:
+            tag = "supplemental precip"
+            calc_regrid_flag = check_supp_pcp_regrid_status(id_tmp, forcings_or_precip, config_options,
+                                                            wrf_hydro_geo_meta, mpi_config)
+        else:
+            tag = "input"
+            calc_regrid_flag = check_regrid_status(id_tmp, force_count, forcings_or_precip,
+                                                   config_options, wrf_hydro_geo_meta, mpi_config)
         err_handler.check_program_status(config_options, mpi_config)
 
-    if(config_options.grid_type == "gridded"):
-        # Regrid the input variables.
-        var_tmp = None
-        if mpi_config.rank == 0:
-            config_options.statusMsg = "Regridding NBM APCP Precipitation."
-            err_handler.log_msg(config_options, mpi_config)
+        if calc_regrid_flag:
+            if is_supp:
+                if mpi_config.rank == 0:
+                    config_options.statusMsg = f"Calculating NBM {tag} regridding weights."
+                    err_handler.log_msg(config_options, mpi_config)
+                calculate_supp_pcp_weights(forcings_or_precip, id_tmp, forcings_or_precip.file_in1, config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+            else:
+                if mpi_config.rank == 0:
+                    config_options.statusMsg = f"Calculating NBM {tag} regridding weights."
+                    err_handler.log_msg(config_options, mpi_config)
+                calculate_weights(id_tmp, force_count, forcings_or_precip, config_options, mpi_config, fill=True)
+                err_handler.check_program_status(config_options, mpi_config)
+
+                # Regrid the height variable.
+                if config_options.grid_meta is None:
+                    config_options.errMsg = "No NBM height file supplied, downscaling will not be available"
+                    err_handler.log_warning(config_options, mpi_config)
+                    err_handler.check_program_status(config_options, mpi_config)
+                else:
+                    if not os.path.exists(config_options.grid_meta):
+                        config_options.errMsg = "NBM height file \"{config_options.grid_meta}\" does not exist"
+                        err_handler.log_critical(config_options, mpi_config)
+                    err_handler.check_program_status(config_options, mpi_config)
+
+                    terrain_tmp = os.path.join(config_options.scratch_dir, 'nbm_terrain_temp.nc')
+                    cmd = f"$WGRIB2 {config_options.grid_meta} -netcdf {terrain_tmp}"
+                    hgt_tmp = ioMod.open_grib2(config_options.grid_meta, terrain_tmp, cmd, config_options,
+                                               mpi_config, 'DIST_surface')
+                    if(config_options.grid_type == "gridded"):
+                        if mpi_config.rank == 0:
+                            var_tmp = hgt_tmp.variables['DIST_surface'][0, :, :]
+                        else:
+                            var_tmp = None
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        var_sub_tmp = mpi_config.scatter_array(forcings_or_precip, var_tmp, config_options)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.esmf_field_in.data[:, :] = var_sub_tmp
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to place NBM elevation data into the ESMF field object: " \
+                                                + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            config_options.statusMsg = "Regridding NBM elevation data to the WRF-Hydro domain."
+                            err_handler.log_msg(config_options, mpi_config)
+                        try:
+                            forcings_or_precip.esmf_field_out = forcings_or_precip.regridObj(forcings_or_precip.esmf_field_in,
+                                                                                             forcings_or_precip.esmf_field_out)
+                        except ValueError as ve:
+                            config_options.errMsg = "Unable to regrid NBM elevation data to the WRF-Hydro domain " \
+                                                    "using ESMF: " + str(ve)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        # Set any pixel cells outside the input domain to the global missing value.
+                        try:
+                            forcings_or_precip.esmf_field_out.data[np.where(forcings_or_precip.regridded_mask == 0)] = \
+                                config_options.globalNdv
+                        except (ValueError, ArithmeticError) as npe:
+                            config_options.errMsg = "Unable to compute mask on NBM elevation data: " + str(npe)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.height[:, :] = forcings_or_precip.esmf_field_out.data
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to extract ESMF regridded NBM elevation data to a local " \
+                                                    "array: " + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            hgt_tmp.close()
+                    elif(config_options.grid_type == "hydrofabric"):
+                        if mpi_config.rank == 0:
+                            var_tmp = hgt_tmp.variables['DIST_surface'][0, :, :]
+                        else:
+                            var_tmp = None
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        var_sub_tmp = mpi_config.scatter_array(forcings_or_precip, var_tmp, config_options)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.esmf_field_in.data[:, :] = var_sub_tmp
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to place NBM elevation data into the ESMF field object: " \
+                                                + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            config_options.statusMsg = "Regridding NBM elevation data to the WRF-Hydro domain."
+                            err_handler.log_msg(config_options, mpi_config)
+                        try:
+                            forcings_or_precip.esmf_field_out = forcings_or_precip.regridObj(forcings_or_precip.esmf_field_in,
+                                                                                             forcings_or_precip.esmf_field_out)
+                        except ValueError as ve:
+                            config_options.errMsg = "Unable to regrid NBM elevation data to the WRF-Hydro domain " \
+                                                    "using ESMF: " + str(ve)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        # Set any pixel cells outside the input domain to the global missing value.
+                        try:
+                            forcings_or_precip.esmf_field_out.data[np.where(forcings_or_precip.regridded_mask == 0)] = \
+                                config_options.globalNdv
+                        except (ValueError, ArithmeticError) as npe:
+                            config_options.errMsg = "Unable to compute mask on NBM elevation data: " + str(npe)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.height[:] = forcings_or_precip.esmf_field_out.data
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to extract ESMF regridded NBM elevation data to a local " \
+                                                    "array: " + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            hgt_tmp.close()
+                    elif(config_options.grid_type == "unstructured"):
+                        if mpi_config.rank == 0:
+                            var_tmp = hgt_tmp.variables['DIST_surface'][0, :, :]
+                        else:
+                            var_tmp = None
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        var_sub_tmp = mpi_config.scatter_array(forcings_or_precip, var_tmp, config_options)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.esmf_field_in.data[:, :] = var_sub_tmp
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to place NBM elevation data into the ESMF field object: " \
+                                                + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            config_options.statusMsg = "Regridding NBM elevation data to the WRF-Hydro domain."
+                            err_handler.log_msg(config_options, mpi_config)
+                        try:
+                            forcings_or_precip.esmf_field_out = forcings_or_precip.regridObj(forcings_or_precip.esmf_field_in,
+                                                                                             forcings_or_precip.esmf_field_out)
+                        except ValueError as ve:
+                            config_options.errMsg = "Unable to regrid NBM elevation data to the WRF-Hydro domain " \
+                                                    "using ESMF: " + str(ve)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        # Set any pixel cells outside the input domain to the global missing value.
+                        try:
+                            forcings_or_precip.esmf_field_out.data[np.where(forcings_or_precip.regridded_mask == 0)] = \
+                                config_options.globalNdv
+                        except (ValueError, ArithmeticError) as npe:
+                            config_options.errMsg = "Unable to compute mask on NBM elevation data: " + str(npe)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.height[:] = forcings_or_precip.esmf_field_out.data
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to extract ESMF regridded NBM elevation data to a local " \
+                                                    "array: " + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            var_tmp_elem = hgt_tmp.variables['DIST_surface'][0, :, :]
+                        else:
+                            var_tmp_elem = None
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        var_sub_tmp_elem = mpi_config.scatter_array(forcings_or_precip, var_tmp_elem, config_options)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to place NBM elevation data into the ESMF field object: " \
+                                                + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            config_options.statusMsg = "Regridding NBM elevation data to the unstructured domain."
+                            err_handler.log_msg(config_options, mpi_config)
+                        try:
+                            forcings_or_precip.esmf_field_out_elem = forcings_or_precip.regridObj_elem(forcings_or_precip.esmf_field_in_elem,
+                                                                                             forcings_or_precip.esmf_field_out_elem)
+                        except ValueError as ve:
+                            config_options.errMsg = "Unable to regrid NBM elevation data to the unstructured domain " \
+                                                    "using ESMF: " + str(ve)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        # Set any pixel cells outside the input domain to the global missing value.
+                        try:
+                            forcings_or_precip.esmf_field_out_elem.data[np.where(forcings_or_precip.regridded_mask_elem == 0)] = \
+                                config_options.globalNdv
+                        except (ValueError, ArithmeticError) as npe:
+                            config_options.errMsg = "Unable to compute element mask on NBM elevation data: " + str(npe)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        try:
+                            forcings_or_precip.height_elem[:] = forcings_or_precip.esmf_field_out_elem.data
+                        except (ValueError, KeyError, AttributeError) as err:
+                            config_options.errMsg = "Unable to extract ESMF regridded NBM elevation data to a local " \
+                                                    "array: " + str(err)
+                            err_handler.log_critical(config_options, mpi_config)
+                        err_handler.check_program_status(config_options, mpi_config)
+
+                        if mpi_config.rank == 0:
+                            hgt_tmp.close()
+
+        if(config_options.grid_type == "gridded"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = f"Regridding NBM {nc_var}"
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp.variables[nc_var][0, :, :]
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = "Unable to extract data from NBM file: " + \
+                                            forcings_or_precip.file_in1 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(forcings_or_precip, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
             try:
-                var_tmp = id_tmp.variables['APCP_surface'][0, :, :]
+                forcings_or_precip.esmf_field_in.data[:, :] = var_sub_tmp
             except (ValueError, KeyError, AttributeError) as err:
-                config_options.errMsg = "Unable to extract precipitation from NBM file: " + \
-                                        supplemental_precip.file_in1 + " (" + str(err) + ")"
+                config_options.errMsg = f"Unable to place NBM {tag} into local ESMF field: " + str(err)
                 err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        var_sub_tmp = mpi_config.scatter_array(supplemental_precip, var_tmp, config_options)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        try:
-            supplemental_precip.esmf_field_in.data[:, :] = var_sub_tmp
-        except (ValueError, KeyError, AttributeError) as err:
-            config_options.errMsg = "Unable to place NBM precipitation into local ESMF field: " + str(err)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        try:
-            supplemental_precip.esmf_field_out = supplemental_precip.regridObj(supplemental_precip.esmf_field_in,
-                                                                               supplemental_precip.esmf_field_out)
-        except ValueError as ve:
-            config_options.errMsg = "Unable to regrid NBM supplemental precipitation: " + str(ve)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        # Set any pixel cells outside the input domain to the global missing value.
-        try:
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = \
-                config_options.globalNdv
-        except (ValueError, ArithmeticError) as npe:
-            config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        supplemental_precip.regridded_precip2[:, :] = supplemental_precip.esmf_field_out.data
-        err_handler.check_program_status(config_options, mpi_config)
-
-        # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
-        try:
-            ind_valid = np.where(supplemental_precip.regridded_precip2 != config_options.globalNdv)
-            if supplemental_precip.input_frequency == 60.0:
-                supplemental_precip.regridded_precip2[ind_valid] = supplemental_precip.regridded_precip2[ind_valid] / 3600.0
-            elif supplemental_precip.input_frequency == 360.0:
-                supplemental_precip.regridded_precip2[ind_valid] = supplemental_precip.regridded_precip2[ind_valid] / 21600.0 #uniform disaggregation for 6-hourly nbm data
-            del ind_valid
-        except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
-            config_options.errMsg = "Unable to run NDV search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        # If we are on the first timestep, set the previous regridded field to be
-        # the latest as there are no states for time 0.
-        if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1[:, :] = \
-                supplemental_precip.regridded_precip2[:, :]
-        err_handler.check_program_status(config_options, mpi_config)
-
-    elif(config_options.grid_type == "unstructured"):
-        # Regrid the input variables.
-        var_tmp = None
-        if mpi_config.rank == 0:
-            config_options.statusMsg = "Regridding NBM APCP Precipitation."
-            err_handler.log_msg(config_options, mpi_config)
             try:
-                var_tmp = id_tmp.variables['APCP_surface'][0, :, :]
-            except (ValueError, KeyError, AttributeError) as err:
-                config_options.errMsg = "Unable to extract precipitation from NBM file: " + \
-                                        supplemental_precip.file_in1 + " (" + str(err) + ")"
+                forcings_or_precip.esmf_field_out = forcings_or_precip.regridObj(forcings_or_precip.esmf_field_in,
+                                                                                 forcings_or_precip.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = f"Unable to regrid NBM {tag}: " + str(ve)
                 err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        var_sub_tmp = mpi_config.scatter_array(supplemental_precip, var_tmp, config_options)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        try:
-            supplemental_precip.esmf_field_in.data[:, :] = var_sub_tmp
-        except (ValueError, KeyError, AttributeError) as err:
-            config_options.errMsg = "Unable to place NBM precipitation into local ESMF field: " + str(err)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        try:
-            supplemental_precip.esmf_field_out = supplemental_precip.regridObj(supplemental_precip.esmf_field_in,
-                                                                               supplemental_precip.esmf_field_out)
-        except ValueError as ve:
-            config_options.errMsg = "Unable to regrid NBM supplemental precipitation: " + str(ve)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        # Set any pixel cells outside the input domain to the global missing value.
-        try:
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = \
-                config_options.globalNdv
-        except (ValueError, ArithmeticError) as npe:
-            config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        supplemental_precip.regridded_precip2[:] = supplemental_precip.esmf_field_out.data
-        err_handler.check_program_status(config_options, mpi_config)
-
-        # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
-        try:
-            ind_valid = np.where(supplemental_precip.regridded_precip2 != config_options.globalNdv)
-            if supplemental_precip.input_frequency == 60.0:
-                supplemental_precip.regridded_precip2[ind_valid] = supplemental_precip.regridded_precip2[ind_valid] / 3600.0
-            elif supplemental_precip.input_frequency == 360.0:
-                supplemental_precip.regridded_precip2[ind_valid] = supplemental_precip.regridded_precip2[ind_valid] / 21600.0 #uniform disaggregation for 6-hourly nbm data
-            del ind_valid
-        except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
-            config_options.errMsg = "Unable to run NDV search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
-
-        # If we are on the first timestep, set the previous regridded field to be
-        # the latest as there are no states for time 0.
-        if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1[:] = \
-                supplemental_precip.regridded_precip2[:]
-        err_handler.check_program_status(config_options, mpi_config)
-
-        # Regrid the input variables.
-        var_tmp_elem = None
-        if mpi_config.rank == 0:
-            config_options.statusMsg = "Regridding NBM APCP Precipitation."
-            err_handler.log_msg(config_options, mpi_config)
+            # Set any pixel cells outside the input domain to the global missing value.
             try:
-                var_tmp_elem = id_tmp.variables['APCP_surface'][0, :, :]
-            except (ValueError, KeyError, AttributeError) as err:
-                config_options.errMsg = "Unable to extract precipitation from NBM file: " + \
-                                        supplemental_precip.file_in1 + " (" + str(err) + ")"
+                forcings_or_precip.esmf_field_out.data[np.where(forcings_or_precip.regridded_mask == 0)] = \
+                    config_options.globalNdv
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
                 err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        var_sub_tmp_elem = mpi_config.scatter_array(supplemental_precip, var_tmp_elem, config_options)
-        err_handler.check_program_status(config_options, mpi_config)
+            destination1 = forcings_or_precip.regridded_precip1 if is_supp else \
+                forcings_or_precip.regridded_forcings1[forcings_or_precip.input_map_output[force_count]]
 
-        try:
-            supplemental_precip.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem
-        except (ValueError, KeyError, AttributeError) as err:
-            config_options.errMsg = "Unable to place NBM precipitation into local ESMF field: " + str(err)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            destination2 = forcings_or_precip.regridded_precip2 if is_supp else \
+                forcings_or_precip.regridded_forcings2[forcings_or_precip.input_map_output[force_count]]
 
-        try:
-            supplemental_precip.esmf_field_out_elem = supplemental_precip.regridObj_elem(supplemental_precip.esmf_field_in_elem,
-                                                                               supplemental_precip.esmf_field_out_elem)
-        except ValueError as ve:
-            config_options.errMsg = "Unable to regrid NBM supplemental precipitation: " + str(ve)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            destination2[:, :] = forcings_or_precip.esmf_field_out.data
+            err_handler.check_program_status(config_options, mpi_config)
 
-        # Set any pixel cells outside the input domain to the global missing value.
-        try:
-            supplemental_precip.esmf_field_out_elem.data[np.where(supplemental_precip.regridded_mask_elem == 0)] = \
-                config_options.globalNdv
-        except (ValueError, ArithmeticError) as npe:
-            config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
+            if 'APCP' in nc_var:
+                try:
+                    ind_valid = np.where(destination2 != config_options.globalNdv)
+                    if forcings_or_precip.input_frequency == 60.0:
+                        destination2[ind_valid] = destination2[ind_valid] / 3600.0
+                    elif forcings_or_precip.input_frequency == 360.0:
+                        destination2[ind_valid] = destination2[ind_valid] / 21600.0  # uniform disaggregation for 6-hourly nbm data
+                    del ind_valid
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on NBM precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
 
-        supplemental_precip.regridded_precip2_elem[:] = supplemental_precip.esmf_field_out_elem.data
-        err_handler.check_program_status(config_options, mpi_config)
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                destination1[:, :] = \
+                    destination2[:, :]
+            err_handler.check_program_status(config_options, mpi_config)
+        elif(config_options.grid_type == "hydrofabric"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = f"Regridding NBM {nc_var}"
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp.variables[nc_var][0, :, :]
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = "Unable to extract data from NBM file: " + \
+                                            forcings_or_precip.file_in1 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
-        try:
-            ind_valid_elem = np.where(supplemental_precip.regridded_precip2_elem != config_options.globalNdv)
-            if supplemental_precip.input_frequency == 60.0:
-                supplemental_precip.regridded_precip2_elem[ind_valid_elem] = supplemental_precip.regridded_precip2_elem[ind_valid_elem] / 3600.0
-            elif supplemental_precip.input_frequency == 360.0:
-                supplemental_precip.regridded_precip2_elem[ind_valid_elem] = supplemental_precip.regridded_precip2_elem[ind_valid_elem] / 21600.0 #uniform disaggregation for 6-hourly nbm data
-            del ind_valid_elem
-        except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
-            config_options.errMsg = "Unable to run NDV search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            var_sub_tmp = mpi_config.scatter_array(forcings_or_precip, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        # If we are on the first timestep, set the previous regridded field to be
-        # the latest as there are no states for time 0.
-        if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1_elem[:] = \
-                supplemental_precip.regridded_precip2_elem[:]
-        err_handler.check_program_status(config_options, mpi_config)
-
-    elif(config_options.grid_type == "hydrofabric"):
-        # Regrid the input variables.
-        var_tmp = None
-        if mpi_config.rank == 0:
-            config_options.statusMsg = "Regridding NBM APCP Precipitation."
-            err_handler.log_msg(config_options, mpi_config)
             try:
-                var_tmp = id_tmp.variables['APCP_surface'][0, :, :]
+                forcings_or_precip.esmf_field_in.data[:, :] = var_sub_tmp
             except (ValueError, KeyError, AttributeError) as err:
-                config_options.errMsg = "Unable to extract precipitation from NBM file: " + \
-                                        supplemental_precip.file_in1 + " (" + str(err) + ")"
+                config_options.errMsg = f"Unable to place NBM {tag} into local ESMF field: " + str(err)
                 err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        var_sub_tmp = mpi_config.scatter_array(supplemental_precip, var_tmp, config_options)
-        err_handler.check_program_status(config_options, mpi_config)
+            try:
+                forcings_or_precip.esmf_field_out = forcings_or_precip.regridObj(forcings_or_precip.esmf_field_in,
+                                                                                 forcings_or_precip.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = f"Unable to regrid NBM {tag}: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+            # Set any pixel cells outside the input domain to the global missing value.
+            try:
+                forcings_or_precip.esmf_field_out.data[np.where(forcings_or_precip.regridded_mask == 0)] = \
+                    config_options.globalNdv
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        try:
-            supplemental_precip.esmf_field_in.data[:, :] = var_sub_tmp
-        except (ValueError, KeyError, AttributeError) as err:
-            config_options.errMsg = "Unable to place NBM precipitation into local ESMF field: " + str(err)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            destination1 = forcings_or_precip.regridded_precip1 if is_supp else \
+                forcings_or_precip.regridded_forcings1[forcings_or_precip.input_map_output[force_count]]
 
-        try:
-            supplemental_precip.esmf_field_out = supplemental_precip.regridObj(supplemental_precip.esmf_field_in,
-                                                                               supplemental_precip.esmf_field_out)
-        except ValueError as ve:
-            config_options.errMsg = "Unable to regrid NBM supplemental precipitation: " + str(ve)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            destination2 = forcings_or_precip.regridded_precip2 if is_supp else \
+                forcings_or_precip.regridded_forcings2[forcings_or_precip.input_map_output[force_count]]
 
-        # Set any pixel cells outside the input domain to the global missing value.
-        try:
-            supplemental_precip.esmf_field_out.data[np.where(supplemental_precip.regridded_mask == 0)] = \
-                config_options.globalNdv
-        except (ValueError, ArithmeticError) as npe:
-            config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            destination2[:] = forcings_or_precip.esmf_field_out.data
+            err_handler.check_program_status(config_options, mpi_config)
 
-        supplemental_precip.regridded_precip2[:] = supplemental_precip.esmf_field_out.data
-        err_handler.check_program_status(config_options, mpi_config)
+            # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
+            if 'APCP' in nc_var:
+                try:
+                    ind_valid = np.where(destination2 != config_options.globalNdv)
+                    if forcings_or_precip.input_frequency == 60.0:
+                        destination2[ind_valid] = destination2[ind_valid] / 3600.0
+                    elif forcings_or_precip.input_frequency == 360.0:
+                        destination2[ind_valid] = destination2[ind_valid] / 21600.0  # uniform disaggregation for 6-hourly nbm data
+                    del ind_valid
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on NBM precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
 
-        # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
-        try:
-            ind_valid = np.where(supplemental_precip.regridded_precip2 != config_options.globalNdv)
-            if supplemental_precip.input_frequency == 60.0:
-                supplemental_precip.regridded_precip2[ind_valid] = supplemental_precip.regridded_precip2[ind_valid] / 3600.0
-            elif supplemental_precip.input_frequency == 360.0:
-                supplemental_precip.regridded_precip2[ind_valid] = supplemental_precip.regridded_precip2[ind_valid] / 21600.0 #uniform disaggregation for 6-hourly nbm data
-            del ind_valid
-        except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
-            config_options.errMsg = "Unable to run NDV search on NBM supplemental precipitation: " + str(npe)
-            err_handler.log_critical(config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                destination1[:] = \
+                    destination2[:]
+            err_handler.check_program_status(config_options, mpi_config)
+        elif(config_options.grid_type == "unstructured"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = f"Regridding NBM {nc_var}"
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp.variables[nc_var][0, :, :]
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = "Unable to extract data from NBM file: " + \
+                                            forcings_or_precip.file_in1 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
 
-        # If we are on the first timestep, set the previous regridded field to be
-        # the latest as there are no states for time 0.
-        if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1[:] = \
-                supplemental_precip.regridded_precip2[:]
-        err_handler.check_program_status(config_options, mpi_config)
+            var_sub_tmp = mpi_config.scatter_array(forcings_or_precip, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                forcings_or_precip.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = f"Unable to place NBM {tag} into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                forcings_or_precip.esmf_field_out = forcings_or_precip.regridObj(forcings_or_precip.esmf_field_in,
+                                                                                 forcings_or_precip.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = f"Unable to regrid NBM {tag}: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+            # Set any pixel cells outside the input domain to the global missing value.
+            try:
+                forcings_or_precip.esmf_field_out.data[np.where(forcings_or_precip.regridded_mask == 0)] = \
+                    config_options.globalNdv
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            destination1 = forcings_or_precip.regridded_precip1 if is_supp else \
+                forcings_or_precip.regridded_forcings1[forcings_or_precip.input_map_output[force_count]]
+
+            destination2 = forcings_or_precip.regridded_precip2 if is_supp else \
+                forcings_or_precip.regridded_forcings2[forcings_or_precip.input_map_output[force_count]]
+
+            destination2[:] = forcings_or_precip.esmf_field_out.data
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
+            if 'APCP' in nc_var:
+                try:
+                    ind_valid = np.where(destination2 != config_options.globalNdv)
+                    if forcings_or_precip.input_frequency == 60.0:
+                        destination2[ind_valid] = destination2[ind_valid] / 3600.0
+                    elif forcings_or_precip.input_frequency == 360.0:
+                        destination2[ind_valid] = destination2[ind_valid] / 21600.0  # uniform disaggregation for 6-hourly nbm data
+                    del ind_valid
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on NBM precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                destination1[:] = \
+                    destination2[:]
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Regrid the input variables.
+            var_tmp_elem = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = f"Regridding NBM {nc_var}"
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp_elem = id_tmp.variables[nc_var][0, :, :]
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = "Unable to extract data from NBM file: " + \
+                                            forcings_or_precip.file_in1 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp_elem = mpi_config.scatter_array(forcings_or_precip, var_tmp_elem, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                forcings_or_precip.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = f"Unable to place NBM {tag} into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                forcings_or_precip.esmf_field_out_elem = forcings_or_precip.regridObj_elem(forcings_or_precip.esmf_field_in_elem,
+                                                                                 forcings_or_precip.esmf_field_out_elem)
+            except ValueError as ve:
+                config_options.errMsg = f"Unable to regrid NBM {tag}: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+            # Set any pixel cells outside the input domain to the global missing value.
+            try:
+                forcings_or_precip.esmf_field_out_elem.data[np.where(forcings_or_precip.regridded_mask_elem == 0)] = \
+                    config_options.globalNdv
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = "Unable to run mask search on NBM supplemental precipitation: " + str(npe)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            destination1_elem = forcings_or_precip.regridded_precip1_elem if is_supp else \
+                forcings_or_precip.regridded_forcings1_elem[forcings_or_precip.input_map_output[force_count]]
+
+            destination2_elem = forcings_or_precip.regridded_precip2_elem if is_supp else \
+                forcings_or_precip.regridded_forcings2_elem[forcings_or_precip.input_map_output[force_count]]
+
+            destination2_elem[:] = forcings_or_precip.esmf_field_out_elem.data
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Convert the hourly precipitation total from kg.m-2.hour-1 to a rate of mm.s-1
+            if 'APCP' in nc_var:
+                try:
+                    ind_valid_elem = np.where(destination2_elem != config_options.globalNdv)
+                    if forcings_or_precip.input_frequency == 60.0:
+                        destination2_elem[ind_valid_elem] = destination2_elem[ind_valid_elem] / 3600.0
+                    elif forcings_or_precip.input_frequency == 360.0:
+                        destination2_elem[ind_valid_elem] = destination2_elem[ind_valid_elem] / 21600.0  # uniform disaggregation for 6-hourly nbm data
+                    del ind_valid_elem
+                except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
+                    config_options.errMsg = "Unable to run NDV search on NBM precipitation: " + str(npe)
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                destination1_elem[:] = \
+                    destination2_elem[:]
+            err_handler.check_program_status(config_options, mpi_config)
 
     # Close the temporary NetCDF file and remove it.
     if mpi_config.rank == 0:
         try:
             id_tmp.close()
         except OSError:
-            config_options.errMsg = "Unable to close NetCDF file: " + supplemental_precip.file_in1
+            config_options.errMsg = "Unable to close NetCDF file: " + forcings_or_precip.file_in1
             err_handler.log_critical(config_options, mpi_config)
         try:
             os.remove(nbm_tmp_nc)
@@ -6739,7 +7456,6 @@ def regrid_hourly_nbm_apcp(supplemental_precip, config_options, wrf_hydro_geo_me
             config_options.errMsg = "Unable to remove temporary NBM NetCDF file: " + nbm_tmp_nc
             err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
-
 
 def check_regrid_status(id_tmp, force_count, input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
     """
@@ -7317,9 +8033,6 @@ def calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_c
         err_handler.check_program_status(config_options, mpi_config)
         try:
             begin = time.monotonic()
-            #print("ESMF GFS grid data")
-            #print(input_forcings.esmf_field_in_elem.data)
-            #print(input_forcings.esmf_field_in_elem.upper_bounds)
             input_forcings.regridObj_elem = ESMF.Regrid(input_forcings.esmf_field_in_elem,
                                                    input_forcings.esmf_field_out_elem,
                                                    src_mask_values=np.array([0, config_options.globalNdv]),
@@ -7636,6 +8349,7 @@ def calculate_supp_pcp_weights(supplemental_precip, id_tmp, tmp_file, config_opt
             # be used to generate an output mask that is used later on in downscaling, layering,
             # etc.
             var_tmp[:] = np.where(var_tmp==id_tmp[supplemental_precip.netcdf_var_names[0]]._FillValue,0.0,1.0)
+            var_tmp[:] = np.where(var_tmp==9.999e20,0.0,1.0)
         else:
             var_tmp = None
         var_sub_tmp = mpi_config.scatter_array(supplemental_precip, var_tmp, config_options)
@@ -7644,12 +8358,11 @@ def calculate_supp_pcp_weights(supplemental_precip, id_tmp, tmp_file, config_opt
         # Place temporary data into the field array for generating the regridding object.
         supplemental_precip.esmf_field_in.data[:] = var_sub_tmp
         # mpi_config.comm.barrier()
-
         supplemental_precip.regridObj = ESMF.Regrid(supplemental_precip.esmf_field_in,
                                                     supplemental_precip.esmf_field_out,
                                                     src_mask_values=np.array([0]),
                                                     regrid_method=ESMF.RegridMethod.BILINEAR,
-                                                    unmapped_action=ESMF.UnmappedAction.IGNORE)
+                                                    unmapped_action=ESMF.UnmappedAction.IGNORE,extrap_method=ESMF.ExtrapMethod.NEAREST_STOD)
 
         # Run the regridding object on this test dataset. Check the output grid for
         # any 0 values.

@@ -21,6 +21,7 @@ class ConfigOptions:
         param config: The user-specified path to the configuration file.
         """
         self.bmi_time = None
+        self.bmi_time_index = 0
         self.input_forcings = None
         self.supp_precip_forcings = None
         self.input_force_dirs = None
@@ -55,6 +56,7 @@ class ConfigOptions:
         self.prev_output_date = None
         self.current_output_date = None
         self.look_back = None
+        self.future_time = None
         self.fcst_freq = None
         self.nFcsts = None
         self.fcst_shift = None
@@ -63,6 +65,7 @@ class ConfigOptions:
         self.process_window = None
         self.spatial_meta = None
         self.grid_type = None
+        self.grid_meta = None
         self.ExactExtract = None
         self.lat_var = None
         self.lon_var = None
@@ -113,6 +116,7 @@ class ConfigOptions:
         self.nwmVersion = None
         self.nwmConfig = None
         self.include_lqfraq = False
+        self.forcing_output = None
 
     def read_config(self, cfg):
         """
@@ -134,8 +138,8 @@ class ConfigOptions:
 
         # Check to make sure forcing options make sense
         for forceOpt in self.input_forcings:
-            if forceOpt < 0 or forceOpt > 20:
-                err_handler.err_out_screen('Please specify InputForcings values between 1 and 20.')
+            if forceOpt < 0 or forceOpt > 24:
+                err_handler.err_out_screen('Please specify InputForcings values between 1 and 24.')
             # Keep tabs on how many custom input forcings we have.
             if forceOpt == 10:
                 self.number_custom_inputs = self.number_custom_inputs + 1
@@ -156,7 +160,7 @@ class ConfigOptions:
             err_handler.err_out_screen('Number of InputForcingTypes must match the number '
                                        'of InputForcings in the configuration file.')
         for fileType in self.input_force_types:
-            if fileType not in ['GRIB1', 'GRIB2', 'NETCDF']:
+            if fileType not in ['GRIB1', 'GRIB2', 'NETCDF','NETCDF4']:
                 err_handler.err_out_screen('Invalid forcing file type "{}" specified. '
                                            'Only GRIB1, GRIB2, and NETCDF are supported'.format(fileType))
 
@@ -284,7 +288,19 @@ class ConfigOptions:
         except ValueError:
             err_handler.err_out_screen('Improper includeLQFraq value: {}'.format(cfg['includeLQFraq']))
         if self.include_lqfraq < 0 or self.include_lqfraq > 1:
-            err_handler.err_out_screen('Please choose a includeLQFraq value of 0 or 1.')
+            err_handler.err_out_screen('Please choose an includeLQFraq value of 0 or 1.')
+
+        # Read in Forcing output option
+        try:
+            self.forcing_output = cfg['Output']
+        except KeyError:
+            self.forcing_output = 0
+        except configparser.NoOptionError:
+            self.forcing_output = 0
+        except ValueError:
+            err_handler.err_out_screen('Improper Forcing Output value: {}'.format(cfg['Output']))
+        if self.forcing_output < 0 or self.forcing_output > 1:
+            err_handler.err_out_screen('Please choose a Forcing Output value of 0 (No output) or 1 (output).')
 
         # Read AnA flag option
         try:

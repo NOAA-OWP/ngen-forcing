@@ -18,29 +18,29 @@ from .bmi_grid import Grid, GridType
 # Here is the model we want to run
 from .model import NWMv3_Forcing_Engine_model
 
+# Import MPI Python module
+from mpi4py import MPI
+
 ###### NWMv3.0 Forcings Engine modules ######
 try:
     import esmpy as ESMF
 except ImportError:
     import ESMF
-    
+
+
 from .core import config
 from .core import err_handler
 from .core import forcingInputMod
-from .core import forecastMod
 from .core import geoMod
 from .core import ioMod
 from .core import parallel
 from .core import suppPrecipMod
 
-from mpi4py import MPI
-
-
 # If less than 0, then ESMF.__version__ is greater than 8.6.0
 if ESMF.version_compare('8.6.0', ESMF.__version__) < 0:
     manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
-    
-    
+
+
 class UnknownBMIVariable(RuntimeError):
     pass
 
@@ -303,6 +303,24 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             err_handler.err_out_screen_para(self._job_meta, self._mpi_meta)
         err_handler.check_program_status(self._job_meta, self._mpi_meta)
 
+        # If user requests output for given domain, then call
+        # the I/O module to initialize netcdf file with given
+        # geospatial fields of the domain
+        if(self._job_meta.forcing_output == 1):
+            # First, name the file based on domain configuration and start time requested
+            # Compose the expected path to the output file. Check to see if the file exists,
+            # if so, continue to the next time step. Also initialize our output arrays if necessary.
+            if(self._job_meta.grid_type=='gridded'):
+                ext = 'GRIDDED'
+            elif(self._job_meta.grid_type=='hydrofabric'):
+                ext = 'HYDROFABRIC'
+            elif(self._job_meta.grid_type=='unstructured'):
+                ext = 'MESH'
+            self._OutputObj.outPath = self._job_meta.scratch_dir + "/NextGen_Forcings_Engine_" + ext + "_output_" + pd.Timestamp(self._job_meta.b_date_proc).strftime('%Y%m%d%H%M') + ".nc"
+
+            self._OutputObj.init_forcing_file(self._job_meta,self._WrfHydroGeoMeta,self._mpi_meta)
+
+
         # Next, initialize our input forcing classes. These objects will contain
         # information about our source products (I.E. data type, grid sizes, etc).
         # Information will be mapped via the options specified by the user.
@@ -415,11 +433,11 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     def finalize( self ):
         """Finalize model."""
         # Remove scratch directory files once BMI is completed to avoid 
-        # storage issues for NextGen formulation run
+        # storage issues for NextGen formulation run, but only on root thread
         if(self._mpi_meta.rank == 0):
             for filename in os.listdir(self._job_meta.scratch_dir):
-                file_path = os.path.join(self._job_meta.scratch_dir, filename)  
-                if(os.path.isfile(file_path)):
+                file_path = os.path.join(self._job_meta.scratch_dir, filename)
+                if(os.path.isfile(file_path) and filename[0:23] != "NextGen_Forcings_Engine"):
                     os.remove(file_path)
                 elif(os.path.isdir(file_path)):
                     os.rmdir(file_path)
@@ -439,9 +457,8 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             del self._suppPcpMod
         except AttributeError:
             pass
-
+    
         self._model = None
-
     #-------------------------------------------------------------------
     #-------------------------------------------------------------------
     # BMI: Model Information Functions
@@ -682,8 +699,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             Name of model variable for which to set values.
         values : np.ndarray
               Array of new values.
-        """ 
-
+        """
         if var_name == 'bmi_mpi_comm':
             self._comm = values[0]
         else:
