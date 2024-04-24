@@ -2,8 +2,8 @@ time_step_seconds: 3600
 initial_time: 0
 NWM_VERSION: 4.0
 NWM_CONFIG: "short_range"
-InputForcings: [6,5] 
-InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/RAP_Idalia", "/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/HRRR_Idalia"]
+InputForcings: [17,18]
+InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/NAM_Nest_PuertoRico", "/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/WRF_ARW_Puerto_Rico"]
 InputForcingTypes: ["GRIB2", "GRIB2"]
 InputMandatory: [1,1]
 OutputFrequency: 60
@@ -16,13 +16,13 @@ AnAFlag: 0
 BDateProc: -9999
 EDateProc: -9999
 LookBack : -9999
-RefcstBDateProc: "202308301200"
-RefcstEDateProc: "202308310000"
-ForecastFrequency: 60
+RefcstBDateProc: "202302280600"
+RefcstEDateProc: "202303010600"
+ForecastFrequency: 720
 ForecastShift: 0
-ForecastInputHorizons: [1080, 1080]
-ForecastInputOffsets: [0, 0]
-GeogridIn: "./NextGen_Domains/unstructured/SCHISM_Atlantic_ESMF_Mesh.nc"
+ForecastInputHorizons: [2880, 2880]
+ForecastInputOffsets: [0, 6]
+GeogridIn: "./NextGen_Domains/unstructured/SCHISM_Lake_Erie_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "unstructured"
 NodeCoords: 'nodeCoords'
@@ -31,7 +31,7 @@ ElemConn: 'elementConn'
 NumElemConn: 'numElementConn'
 HGTVAR: 'Node_Elevations'
 HGTVAR_ELEM: 'Element_Elevations'
-IgnoredBorderWidths: [0, 10]
+IgnoredBorderWidths: [0, 0]
 RegridOpt: [1, 1]
 ForcingTemporalInterpolation: [0, 0]
 TemperatureBiasCorrection: [0, 0]
@@ -46,17 +46,17 @@ ShortwaveDownscaling: [0,0]
 PressureDownscaling: [0,0]
 PrecipDownscaling: [0,0]
 HumidityDownscaling: [0,0]
-DownscalingParamDirs: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/Short_Range", "/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/Short_Range"]
+DownscalingParamDirs: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/PuertoRico", "/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/PuertoRico"]
 SuppPcp: []
 SuppPcpForcingTypes: []
-SuppPcpDirectories: []
-SuppPcpParamDir: ''
-RegridOptSuppPcp: []
-SuppPcpTemporalInterpolation: []
-SuppPcpInputOffsets: []
-SuppPcpMandatory: []
+SuppPcpDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/WRF_ARW_Puerto_Rico"]
+SuppPcpParamDir: '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/PuertoRico'
+RegridOptSuppPcp: [1]
+SuppPcpTemporalInterpolation: [0]
+SuppPcpInputOffsets: [0]
+SuppPcpMandatory: [0]
 RqiMethod: 0
 RqiThreshold: 0.9
-cfsEnsNumber: ''
+cfsEnsNumber: '1'
 custom_input_fcst_freq: []
 includeLQFraq: 0

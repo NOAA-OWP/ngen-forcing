@@ -22,12 +22,13 @@ ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [60, 60]
 ForecastInputOffsets: [0, 0]
-GeogridIn: "./NextGen_Domains/hydrofabric/nextgen_uniform_06_ESMF_Mesh.nc"
+GeogridIn: "./NextGen_Domains/hydrofabric/NextGen_Hyfab_v2_VPU_conus_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
 NodeCoords: 'nodeCoords'
 ElemCoords: 'centerCoords'
 ElemConn: 'elementConn'
+ElemID: 'element_id'
 NumElemConn: 'numElementConn'
 HGTVAR: 'Element_Elevation'
 SLOPE: 'Element_Slope'

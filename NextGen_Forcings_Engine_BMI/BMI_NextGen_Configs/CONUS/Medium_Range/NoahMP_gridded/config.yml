@@ -3,7 +3,7 @@ initial_time: 0
 NWM_VERSION: 4.0
 NWM_CONFIG: "medium_range"
 InputForcings: [3] 
-InputForcingDirectories: ["./GFS_Data"]
+InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/GFS_Idalia"]
 InputForcingTypes: ["GRIB2"]
 InputMandatory: [1]
 OutputFrequency: 60
@@ -16,8 +16,8 @@ AnAFlag: 0
 BDateProc: -9999
 EDateProc: -9999
 LookBack : -9999
-RefcstBDateProc: "202301220000"
-RefcstEDateProc: "202301230000"
+RefcstBDateProc: "202308300000"
+RefcstEDateProc: "202309010000"
 ForecastFrequency: 360
 ForecastShift: 0
 ForecastInputHorizons: [14400]

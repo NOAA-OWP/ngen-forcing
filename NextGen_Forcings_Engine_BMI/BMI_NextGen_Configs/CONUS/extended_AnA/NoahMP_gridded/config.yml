@@ -47,7 +47,7 @@ PressureDownscaling: [1,1]
 PrecipDownscaling: [0,0]
 HumidityDownscaling: [1,1]
 DownscalingParamDirs: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/AnA"]
-SuppPcp: [11]
+SuppPcp: [12]
 SuppPcpForcingTypes: ['GRIB2']
 SuppPcpDirectories: ['/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/extended_AnA_CONUS/MRMS_CONUS', '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/extended_AnA_CONUS/StageIV_CONUS']
 SuppPcpParamDir: '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/AnA'

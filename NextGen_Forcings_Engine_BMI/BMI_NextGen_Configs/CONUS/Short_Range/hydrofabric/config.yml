@@ -3,7 +3,7 @@ initial_time: 0
 NWM_VERSION: 4.0
 NWM_CONFIG: "short_range"
 InputForcings: [6,5] 
-InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/extended_AnA_CONUS/RAP", "/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/extended_AnA_CONUS/HRRR"]
+InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/RAP_Idalia", "/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/HRRR_Idalia"]
 InputForcingTypes: ["GRIB2", "GRIB2"]
 InputMandatory: [1,1]
 OutputFrequency: 60
@@ -16,16 +16,17 @@ AnAFlag: 0
 BDateProc: -9999
 EDateProc: -9999
 LookBack : -9999
-RefcstBDateProc: "202308211800"
-RefcstEDateProc: "202308211900"
+RefcstBDateProc: "202308301200"
+RefcstEDateProc: "202308310000"
 ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [1080, 1080]
 ForecastInputOffsets: [0, 0]
-GeogridIn: "./NextGen_Domains/hydrofabric/nextgen_uniform_06_ESMF_Mesh.nc"
+GeogridIn: "./NextGen_Domains/hydrofabric/NextGen_Hyfab_v2_VPU_conus_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
 NodeCoords: 'nodeCoords'
+ElemID: 'element_id'
 ElemCoords: 'centerCoords'
 ElemConn: 'elementConn'
 NumElemConn: 'numElementConn'
