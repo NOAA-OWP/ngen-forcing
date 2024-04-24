@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import numpy as np
+import sys
 
 # This is the BMI LSTM that we will be running
-from bmi_model import NWMv3_Forcing_Engine_BMI_model
+from NextGen_Forcings_Engine.bmi_model import NWMv3_Forcing_Engine_BMI_model
 
 
 def execute():
@@ -19,6 +20,8 @@ def execute():
     # Now loop through the inputs, set the forcing values, and update the model
     print('Now loop through the inputs, updating the model, and extracting forcing data')
     print('\n')
+    print('rank')
+    print(model._mpi_meta.rank)
     if(model._grid_type == "gridded"):
         # Initialize numpy arrays for get value
         U2D = np.zeros(model._varsize,dtype=float)
@@ -60,7 +63,7 @@ def execute():
         PSFC_ELEMENT = np.zeros(model._varsize_elem,dtype=float)
         RAINRATE_ELEMENT = np.zeros(model._varsize_elem,dtype=float)
 
-    for x in range(18):
+    for x in range(3):
 
         #########################################
         # UPDATE THE MODEL AND GET REGRIDDED FORCINGS #
