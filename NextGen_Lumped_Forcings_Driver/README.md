@@ -1,22 +1,8 @@
-Required Python packages to execute lumped forcings driver:
+# Steps to install an Anaconda Python environment to utilize the NextGen Lumped Forcings Driver
+1. conda env create --name NextGen_Lumped_Forcings_Driver --file=environment.yml
+2. The remaining Python module dependency here for the NextGen Lumped Forcings driver is the special exactextract Python bindings developed by GitHub contributors within the ExactExtract GitHub repository. The python bindings can be install by downloading python packages and following instructions on the GitHub repository link here: https://github.com/jdalrym2/exactextract/tree/coverage-fraction-pybindings (This will directly link the ExactExtract python bindings to your python executable or anaconda environment).
 
-1. pybind11
-2. xarray
-3. dask
-4. netCDF4
-5. numpy
-6. gdal
-7. re
-8. geopandas
-9. pandas
-10. multiprocessing
-11. wget
-12. scipy
-13. shapely
-14. ssl
-15. pyarrow
-16. exactextract (python bindings can be install by downloading python packages and following instructions on GitHub https://github.com/jdalrym2/exactextract/tree/coverage-fraction-pybindings to directly link the ExactExtract python bindings to your python executable or anaconda environment)
-
+# Example Execution of the NextGen Lumped Forcings Driver and Description of Python Arguments Required/Optional
 ###################### Python executable sample code for executing lumped forcings driver #############################
 from NextGen_lumped_forcings_driver import NextGen_lumped_forcings_driver
 
