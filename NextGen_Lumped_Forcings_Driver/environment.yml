@@ -7,18 +7,17 @@ dependencies:
   - xarray
   - dask
   - pandas
-  - python=3.7
+  - python
   - netCDF4
   - pybind11
   - geopandas
   - gdal
-  - re
   - numpy
-  - ssl
   - wget
   - pathlib
-  - os
   - shapely
   - scipy
-  - multiprocessing
   - pyarrow
+  - multiprocess
+  - regex
+  - openssl
