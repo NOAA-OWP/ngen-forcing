@@ -1,49 +1,58 @@
 # NextGen Forcings Engine Dependencies
-•	Required python packages for execution: [‘netCDF4’,’numpy’,’ESMPy’,’mpi4py’,’pandas’,’scipy’]
-
-•	Python and package versions dependencies for python environment setup: pandas=1.15, mpi4py=3.1.4, esmpy=8.1.0, numpy=1.20.1 (please see environment.yml file for more details)
+•	Please see detailed description of Python environmental dependencies and packages within the pyproject.toml file in the root of this directory.
 
 •	wgrib2 NCAR tool installation (Download and compile wgrib2 executable from NCAR (https://www.cpc.ncep.noaa.gov/products/wesley/wgrib2/wgrib2_v3.1.1_changes.html, execute the precompiled MakeFile in the directory and allow the wgrib2 tool to compiled its own pre-defined libraries and create its wgrib2 executable. Export the Linux variable “WGRIB2” to the for the NWMv3.0 python executable to reference to for converting wgrib2 files to netcdf files (export WGRIB2=/pathway/to/executable).
 
-•	Supercomputer environment modules required to link the NWMv3.0 Forcings Engine python environment and its MPI communicator to cluster compute nodes/cpus:  
-  1. intel/18.0.5.274
-  2. impi/2018.0.4
-  3. netcdf_parallel/4.7.4.release
-  4. esmf/8.1.0 (contains ESMPy python bindings to wrap with the module installation). Otherwise, ensure to install your own intel dependencies within your anaconda environment that will be properly linked to your ESMF libraries.
+•	NOAA RDHPCS Hera cluster recommended Rocky8 modules required to link the NextGen Forcings Engine python environment and its MPI communicator to cluster compute nodes/cpus:  
+  1. intel/2022.1.2
+  2. impi/2022.1.2
+  3. netcdf-hdf5parallel/4.7.4
+  4. Any ESMF version >= 8.1.0 (contains ESMPy python bindings to wrap with the module installation). Ensure to manually install your own intel dependencies within your anaconda environment that will be properly linked to your ESMF libraries.
 
-# Installing the NextGen Forcings Engine on the RDHPCS Hera Cluster with ESMF Library Dependencies
+# Steps for directly installing the NextGen Forcings Engine onto your own local Python environment using Anaconda (no supercomputer implementation)
+1. Make sure cd into the NextGen Forcings Engine BMI directory of this repository.
+2. Execute the following command to create a new Python environment containing all required NextGen Forcings Engine dependencies listed within the .yml file: conda env create --name NextGen_Forcings_Engine --file=environments.yml
+
+# Steps for Installing the NextGen Forcings Engine on the RDHPCS Hera Cluster with ESMF Library Dependencies
 1.	You will first need to load the ESMF libraries precompiled on the Hera cluster, followed by its respective intel MPI compilers that were used to compile the ESMF code on the supercomputer. Otherwise, allow the anaconda environment installer to build/link intel libraries to your Python environment for non-supercomputer clusters. The following options below are loading the correct compilers up on the RDHPCS Hera Cluster:
-  a.	module use /home/emc.nemspara/SOFT-hera/modulefiles
-  b.	module load intel/18.0.5.274
-  c.	module load impi/2018.0.4
-  d.	module load netcdf_parallel/4.7.4.release
-  e.	 export FC=mpiifort, export CXX=mpiicpc, export CC=mpiicc
-2.	Download and install ESMF v8.1.0 release from the GitHub repository (esmf-org/esmf at release/8.1.0 (github.com)). Instructions below highlight method to manually install and link ESMF libraries to intel libraries on a given supercomputer cluster. Otherwise, just install “esmpy=8.1.0” on your own separate anaconda environment for your local computer. Instructions below is for downloading the ESMF library and installing it onto a supercomputer or your local environment:
-  a.	unzip file, cd into esmf-release-8.1.0 directory.
-  b.	export ESMF_DIR=/pathway/to/esmf-release-8.1.0
-  c.	export ESMF_COMPILER=intel
-  d.	export ESMF_COMM=intelmpi
-  e.	export ESMF_OPENMP=ON
-  f.	export netcdf variables to force ESMF to build with netcdf capabilities (export ESMF_NETCDF=”split”, export ESMF_NETCDF_INCLUDE=$NETCDF_INCLUDE, export ESMF_NETCDF_LIBPATH=$NETCDF_LIB”,export ESMF_NETCDF_LIBS="-lnetcdff -lnetcdf")
-  g.	gmake
-  h.	gmake install
-  i.	gmake installcheck
-3.	  conda create -n ngen_engine -c conda-forge python=3.8.6 numpy=1.20.1 pandas=1.1.5
-  a.	*** Include esmpy=8.1.0 in the conda installation above if you’re using your own local environment to install the NextGen Forcings Engine instead of your own manual ESMF library ***
-  b.	conda activate ngen_engine (this will load the python and pip executables, which will be used to install Hera precompiled libraries).
-4.	*** Need wgrib2 tool as well ****
-  a.	Download and compile wgrib2 executable from NCAR (https://www.cpc.ncep.noaa.gov/products/wesley/wgrib2/wgrib2_v3.1.1_changes.html), execute the precompiled MakeFile in the directory and allow the wgrib2 tool to compiled its own pre-defined libraries and create its wgrib2 executable. Export the variable “WGRIB2” to the pathway to the executable (export WGRIB2=/pathway/to/executable)
-  b.	If you’re on the Hera-boulder cluster, then you can simply load the module with the precompiled wgrib2 executable	(module load wgrib2/2.0.8). Export the variable “WGRIB2” to the pathway to the executable (export WGRIB2= (which wgrib2))
-5.	Install mpi4py python libraries using pip install that will configure the mpi4py library to the Hera intel compilers (“pip install --no-cache-dir mpi4py”).
-6.	Install python “setuptools” to properly configure the correct python setup tools needed to setup and install ESMF packages for the anaconda environment (“pip install setuptools==58.2.0”). This step is only necessary if you are manually installing/linking ESMF libraries to your Python environment on a supercomputer. 
-7.	 Install netcdf4 libraries to be able to load NWM domain files and meteorological datasets to execute the NWMv3.0 Forcings Engine (“pip install --no-cache-dir netCDF4”).
-8.	Install scipy libraries to load up interpolation methods that are utilized within the NextGen Forcings Engine (“pip install scipy”).
-9.	The following instructions below are to manually link the ESMF makefile to your Python environment setup if you’re installing ESMF libraries manually to your own environment. Otherwise, if you allowed Anaconda environment setup to install the ESMF libraries, then you are already finished!
-10.	cd to esmf-release-8.1.0/src/addon/ESMPy directory. This is where the setup.py python script is located to install ESMF libraries onto your anaconda environment. *** Only necessary if installing ESMF libraries manually *** 
-11.	Export ESMFMKFILE=/pathway/to/directory/esmf-release-8.1.0/lib/libO/Linux.intel.64.intel.default/esmf.mk *** Only necessary if installing ESMF libraries manually ***
-12.	python setup.py build *** Only necessary if installing ESMF libraries manually ***
-13.	python setup.py install *** Only necessary if installing ESMF libraries manually ***
-14.	ESMF packages should be properly installed and linked to the intel compiler libraries for MPI capabilities. Open a python command line and “import ESMF” to make sure that the ESMF libraries were properly install on the anaconda environment. If it succeeds, then you should be good to go! *** Only necessary if installing ESMF libraries manually ***
+• module load intel/2022.1.2
+• module load impi/2022.1.2
+• module load netcdf-hdf5parallel/4.7.4
+• export FC=mpiifort, export CXX=mpiicpc, export CC=mpiicc
+
+3.	Download and install and ESMF version release >= 8.1.0 from the GitHub repository (https://github.com/esmf-org/esmf). Instructions below highlight method to manually install and link ESMF libraries to intel libraries on a given supercomputer cluster.
+  • unzip esmf zipped file downloaded from the GitHub repository, cd into esmf-release-VERSION directory.
+  • export ESMF_DIR=/pathway/to/esmf-release-VERSION
+  • export ESMF_COMPILER=intel
+  • export ESMF_COMM=intelmpi
+  • export ESMF_OPENMP=ON
+  • export netcdf variables to force ESMF to build with netcdf capabilities (export ESMF_NETCDF=”split”, export ESMF_NETCDF_INCLUDE=$NETCDF_INCLUDE_PATHWAY, export ESMF_NETCDF_LIBPATH=$NETCDF_LIB_PATHWAY,export ESMF_NETCDF_LIBS="-lnetcdff -lnetcdf")
+  • gmake
+  • gmake install
+  • gmake installcheck
+
+4.	*** Need wgrib2 tool as well **** Download and  wgrib2 executable from GitHub (https://github.com/weathersource/wgrib2),
+  • Unzip the wgrib2 tar ball, go into directory and edit "makefile" to include USE_NETCDF4=1, MAKE_SHARED_LIB=1 options
+  • export CC=gcc; FC=gfortran
+  • make
+  • make lib (will include shared library libwgrib2.so in case user wants to link library with pywgrib2_s module)
+  • export WGRIB2=/pathway/to/executable (or compile your anaconda environment with pywgrib2_s python module using instructions here https://www.cpc.ncep.noaa.gov/products/wesley/wgrib2/pywgrib2_s_install.html)
+
+7. Install a new Python environment to link the intel (if you've just compiled wgrib2 executable, reload your compiler pathways as shown here export FC=mpiifort, export CXX=mpiicpc, export CC=mpiicc):
+  • conda create -n ngen_engine -c conda-forge python numpy pandas
+  • conda activate ngen_engine (this will load the python and pip executables, which will be used to install Hera precompiled libraries).
+6.	Install mpi4py python libraries using pip install that will configure the mpi4py library to the Hera intel compilers:
+  • pip install --no-cache-dir mpi4py”
+8.	Install python “setuptools” to properly configure the correct python setup tools needed to setup and install ESMF packages for the anaconda environment.This step is only necessary if you are manually installing/linking ESMF libraries to your Python environment on a supercomputer:
+  • pip install setuptools==58.2.0
+9.	 Install netcdf4 libraries to be able to load NWM domain files and meteorological datasets to execute the NWMv3.0 Forcings Engine: 
+  • pip install --no-cache-dir netCDF4
+10.	Install scipy libraries to load up interpolation methods that are utilized within the NextGen Forcings Engine:
+  • pip install scipy
+11.	cd to esmf-release-VERSION/src/addon/ESMPy directory. This is where the setup.py python script is located to install ESMF libraries onto your anaconda environment. Execute the following steps to link the ESMPy Python module to your anaconda environment:
+  • Export ESMFMKFILE=/pathway/to/directory/esmf-release-8.1.0/lib/libO/Linux.intel.64.intel.default/esmf.mk
+  • pip install .
+12.	ESMF packages should be properly installed and linked to the intel compiler libraries for MPI capabilities. Open a python command line and “import ESMF” to make sure that the ESMF libraries were properly install on the anaconda environment. If it succeeds, then you should be good to go!
 
 # NextGen Forcings Engine Basic Model Interface Setup and Execution
 1.	Within your python environment, make sure to install the “bmipy” and “yaml” libraries to enable BMI functionality for the NextGen Forcings Engine to utilize. 
@@ -88,7 +97,7 @@
  - run_bmi_unit_test.py: This is a file that runs each BMI unit test to make sure that the BMI is complete and functioning as expected.
  - config.yml: This is a configuration file that the BMI reads to set inital_time (initial value of current_model_time) and all the required variables needed to drive the NextGen Forcings Engine.
  - environment.yml: Environment file with the required Python libraries needed to run the model with BMI and the NextGen Forcings Engine. Create the environment with this command: `conda env create -f environment.yml`, then activate it with `conda activate bmi_test`
- - slurm.job: Example Python submission script for a slurm job manager that is utilized to execute a MPI Python script (NextGen Forcings Engine) on a supercomputer.
+ - slurm.job: Example Python submission script for a slurm job manager that is utilized to execute a MPI Python script (NextGen Forcings Engine) on the NOAA RDHPCS Hera supercomputer.
  - ./NextGen_Forcings_Engine/core/: The sub-directory containing all the support Python modules required to execute the NextGen Forcings Engine driver within model.py script.
  - ./BMI_NextGen_Configs/: A sub-directory containing all the current config.yml BMI file setupts that will allow a a user to driver the NextGen BMI Forcings Engine for a gridded domain, a coastal-model unstructured mesh domain, and a NextGen hydrofabric (VPU 06) unstructured mesh domain. 
  - ./NextGen_Domains/: A sub-directory that contains a sample domain geogrid file for a gridded domain, a coastal-model unstructured mesh domain, and a NextGen hydrofabric (VPU 06) unstructured mesh domain that can all be utitlized currently to regrid forcings for a Medium Range forecast simulation driver by GFS forcings.
@@ -97,8 +106,6 @@
 
 # About
 This is an implementation of a Python-based model that fulfills the Python language BMI interface and can be used in the Framework. It is intended to serve as a control for testing purposes, freeing the framework from dependency on any real-world model in order to test BMI related functionality.
-
-# Implementation Details
 
 ## Test the complete BMI functionality
 `python run_bmi_unit_test.py`
