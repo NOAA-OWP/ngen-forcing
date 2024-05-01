@@ -12,6 +12,7 @@ dependencies = [
     "bokeh",
     "pandas>=1.15",
     "netCDF4",
+    "scipy",    
     "mpi4py>=3.1.4",
     "esmpy>=8.1.0",
     "numpy>=1.20.1"
