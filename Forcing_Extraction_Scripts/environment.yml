@@ -1,0 +1,9 @@
+name: forcing_extraction
+channels:
+  - defaults
+  - anaconda
+  - conda-forge
+dependencies:
+  - bs4
+  - requests
+  - python
