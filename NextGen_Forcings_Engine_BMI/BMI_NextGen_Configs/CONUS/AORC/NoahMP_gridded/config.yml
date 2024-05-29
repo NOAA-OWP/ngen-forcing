@@ -4,7 +4,7 @@ NWM_VERSION: 4.0
 NWM_CONFIG: "AORC"
 InputForcings: [12] 
 InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/AORC"]
-InputForcingTypes: ["NETCDF"]
+InputForcingTypes: ["NETCDF4"]
 InputMandatory: [1]
 OutputFrequency: 60
 OutDir: "./Unit_Test_Output/AORC"
