@@ -37,7 +37,7 @@ from .core import parallel
 from .core import suppPrecipMod
 
 # If less than 0, then ESMF.__version__ is greater than 8.6.0
-if ESMF.version_compare('8.6.0', ESMF.__version__) < 0:
+if ESMF.version_compare('8.7.0', ESMF.__version__) < 0:
     manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
 
 
