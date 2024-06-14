@@ -137,51 +137,51 @@ This tells the NextGen Forcings Engine BMI which grid type the engine is initali
 - Example- GRID_TYPE: "gridded"
 
 ### LONVAR
-This variable is the naming convention of the longitude variable within the "GeogridIn" file the user has specified. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
+This variable is the naming convention of the longitude variable within the "GeogridIn" file the user has specified. Variable naming convention ONLY for gridded domain configurations. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
 - Example- LONVAR: "XLONG_M"
 
 ### LATVAR
-This variable is the naming convention of the latitude variable within the "GeogridIn" file the user has specified. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
+This variable is the naming convention of the latitude variable within the "GeogridIn" file the user has specified. Variable naming convention ONLY for gridded domain configurations. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
 - Example- LATVAR: "XLAT_M"
 
 ### HGTVAR
-This variable is the naming convention of the elevation variable (describes the elevation estimate for each grid cell or mesh node for unstructured mesh) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a bias calibration or downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the elevation variable (describes the elevation estimate for each grid cell or mesh node for unstructured mesh) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
 - Example- HGTVAR: "Elevation"
 
 ### HGTVAR_ELEM
-This variable is the naming convention of the elevation element variable (describes the elevation estimate for mesh element ONLY in an unstructured mesh) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a bias calibration or downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the elevation element variable (describes the elevation estimate for mesh element ONLY in an unstructured mesh) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
 - Example- HGTVAR_ELEM: "Elevation_Element"
 
 ### SLOPE
-This variable is the naming convention of the slope variable (describes the slope estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a bias calibration or downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the slope variable (describes the slope estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
 - Example- SLOPE: "Slope"
 
 ### SLOPE_AZIMUTH
-This variable is the naming convention of the slope azmuith variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a bias calibration or downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the slope azmuith variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
 - Example- SLOPE_AZIMUTH: "Slope_Tilt"
 
 ### SINALPHA
-This variable is the naming convention of the sine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a bias calibration or downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the sine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions OR from a gridded domain configuration that has the same calculated variable. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
 - Example- SINALHPA: "SINALPHA"
 
 ### COSALPHA
-This variable is the naming convention of the cosine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a bias calibration or downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the cosine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions OR from a gridded domain configuration that has the same calculated variable. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
 - Example- COSALHPA: "COSALPHA"
 
 ### NodeCoords
-This variable is the naming convention of the node coordinates variable within the "GeogridIn" file the user has specified for an unstructured mesh of the NextGen hydrofabric. This is a 2-D array stating the latitude and longitude coordinates for all the nodes in the mesh. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
+This variable is the naming convention of the node coordinates variable within the "GeogridIn" file the user has specified for ONLY an unstructured mesh or the NextGen hydrofabric. This is a 2-D array stating the latitude and longitude coordinates for all the nodes in the mesh. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
 - Example- NodeCoods: "nodecoords"
 
 ### ElemCoords
-This variable is the naming convention of the element coordinates variable within the "GeogridIn" file the user has specified for an unstructured mesh of the NextGen hydrofabric. This is a 2-D array stating the latitude and longitude coordinates for all the elements in the mesh. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
+This variable is the naming convention of the element coordinates variable within the "GeogridIn" file the user has specified for ONLY an unstructured mesh or the NextGen hydrofabric. This is a 2-D array stating the latitude and longitude coordinates for all the elements in the mesh. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
 - Example- ElemCoods: "elemcoords"
 
 ### ElemConn
-This variable is the naming convention of the element connectivity variable within the "GeogridIn" file the user has specified for an unstructured mesh of the NextGen hydrofabric. This is a 2-D array stating the node ids for each element connecting the entire mesh structure. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
+This variable is the naming convention of the element connectivity variable within the "GeogridIn" file the user has specified for ONLY an unstructured mesh or the NextGen hydrofabric. This is a 2-D array stating the node ids for each element connecting the entire mesh structure. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
 - Example- ElemConn: "elemconn"
 
 ### NumElemConn
-This variable is the naming convention of the number of nodes per element variable within the "GeogridIn" file the user has specified for an unstructured mesh of the NextGen hydrofabric. This is a 1-D array stating the how many nodes are connecting each element within the unstructured mesh. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
+This variable is the naming convention of the number of nodes per element variable within the "GeogridIn" file the user has specified for ONLY an unstructured mesh or the NextGen hydrofabric. This is a 1-D array stating the how many nodes are connecting each element within the unstructured mesh. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object.
 - Example- NumElemConn: "numelemconn"
 
 ### ElemID
