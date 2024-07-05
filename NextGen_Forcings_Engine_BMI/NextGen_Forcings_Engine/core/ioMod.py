@@ -124,7 +124,7 @@ class OutputObj:
                         break
                 elif(ConfigOptions.grid_type == "hydrofabric"):
                     try:
-                        self.idOut.createDimension("catchment_id",len(geoMetaWrfHydro.element_ids_global))
+                        self.idOut.createDimension("catchment-id",len(geoMetaWrfHydro.element_ids_global))
                     except:
                         ConfigOptions.errMsg = "Unable to create catchment id dimension in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -189,26 +189,26 @@ class OutputObj:
 
                 # Create variables.
                 try:
-                    self.idOut.createVariable('time','i4',('time'))
+                    self.idOut.createVariable('Time','i4',('time'))
                 except:
                     ConfigOptions.errMsg = "Unable to create time variable in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
                 # Populate time and reference time variables with appropriate attributes and time values.
                 try:
-                    self.idOut.variables['time'].units = "minutes since 1970-01-01 00:00:00 UTC"
+                    self.idOut.variables['Time'].units = "minutes since 1970-01-01 00:00:00 UTC"
                 except:
                     ConfigOptions.errMsg = "Unable to create time units attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
                 try:
-                    self.idOut.variables['time'].standard_name = "time"
+                    self.idOut.variables['Time'].standard_name = "time"
                 except:
                     ConfigOptions.errMsg = "Unable to create time standard_name attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
                 try:
-                    self.idOut.variables['time'].long_name = "valid output time"
+                    self.idOut.variables['Time'].long_name = "valid output time"
                 except:
                     ConfigOptions.errMsg = "Unable to create time long_name attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -219,8 +219,8 @@ class OutputObj:
                     dim_x = 'x'
                     dim_y = 'y'
                 elif(ConfigOptions.grid_type == "hydrofabric"):
-                    dim_x = "catchment_id"
-                    dim_y = "catchment_id"
+                    dim_x = "catchment-id"
+                    dim_y = "catchment-id"
                 elif(ConfigOptions.grid_type == "unstructured"):
                     dim_x = "element_id"
                     dim_y = "element_id"
@@ -373,20 +373,20 @@ class OutputObj:
 
                     if(ConfigOptions.grid_type == "hydrofabric"):
                         try:
-                            self.idOut.createVariable('catchment_id', 'i4', (dim_y))
+                            self.idOut.createVariable('ids', 'str', (dim_y))
                         except:
                             ConfigOptions.errMsg = "Unable to create catchment id variable in: " + self.outPath
                             err_handler.log_critical(ConfigOptions, MpiConfig)
                             break
                         try:
-                            self.idOut.variables['catchment_id'].setncattr("standard_name", "Catchment ID")
-                            self.idOut.variables['catchment_id'].setncattr("long_name", "Catchment ID for NextGen hydrofabric")
+                            self.idOut.variables['ids'].setncattr("standard_name", "catchment_ids")
+                            self.idOut.variables['ids'].setncattr("long_name", "Catchment ID for NextGen hydrofabric")
                         except:
                             ConfigOptions.errMsg = "Unable to establish catchment id attributes in: " + self.outPath
                             err_handler.log_critical(ConfigOptions, MpiConfig)
                             break
                         try:
-                            self.idOut.variables['catchment_id'][:] = geoMetaWrfHydro.element_ids_global
+                            self.idOut.variables['ids'][:] = np.array(['cat-' + str(x) for x in np.array(geoMetaWrfHydro.element_ids_global,dtype=int)])
                         except:
                             ConfigOptions.errMsg = "Unable to place y coordinate values into output variable " \
                                                    "for output file: " + self.outPath
