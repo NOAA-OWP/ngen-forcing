@@ -36,7 +36,7 @@ def main(args):
 
     dNowUTC = datetime.datetime.utcnow()
     dNow = datetime.datetime(dNowUTC.year,dNowUTC.month,dNowUTC.day,dNowUTC.hour)
-    ncepHTTP = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/v4.1"
+    ncepHTTP = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/v4.2"
 
     pid = os.getpid()
     lockFile = outDir + "/GET_NBM_Full.lock"
