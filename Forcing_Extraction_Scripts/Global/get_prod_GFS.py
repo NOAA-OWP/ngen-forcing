@@ -106,31 +106,8 @@ def main(args):
                         print("Unable to retrieve: " + url)
                         print("Data may not available yet...")
                         continue
-            # Download 3-hour files from hour 120 to hour 240.
-            for hrDownload in range(123,243,3):
-                fileDownload = "gfs.t" + dCurrent.strftime('%H') + \
-                       "z.sfluxgrbf" + str(hrDownload).zfill(3) + \
-                       ".grib2"
-                url = httpDownloadDir + "/" + fileDownload
-                outFile = gfsOutDir2 + "/" + fileDownload
-                if not os.path.isfile(outFile):
-                    download_complete = False
-                    start_time = time.time()
-                    timer = 0.0
-                    print("Pulling GFS file: " + url)
-                    while(download_complete == False and timer < 600.0):
-                        try:
-                            request.urlretrieve(url,outFile)
-                            download_complete = True
-                        except:
-                            timer = time.time() - start_time
-
-                    if(download_complete == False):
-                        print("Unable to retrieve: " + url)
-                        print("Data may not available yet...")
-                        continue
-            # Download 12-hour files from hour 240 to hour 384.
-            for hrDownload in range(252,396,12):
+            # Download 3-hour files from hour 120 to hour 384.
+            for hrDownload in range(123,387,3):
                 fileDownload = "gfs.t" + dCurrent.strftime('%H') + \
                        "z.sfluxgrbf" + str(hrDownload).zfill(3) + \
                        ".grib2"
