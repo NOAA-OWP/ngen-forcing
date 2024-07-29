@@ -57,4 +57,4 @@ RqiMethod: 0
 RqiThreshold: 0.9
 cfsEnsNumber: ''
 custom_input_fcst_freq: []
-includeLQFraq: 0
+includeLQFrac: 0
