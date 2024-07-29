@@ -9,16 +9,16 @@ InputMandatory: [1,1]
 OutputFrequency: 60
 SubOutputHour: 0
 SubOutFreq: 0
-ScratchDir: "./Unit_Test_Output/extended_AnA"
+ScratchDir: "./Unit_Test_Output/Short_range"
 Output: 1
 compressOutput: 0
 floatOutput: 0
-AnAFlag: 1
-LookBack : 1740
-RefcstBDateProc: "202308221500"
+AnAFlag: 0
+LookBack : -9999
+RefcstBDateProc: "202308211800"
 ForecastFrequency: 60
 ForecastShift: 0
-ForecastInputHorizons: [60, 60]
+ForecastInputHorizons: [1080, 1080]
 ForecastInputOffsets: [0, 0]
 GeogridIn: "./NextGen_Domains/gridded/netcdf_gridded_dummy.nc"
 SpatialMetaIn: ""
@@ -41,14 +41,14 @@ PressureDownscaling: [0,0]
 PrecipDownscaling: [0,0]
 HumidityDownscaling: [0,0]
 DownscalingParamDirs: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/AnA", "/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/AnA"]
-SuppPcp: [12]
-SuppPcpForcingTypes: ['GRIB2']
-SuppPcpDirectories: ['/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/extended_AnA_CONUS/StageIV_CONUS','/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/extended_AnA_CONUS/MRMS_CONUS']
-SuppPcpParamDir: '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/AnA'
-RegridOptSuppPcp: [1]
-SuppPcpTemporalInterpolation: [0]
-SuppPcpInputOffsets: [0]
-SuppPcpMandatory: [0]
+SuppPcp: []
+SuppPcpForcingTypes: []
+SuppPcpDirectories: []
+SuppPcpParamDir: ''
+RegridOptSuppPcp: []
+SuppPcpTemporalInterpolation: []
+SuppPcpInputOffsets: []
+SuppPcpMandatory: []
 RqiMethod: 0
 RqiThreshold: 0.9
 cfsEnsNumber: ''
