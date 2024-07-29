@@ -10,6 +10,7 @@ OutputFrequency: 60
 SubOutputHour: 0
 SubOutFreq: 0
 ScratchDir: "./Unit_Test_Output/AORC"
+Output: 1
 compressOutput: 0
 floatOutput: 0
 AnAFlag: 0
