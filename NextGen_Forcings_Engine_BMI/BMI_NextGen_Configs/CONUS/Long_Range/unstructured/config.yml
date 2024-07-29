@@ -7,17 +7,15 @@ InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/C
 InputForcingTypes: ["GRIB2"]
 InputMandatory: [1]
 OutputFrequency: 60
-OutDir: "./Unit_Test_Output/Long_range"
+SubOutputHour: 0
+SubOutFreq: 0
 ScratchDir: "./Unit_Test_Output/Long_range"
+Output: 1
 compressOutput: 0
 floatOutput: 0
-RetroFlag: 0
 AnAFlag: 0
-BDateProc: -9999
-EDateProc: -9999
 LookBack : -9999
 RefcstBDateProc: "202302140000"
-RefcstEDateProc: "202302150000"
 ForecastFrequency: 360
 ForecastShift: 0
 ForecastInputHorizons: [43200]
