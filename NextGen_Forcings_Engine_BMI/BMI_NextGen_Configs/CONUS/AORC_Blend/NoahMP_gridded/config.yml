@@ -7,17 +7,14 @@ InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/A
 InputForcingTypes: ["NETCDF4","NETCDF"]
 InputMandatory: [1,1]
 OutputFrequency: 60
-OutDir: "./Unit_Test_Output/AORC"
+SubOutputHour: 0
+SubOutFreq: 0
 ScratchDir: "./Unit_Test_Output/AORC"
 compressOutput: 0
 floatOutput: 0
-RetroFlag: 0
 AnAFlag: 0
-BDateProc: -9999
-EDateProc: -9999
 LookBack : 8700
 RefcstBDateProc: "202309030000"
-RefcstEDateProc: "202309100000"
 ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [14400,14400]
