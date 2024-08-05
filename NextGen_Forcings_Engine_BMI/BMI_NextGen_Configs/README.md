@@ -57,7 +57,7 @@ Choose a set of value(s) of forcing variables to be processed for WRF-Hydro. Ple
 - Example- InputForcings: [3,25]
 
 ### InputForcingDirectories
-Specify the input directories for each forcing product.
+Specify the input directories for each forcing product. If a user has the ability to connect to the AWS servers and they specify configuration #12 (CONUS AORC data) then this specific configuration input can be left as a blank string ("").
 - Example- InputForcingDirectories: [./GFS,./NDFD]
 
 ### InputForcingTypes
