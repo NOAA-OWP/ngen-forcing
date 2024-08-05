@@ -14,3 +14,7 @@ dependencies:
   - scipy
   - esmpy
   - numpy
+  - dask
+  - zarr
+  - s3fs
+  - xarray

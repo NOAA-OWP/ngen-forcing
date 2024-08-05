@@ -18,7 +18,7 @@ def err_out_screen(err_msg):
     """
 
     err_msg_out = 'ERROR: ' + err_msg
-    print(err_msg_out)
+    print(err_msg_out,flush=True)
     sys.exit(1)
 
 def err_out_screen_para(err_msg,MpiConfig):
@@ -31,7 +31,7 @@ def err_out_screen_para(err_msg,MpiConfig):
     :return:
     """
     err_msg_out = 'ERROR: RANK - ' + str(MpiConfig.rank) + ' : ' + err_msg
-    print(err_msg_out)
+    print(err_msg_out,flush=True)
     # MpiConfig.comm.Abort()
     sys.exit(1)
 
@@ -269,9 +269,10 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         'T2D': [4, 0.0, 400.0],
         'Q2D': [5, -100.0, 100.0],
         'PSFC': [6, 0.0, 2000000.0],
-        'SWDOWN': [7, 0.0, 5000.0]
+        'SWDOWN': [7, 0.0, 5000.0],
+        'LQFRAC': [8,0,1]
     }
-    fvars = ['U2D', 'V2D', 'LWDOWN', 'RAINRATE', 'T2D', 'Q2D', 'PSFC', 'SWDOWN']
+    fvars = ['U2D', 'V2D', 'LWDOWN', 'RAINRATE', 'T2D', 'Q2D', 'PSFC', 'SWDOWN','LQFRAC']
 
     # If the regridded field is None type, return to the main program as this means no forcings
     # were found for this timestep.
@@ -284,6 +285,9 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         if fvars.index(varTmp) not in input_forcings.input_map_output:
             continue
 
+        if varTmp == 'LQFRAC' and not ConfigOptions.include_lqfrac:
+            continue
+
         # First check to see if we have any data that is not missing.
         # indCheck = np.where(input_forcings.regridded_forcings2[variable_range[varTmp][0]]
         #                    != ConfigOptions.globalNdv)
@@ -293,6 +297,10 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         #    log_critical(ConfigOptions, MpiConfig)
         #    indCheck = None
         #    return
+        if(ConfigOptions.aorc_aws == None):
+            src_file = input_forcings.file_in2
+            if '%FIELD%' in src_file:
+                src_file = src_file.replace('%FIELD%', {'U2D': "[wdir|wspd]", 'V2D': "[wdir|wspd]", 'RAINRATE': "qpf", 'T2D': "tmp"}[varTmp])
 
         # Check to see if any pixel cells are below the minimum value.
         indCheck = np.where((input_forcings.regridded_forcings2[variable_range[varTmp][0]] != ConfigOptions.globalNdv) &
@@ -313,7 +321,7 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         if numCells > 0:
             max = input_forcings.regridded_forcings2[variable_range[varTmp][0]][indCheck].max()
             ConfigOptions.errMsg = f"Data (max = {max}) above maximum threshold for: {varTmp} in " \
-                                   f"{input_forcings.file_in2} for {numCells} regridded pixel cells."
+                                   f"{src_file} for {numCells} regridded pixel cells."
             log_critical(ConfigOptions, MpiConfig)
             indCheck = None
             return

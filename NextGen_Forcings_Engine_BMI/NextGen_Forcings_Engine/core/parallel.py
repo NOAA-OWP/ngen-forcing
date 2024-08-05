@@ -1,10 +1,13 @@
 import numpy as np
 import mpi4py
+#mpi4py.rc.threaded = False
+mpi4py.rc.threads = False
+
 from mpi4py import MPI
 
 from . import err_handler
 
-mpi4py.rc.threaded = False
+#mpi4py.rc.threads = False
 
 # If MPI was initialized outside of python,
 # disable initialization/finalization behavior
@@ -136,7 +139,6 @@ class MpiConfig:
             :param ConfigOptions:
             :return:
         """
-
 
         # Determine which type of input array we have based on the
         # type of numpy array.
@@ -323,4 +325,3 @@ class MpiConfig:
         #err_handler.log_msg(options,self)
 
         return recvbuf
-

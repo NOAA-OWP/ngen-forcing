@@ -76,10 +76,10 @@ class OutputObj:
                        'Surface downward short-wave radiation flux','time: point',0.001,0.0,3]
         }
 
-        if ConfigOptions.include_lqfraq:
-            output_variable_attribute_dict['LQFRAQ'] = [8, '%', 'liquid_water_fraction',
+        if ConfigOptions.include_lqfrac:
+            output_variable_attribute_dict['LQFRAC'] = [8, '%', 'liquid_water_fraction',
                                                         'Fraction of precipitation that is liquid vs. frozen',
-                                                        'time: point', 0.1, 0.0, 3]
+                                                        'time: point', 0.01, 0.0, 3]
 
         # Compose the ESMF remapped string attribute based on the regridding option chosen by the user.
         # We will default to the regridding method chosen for the first input forcing selected.
@@ -131,7 +131,7 @@ class OutputObj:
                         break
                 elif(ConfigOptions.grid_type == "unstructured"):
                     try:
-                        self.idOut.createDimension("element_id",geoMetaWrfHydro.ny_global_elem)
+                        self.idOut.createDimension("element-id",geoMetaWrfHydro.ny_global_elem)
                     except:
                         ConfigOptions.errMsg = "Unable to create element id dimension in: " + self.outPath
                         err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -189,7 +189,7 @@ class OutputObj:
 
                 # Create variables.
                 try:
-                    self.idOut.createVariable('Time','i4',('time'))
+                    self.idOut.createVariable('Time','double',('time'))
                 except:
                     ConfigOptions.errMsg = "Unable to create time variable in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -222,8 +222,8 @@ class OutputObj:
                     dim_x = "catchment-id"
                     dim_y = "catchment-id"
                 elif(ConfigOptions.grid_type == "unstructured"):
-                    dim_x = "element_id"
-                    dim_y = "element_id"
+                    dim_x = "element-id"
+                    dim_y = "element-id"
 
                 # Create geospatial metadata coordinate variables if data was read in from an optional
                 # spatial metadata file.
@@ -388,7 +388,7 @@ class OutputObj:
                         try:
                             self.idOut.variables['ids'][:] = np.array(['cat-' + str(x) for x in np.array(geoMetaWrfHydro.element_ids_global,dtype=int)])
                         except:
-                            ConfigOptions.errMsg = "Unable to place y coordinate values into output variable " \
+                            ConfigOptions.errMsg = "Unable to place catchment id string values into output variable " \
                                                    "for output file: " + self.outPath
                             err_handler.log_critical(ConfigOptions, MpiConfig)
                             break
@@ -543,7 +543,7 @@ class OutputObj:
         err_handler.check_program_status(ConfigOptions, MpiConfig)
 
 
-    def update_forcing_file_output(self,ConfigOptions,geoMetaWrfHydro,MpiConfig,BMI_time):
+    def update_forcing_file_output(self,ConfigOptions,geoMetaWrfHydro,MpiConfig):
 
         output_variable_attribute_dict = {
             'U2D': [0,'m s-1','x_wind','10-m U-component of wind','time: point',0.001,0.0,3],
@@ -558,10 +558,10 @@ class OutputObj:
                        'Surface downward short-wave radiation flux','time: point',0.001,0.0,3]
         }
 
-        if ConfigOptions.include_lqfraq:
-            output_variable_attribute_dict['LQFRAQ'] = [8, '%', 'liquid_water_fraction',
+        if ConfigOptions.include_lqfrac:
+            output_variable_attribute_dict['LQFRAC'] = [8, '%', 'liquid_water_fraction',
                                                         'Fraction of precipitation that is liquid vs. frozen',
-                                                        'time: point', 0.1, 0.0, 3]
+                                                        'time: point', 0.01, 0.0, 3]
 
         if MpiConfig.rank == 0:    
 
@@ -574,10 +574,10 @@ class OutputObj:
 
             # Populate time variables
             dEpoch = datetime.datetime(1970, 1, 1)
-            dtValid = BMI_time - dEpoch
+            dtValid = ConfigOptions.current_time - dEpoch
 
             try:
-                idOut.variables['time'][int(ConfigOptions.bmi_time_index)] = int(dtValid.days * 24.0 * 60) + int(math.floor(dtValid.seconds / 60.0))
+                idOut.variables['Time'][int(ConfigOptions.bmi_time_index)] = int(dtValid.days * 24.0 * 60) + int(math.floor(dtValid.seconds / 60.0))
             except:
                 ConfigOptions.errMsg = "Unable to populate the time variable in: " + self.outPath
                 err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -596,7 +596,6 @@ class OutputObj:
                 elif(ConfigOptions.grid_type == "unstructured"):
                     dataOutTmp = MpiConfig.merge_slabs_gatherv(self.output_local_elem[output_variable_attribute_dict[varTmp][0],:], ConfigOptions)
             except Exception as e:
-                print(e)
                 ConfigOptions.errMsg = "Unable to gather final grids for: " + varTmp
                 err_handler.log_critical(ConfigOptions, MpiConfig)
                 continue
@@ -654,11 +653,11 @@ def open_grib2(GribFileIn,NetCdfFileOut,Wgrib2Cmd,ConfigOptions,MpiConfig,
         ConfigOptions.statusMsg = "Reading in GRIB2 file: " + GribFileIn
         err_handler.log_msg(ConfigOptions, MpiConfig)
         if os.path.isfile(NetCdfFileOut):
-            ConfigOptions.statusMsg = "Overriding temporary NetCDF file: " + NetCdfFileOut
-            err_handler.log_warning(ConfigOptions, MpiConfig)
+            ConfigOptions.statusMsg = "Overwriting temporary NetCDF file: " + NetCdfFileOut
+            err_handler.log_msg(ConfigOptions, MpiConfig)
         try:
             # WCOSS fix for WGRIB2 crashing when called on the same file twice in python
-            if not os.environ.get('MFE_SILENT'):
+            if not os.environ.get('MFE_SILENT') and not special_case:
                 print("command: " + Wgrib2Cmd)
 
             # set up GRIB2TABLE if needed:
@@ -672,7 +671,6 @@ def open_grib2(GribFileIn,NetCdfFileOut,Wgrib2Cmd,ConfigOptions,MpiConfig,
                             "Multi-sensor estimated precipitation accumulation 1-hour:mm\n"
                     )
                 os.environ['GRIB2TABLE'] = g2path
-
             if(WGRIB2_env):
                 exitcode = subprocess.call(Wgrib2Cmd, shell=True)
             else:
@@ -680,11 +678,23 @@ def open_grib2(GribFileIn,NetCdfFileOut,Wgrib2Cmd,ConfigOptions,MpiConfig,
                     # National Blended Model Supplementary precipitation
                     if(len(Wgrib2Cmd) == 3):
                         exitcode = pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-match',Wgrib2Cmd[0], '-match',Wgrib2Cmd[1], '-not',Wgrib2Cmd[2],'-netcdf',NetCdfFileOut])
+                    # National Digitial Forecast Database 
+                    if(len(Wgrib2Cmd) == 1):
+                        # Extract table contents of the forecast hour data matching the forecast cycle start time
+                        #table = pywgrib2_s.inq(GribFileIn,Wgrib2Cmd[0],Matched=True)#pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-match',Wgrib2Cmd[0],'-vt',GribFileIn])
+                        #wgrib2_table = []
+                        # append the time date stamps from pwgrib2 inquiry
+                        #for i in range(table):
+                        #    wgrib2_table.append( pywgrib2_s.matched[i])
+                        # Only extract the hourly forecast time stamps for NDFD
+                        #wgrib2_table = np.array(wgrib2_table[0:48])
+
+                        exitcode = pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-match',Wgrib2Cmd[0],'-netcdf',NetCdfFileOut])
                     # Just specify the entire grib2 file to be converted
                     else:
                         exitcode = pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-netcdf',NetCdfFileOut])
                 else:
-                    print(pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-match',Wgrib2Cmd,'-netcdf',NetCdfFileOut]))
+                    exitcode = pywgrib2_s.wgrib2([GribFileIn,'-rewind_init',GribFileIn,'-match',Wgrib2Cmd,'-netcdf',NetCdfFileOut])
         except:
             ConfigOptions.errMsg = "Unable to convert: " + GribFileIn + " to " + \
                                    NetCdfFileOut
@@ -817,19 +827,18 @@ def unzip_file(GzFileIn,FileOut,ConfigOptions,MpiConfig):
     if MpiConfig.rank == 0:
         # Unzip the file in place.
         try:
-            ConfigOptions.statusMsg = "Unzipping file: {}".format(GzFileIn)
+            ConfigOptions.statusMsg = f"Unzipping file: {GzFileIn}"
             err_handler.log_msg(ConfigOptions, MpiConfig)
             with gzip.open(GzFileIn, 'rb') as fTmpGz:
                 with open(FileOut, 'wb') as fTmp:
                     shutil.copyfileobj(fTmpGz, fTmp)
         except:
-            ConfigOptions.errMsg = "Unable to unzip: " + GzFileIn
+            ConfigOptions.errMsg = f"Unable to unzip: {GzFileIn} to {FileOut}"
             err_handler.log_critical(ConfigOptions, MpiConfig)
             return
 
         if not os.path.isfile(FileOut):
-            ConfigOptions.errMsg = "Unable to locate expected unzipped file: " + \
-                                   FileOut
+            ConfigOptions.errMsg = f"Unable to locate expected unzipped file: {FileOut}"
             err_handler.log_critical(ConfigOptions, MpiConfig)
             return
     else:

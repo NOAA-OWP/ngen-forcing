@@ -27,7 +27,6 @@ try:
 except ImportError:
     import ESMF
 
-
 from .core import config
 from .core import err_handler
 from .core import forcingInputMod
@@ -36,7 +35,7 @@ from .core import ioMod
 from .core import parallel
 from .core import suppPrecipMod
 
-# If less than 0, then ESMF.__version__ is greater than 8.6.0
+# If less than 0, then ESMF.__version__ is greater than 8.7.0
 if ESMF.version_compare('8.7.0', ESMF.__version__) < 0:
     manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
 
@@ -126,7 +125,6 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         # output files as a global attribute.
         if self.cfg_bmi['NWM_CONFIG'] is not None:
             self._job_meta.nwmConfig = self.cfg_bmi['NWM_CONFIG']
-        print("Initializing MPI communicator")
         # Initialize our MPI communication
         self._mpi_meta = parallel.MpiConfig()
         try:
@@ -134,7 +132,6 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             self._mpi_meta.initialize_comm(self._job_meta, comm=comm)
         except:
             err_handler.err_out_screen(self._job_meta.errMsg)
-        print("Finished initializing MPI communicator")
         # Initialize our WRF-Hydro geospatial object, which contains
         # information about the modeling domain, local processor
         # grid boundaries, and ESMF grid objects/fields to be used
@@ -167,113 +164,234 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             #---------------------------------------------
             # Output variable names (CSDMS standard names)
             #---------------------------------------------
-            self._output_var_names = ['U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT']
+            
+            # Flag here to indicate whether or not the NWM operational configuration
+            # will support a BMI field for liquid fraction of precipitation
+            if(self._job_meta.include_lqfrac == 1):
+                self._output_var_names = ['U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT','LQFRAC_ELEMENT']
 
-            #------------------------------------------------------
-            # Create a Python dictionary that maps CSDMS Standard
-            # Names to the model's internal variable names.
-            # This is going to get long,
-            #     since the input variable names could come from any forcing...
-            #------------------------------------------------------
-            self._var_name_units_map = {'U2D_ELEMENT':['10-m U-component of wind','m/s'],
-                                        'V2D_ELEMENT':['10-m V-component of wind','m/s'],
-                                        'T2D_ELEMENT':['2-m Air Temperature','K'],
-                                        'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
-                                        'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
-                                        'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
-                                        'PSFC_ELEMENT':['Surface Pressure','Pa'],
-                                        'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s']}
+                #------------------------------------------------------
+                # Create a Python dictionary that maps CSDMS Standard
+                # Names to the model's internal variable names.
+                # This is going to get long,
+                #     since the input variable names could come from any forcing...
+                #------------------------------------------------------
+                self._var_name_units_map = {'U2D_ELEMENT':['10-m U-component of wind','m/s'],
+                                            'V2D_ELEMENT':['10-m V-component of wind','m/s'],
+                                            'T2D_ELEMENT':['2-m Air Temperature','K'],
+                                            'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_ELEMENT':['Surface Pressure','Pa'],
+                                            'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s'],
+                                            'LQFRAC_ELEMENT':['Liquid Fraction of Precipitation','%']}
 
-            self.grid_1: Grid = Grid(1, 2, GridType.uniform_rectilinear) #Grid 1 is a 2 dimensional grid
-            self.grid_1._grid_y = self._WrfHydroGeoMeta.latitude_grid.flatten()
-            self.grid_1._grid_x = self._WrfHydroGeoMeta.longitude_grid.flatten()
-            self.grid_1._shape = self._WrfHydroGeoMeta.latitude_grid.shape
-            self.grid_1._size = len(self._WrfHydroGeoMeta.latitude_grid.flatten())
-            self.grid_1._spacing = (self._WrfHydroGeoMeta.dx_meters,self._WrfHydroGeoMeta.dy_meters)
-            self.grid_1._units = 'm'
-            self.grid_1._origin = None
+                self.grid_1: Grid = Grid(1, 2, GridType.uniform_rectilinear) #Grid 1 is a 2 dimensional grid
+                self.grid_1._grid_y = self._WrfHydroGeoMeta.latitude_grid.flatten()
+                self.grid_1._grid_x = self._WrfHydroGeoMeta.longitude_grid.flatten()
+                self.grid_1._shape = self._WrfHydroGeoMeta.latitude_grid.shape
+                self.grid_1._size = len(self._WrfHydroGeoMeta.latitude_grid.flatten())
+                self.grid_1._spacing = (self._WrfHydroGeoMeta.dx_meters,self._WrfHydroGeoMeta.dy_meters)
+                self.grid_1._units = 'm'
+                self.grid_1._origin = None
 
-            self._grids = [self.grid_1]
+                self._grids = [self.grid_1]
 
-            self._grid_map = {'U2D_ELEMENT': self.grid_1, 'V2D_ELEMENT': self.grid_1, 'LWDOWN_ELEMENT': self.grid_1, 'SWDOWN_ELEMENT': self.grid_1, 'T2D_ELEMENT': self.grid_1, 'Q2D_ELEMENT': self.grid_1, 'PSFC_ELEMENT': self.grid_1, 'RAINRATE_ELEMENT': self.grid_1}
+                self._grid_map = {'U2D_ELEMENT': self.grid_1, 'V2D_ELEMENT': self.grid_1, 'LWDOWN_ELEMENT': self.grid_1, 'SWDOWN_ELEMENT': self.grid_1, 'T2D_ELEMENT': self.grid_1, 'Q2D_ELEMENT': self.grid_1, 'PSFC_ELEMENT': self.grid_1, 'RAINRATE_ELEMENT': self.grid_1, 'LQFRAC_ELEMENT': self.grid_1}
+
+            else:
+                self._output_var_names = ['U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT']
+
+                #------------------------------------------------------
+                # Create a Python dictionary that maps CSDMS Standard
+                # Names to the model's internal variable names.
+                # This is going to get long,
+                #     since the input variable names could come from any forcing...
+                #------------------------------------------------------
+                self._var_name_units_map = {'U2D_ELEMENT':['10-m U-component of wind','m/s'],
+                                            'V2D_ELEMENT':['10-m V-component of wind','m/s'],
+                                            'T2D_ELEMENT':['2-m Air Temperature','K'],
+                                            'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_ELEMENT':['Surface Pressure','Pa'],
+                                            'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s']}
+
+                self.grid_1: Grid = Grid(1, 2, GridType.uniform_rectilinear) #Grid 1 is a 2 dimensional grid
+                self.grid_1._grid_y = self._WrfHydroGeoMeta.latitude_grid.flatten()
+                self.grid_1._grid_x = self._WrfHydroGeoMeta.longitude_grid.flatten()
+                self.grid_1._shape = self._WrfHydroGeoMeta.latitude_grid.shape
+                self.grid_1._size = len(self._WrfHydroGeoMeta.latitude_grid.flatten())
+                self.grid_1._spacing = (self._WrfHydroGeoMeta.dx_meters,self._WrfHydroGeoMeta.dy_meters)
+                self.grid_1._units = 'm'
+                self.grid_1._origin = None
+
+                self._grids = [self.grid_1]
+
+                self._grid_map = {'U2D_ELEMENT': self.grid_1, 'V2D_ELEMENT': self.grid_1, 'LWDOWN_ELEMENT': self.grid_1, 'SWDOWN_ELEMENT': self.grid_1, 'T2D_ELEMENT': self.grid_1, 'Q2D_ELEMENT': self.grid_1, 'PSFC_ELEMENT': self.grid_1, 'RAINRATE_ELEMENT': self.grid_1}
 
         elif(self._grid_type == "unstructured"):
-            #---------------------------------------------
-            # Output variable names (CSDMS standard names)
-            #---------------------------------------------
-            self._output_var_names = ['U2D_NODE', 'V2D_NODE', 'LWDOWN_NODE','SWDOWN_NODE','T2D_NODE','Q2D_NODE','PSFC_NODE','RAINRATE_NODE','U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT']
+            # Flag here to indicate whether or not the NWM operational configuration
+            # will support a BMI field for liquid fraction of precipitation
+            if(self._job_meta.include_lqfrac == 1):
+                #---------------------------------------------
+                # Output variable names (CSDMS standard names)
+                #---------------------------------------------
+                self._output_var_names = ['U2D_NODE', 'V2D_NODE', 'LWDOWN_NODE','SWDOWN_NODE','T2D_NODE','Q2D_NODE','PSFC_NODE','RAINRATE_NODE','LQFRAC_NODE','U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT','LQFRAC_ELEMENT']
 
-            #------------------------------------------------------
-            # Create a Python dictionary that maps CSDMS Standard
-            # Names to the model's internal variable names.
-            # This is going to get long,
-            #     since the input variable names could come from any forcing...
-            #------------------------------------------------------
-            self._var_name_units_map = {'U2D_NODE':['10-m U-component of wind','m/s'],
-                                        'V2D_NODE':['10-m V-component of wind','m/s'],
-                                        'T2D_NODE':['2-m Air Temperature','K'],
-                                        'Q2D_NODE':['2-m Specific Humidity','kg/kg'],
-                                        'LWDOWN_NODE':['Surface downward long-wave radiation flux','W/m^2'],
-                                        'SWDOWN_NODE':['Surface downward short-wave radiation flux','W/m^2'],
-                                        'PSFC_NODE':['Surface Pressure','Pa'],
-                                        'RAINRATE_NODE':['Surface Precipitation Rate','mm/s'],
-                                        'U2D_ELEMENT':['10-m U-component of wind','m/s'],
-                                        'V2D_ELEMENT':['10-m V-component of wind','m/s'],
-                                        'T2D_ELEMENT':['2-m Air Temperature','K'],
-                                        'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
-                                        'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
-                                        'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
-                                        'PSFC_ELEMENT':['Surface Pressure','Pa'],
-                                        'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s']}
+                #------------------------------------------------------
+                # Create a Python dictionary that maps CSDMS Standard
+                # Names to the model's internal variable names.
+                # This is going to get long,
+                #     since the input variable names could come from any forcing...
+                #------------------------------------------------------
+                self._var_name_units_map = {'U2D_NODE':['10-m U-component of wind','m/s'],
+                                            'V2D_NODE':['10-m V-component of wind','m/s'],
+                                            'T2D_NODE':['2-m Air Temperature','K'],
+                                            'Q2D_NODE':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_NODE':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_NODE':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_NODE':['Surface Pressure','Pa'],
+                                            'RAINRATE_NODE':['Surface Precipitation Rate','mm/s'],
+                                            'LQFRAC_NODE':['Liquid Fraction of Precipitation','%'],
+                                            'U2D_ELEMENT':['10-m U-component of wind','m/s'],
+                                            'V2D_ELEMENT':['10-m V-component of wind','m/s'],
+                                            'T2D_ELEMENT':['2-m Air Temperature','K'],
+                                            'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_ELEMENT':['Surface Pressure','Pa'],
+                                            'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s'],
+                                            'LQFRAC_ELEMENT':['Liquid Fraction of Precipitation','%']}
 
-            self.grid_2: Grid = Grid(2, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
-            self.grid_3: Grid = Grid(3, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
+                self.grid_2: Grid = Grid(2, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
+                self.grid_3: Grid = Grid(3, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
 
-            self.grid_2._grid_y = self._WrfHydroGeoMeta.latitude_grid_elem
-            self.grid_2._grid_x = self._WrfHydroGeoMeta.longitude_grid_elem
+                self.grid_2._grid_y = self._WrfHydroGeoMeta.latitude_grid_elem
+                self.grid_2._grid_x = self._WrfHydroGeoMeta.longitude_grid_elem
 
-            self.grid_3._grid_y = self._WrfHydroGeoMeta.latitude_grid
-            self.grid_3._grid_x = self._WrfHydroGeoMeta.longitude_grid
+                self.grid_3._grid_y = self._WrfHydroGeoMeta.latitude_grid
+                self.grid_3._grid_x = self._WrfHydroGeoMeta.longitude_grid
 
-            self.grid_2._size = len(self._WrfHydroGeoMeta.latitude_grid_elem)
-            self.grid_3._size = len(self._WrfHydroGeoMeta.latitude_grid)
+                self.grid_2._size = len(self._WrfHydroGeoMeta.latitude_grid_elem)
+                self.grid_3._size = len(self._WrfHydroGeoMeta.latitude_grid)
 
-            self._grids = [self.grid_2, self.grid_3]
+                self._grids = [self.grid_2, self.grid_3]
 
-            self._grid_map = {'U2D_ELEMENT': self.grid_2, 'V2D_ELEMENT': self.grid_2, 'LWDOWN_ELEMENT': self.grid_2, 'SWDOWN_ELEMENT': self.grid_2, 'T2D_ELEMENT': self.grid_2, 'Q2D_ELEMENT': self.grid_2, 'PSFC_ELEMENT': self.grid_2, 'RAINRATE_ELEMENT': self.grid_2, 'U2D_NODE': self.grid_3, 'V2D_NODE': self.grid_3, 'LWDOWN_NODE': self.grid_3, 'SWDOWN_NODE': self.grid_3, 'T2D_NODE': self.grid_3, 'Q2D_NODE': self.grid_3, 'PSFC_NODE': self.grid_3, 'RAINRATE_NODE': self.grid_3}
+                self._grid_map = {'U2D_ELEMENT': self.grid_2, 'V2D_ELEMENT': self.grid_2, 'LWDOWN_ELEMENT': self.grid_2, 'SWDOWN_ELEMENT': self.grid_2, 'T2D_ELEMENT': self.grid_2, 'Q2D_ELEMENT': self.grid_2, 'PSFC_ELEMENT': self.grid_2, 'RAINRATE_ELEMENT': self.grid_2, 'LQFRAC_ELEMENT': self.grid_2, 'U2D_NODE': self.grid_3, 'V2D_NODE': self.grid_3, 'LWDOWN_NODE': self.grid_3, 'SWDOWN_NODE': self.grid_3, 'T2D_NODE': self.grid_3, 'Q2D_NODE': self.grid_3, 'PSFC_NODE': self.grid_3, 'RAINRATE_NODE': self.grid_3, 'LQFRAC_NODE': self.grid_3}          
+            else:
+                #---------------------------------------------
+                # Output variable names (CSDMS standard names)
+                #---------------------------------------------
+                self._output_var_names = ['U2D_NODE', 'V2D_NODE', 'LWDOWN_NODE','SWDOWN_NODE','T2D_NODE','Q2D_NODE','PSFC_NODE','RAINRATE_NODE','U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT']
+
+                #------------------------------------------------------
+                # Create a Python dictionary that maps CSDMS Standard
+                # Names to the model's internal variable names.
+                # This is going to get long,
+                #     since the input variable names could come from any forcing...
+                #------------------------------------------------------
+                self._var_name_units_map = {'U2D_NODE':['10-m U-component of wind','m/s'],
+                                            'V2D_NODE':['10-m V-component of wind','m/s'],
+                                            'T2D_NODE':['2-m Air Temperature','K'],
+                                            'Q2D_NODE':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_NODE':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_NODE':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_NODE':['Surface Pressure','Pa'],
+                                            'RAINRATE_NODE':['Surface Precipitation Rate','mm/s'],
+                                            'U2D_ELEMENT':['10-m U-component of wind','m/s'],
+                                            'V2D_ELEMENT':['10-m V-component of wind','m/s'],
+                                            'T2D_ELEMENT':['2-m Air Temperature','K'],
+                                            'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_ELEMENT':['Surface Pressure','Pa'],
+                                            'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s']}
+
+                self.grid_2: Grid = Grid(2, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
+                self.grid_3: Grid = Grid(3, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
+
+                self.grid_2._grid_y = self._WrfHydroGeoMeta.latitude_grid_elem
+                self.grid_2._grid_x = self._WrfHydroGeoMeta.longitude_grid_elem
+
+                self.grid_3._grid_y = self._WrfHydroGeoMeta.latitude_grid
+                self.grid_3._grid_x = self._WrfHydroGeoMeta.longitude_grid
+
+                self.grid_2._size = len(self._WrfHydroGeoMeta.latitude_grid_elem)
+                self.grid_3._size = len(self._WrfHydroGeoMeta.latitude_grid)
+
+                self._grids = [self.grid_2, self.grid_3]
+
+                self._grid_map = {'U2D_ELEMENT': self.grid_2, 'V2D_ELEMENT': self.grid_2, 'LWDOWN_ELEMENT': self.grid_2, 'SWDOWN_ELEMENT': self.grid_2, 'T2D_ELEMENT': self.grid_2, 'Q2D_ELEMENT': self.grid_2, 'PSFC_ELEMENT': self.grid_2, 'RAINRATE_ELEMENT': self.grid_2, 'U2D_NODE': self.grid_3, 'V2D_NODE': self.grid_3, 'LWDOWN_NODE': self.grid_3, 'SWDOWN_NODE': self.grid_3, 'T2D_NODE': self.grid_3, 'Q2D_NODE': self.grid_3, 'PSFC_NODE': self.grid_3, 'RAINRATE_NODE': self.grid_3}
 
         elif(self._grid_type == "hydrofabric"):
-            #---------------------------------------------
-            # Output variable names (CSDMS standard names)
-            #---------------------------------------------
-            self._output_var_names = ['CAT-ID','U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT']
+            # Flag here to indicate whether or not the NWM operational configuration
+            # will support a BMI field for liquid fraction of precipitation
+            if(self._job_meta.include_lqfrac == 1):
+                #---------------------------------------------
+                # Output variable names (CSDMS standard names)
+                #---------------------------------------------
+                self._output_var_names = ['CAT-ID','U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT','LQFRAC_ELEMENT']
 
-            #------------------------------------------------------
-            # Create a Python dictionary that maps CSDMS Standard
-            # Names to the model's internal variable names.
-            # This is going to get long,
-            #     since the input variable names could come from any forcing...
-            #------------------------------------------------------
-            self._var_name_units_map = {'CAT-ID':['Catchment ID',''],
-                                        'U2D_ELEMENT':['10-m U-component of wind','m/s'],
-                                        'V2D_ELEMENT':['10-m V-component of wind','m/s'],
-                                        'T2D_ELEMENT':['2-m Air Temperature','K'],
-                                        'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
-                                        'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
-                                        'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
-                                        'PSFC_ELEMENT':['Surface Pressure','Pa'],
-                                        'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s']}
+                #------------------------------------------------------
+                # Create a Python dictionary that maps CSDMS Standard
+                # Names to the model's internal variable names.
+                # This is going to get long,
+                #     since the input variable names could come from any forcing...
+                #------------------------------------------------------
+                self._var_name_units_map = {'CAT-ID':['Catchment ID',''],
+                                            'U2D_ELEMENT':['10-m U-component of wind','m/s'],
+                                            'V2D_ELEMENT':['10-m V-component of wind','m/s'],
+                                            'T2D_ELEMENT':['2-m Air Temperature','K'],
+                                            'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_ELEMENT':['Surface Pressure','Pa'],
+                                            'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s'],
+                                            'LQFRAC_ELEMENT':['Liquid Fraction of Precipitation','%']}
 
-            self.grid_4: Grid = Grid(4, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
+                self.grid_4: Grid = Grid(4, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
 
-            self.grid_4._grid_y = self._WrfHydroGeoMeta.latitude_grid
-            self.grid_4._grid_x = self._WrfHydroGeoMeta.longitude_grid
+                self.grid_4._grid_y = self._WrfHydroGeoMeta.latitude_grid
+                self.grid_4._grid_x = self._WrfHydroGeoMeta.longitude_grid
 
-            self.grid_4._size = len(self._WrfHydroGeoMeta.latitude_grid)
+                self.grid_4._size = len(self._WrfHydroGeoMeta.latitude_grid)
 
-            self._grids = [self.grid_4]
+                self._grids = [self.grid_4]
 
-            self._grid_map = {'CAT-ID': self.grid_4, 'U2D_ELEMENT': self.grid_4, 'V2D_ELEMENT': self.grid_4, 'LWDOWN_ELEMENT': self.grid_4, 'SWDOWN_ELEMENT': self.grid_4, 'T2D_ELEMENT': self.grid_4, 'Q2D_ELEMENT': self.grid_4, 'PSFC_ELEMENT': self.grid_4, 'RAINRATE_ELEMENT': self.grid_4}
+                self._grid_map = {'CAT-ID': self.grid_4, 'U2D_ELEMENT': self.grid_4, 'V2D_ELEMENT': self.grid_4, 'LWDOWN_ELEMENT': self.grid_4, 'SWDOWN_ELEMENT': self.grid_4, 'T2D_ELEMENT': self.grid_4, 'Q2D_ELEMENT': self.grid_4, 'PSFC_ELEMENT': self.grid_4, 'RAINRATE_ELEMENT': self.grid_4, 'LQFRAC_ELEMENT': self.grid_4}
+            else:
+                #---------------------------------------------
+                # Output variable names (CSDMS standard names)
+                #---------------------------------------------
+                self._output_var_names = ['CAT-ID','U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT']
+
+                #------------------------------------------------------
+                # Create a Python dictionary that maps CSDMS Standard
+                # Names to the model's internal variable names.
+                # This is going to get long,
+                #     since the input variable names could come from any forcing...
+                #------------------------------------------------------
+                self._var_name_units_map = {'CAT-ID':['Catchment ID',''],
+                                            'U2D_ELEMENT':['10-m U-component of wind','m/s'],
+                                            'V2D_ELEMENT':['10-m V-component of wind','m/s'],
+                                            'T2D_ELEMENT':['2-m Air Temperature','K'],
+                                            'Q2D_ELEMENT':['2-m Specific Humidity','kg/kg'],
+                                            'LWDOWN_ELEMENT':['Surface downward long-wave radiation flux','W/m^2'],
+                                            'SWDOWN_ELEMENT':['Surface downward short-wave radiation flux','W/m^2'],
+                                            'PSFC_ELEMENT':['Surface Pressure','Pa'],
+                                            'RAINRATE_ELEMENT':['Surface Precipitation Rate','mm/s']}
+
+                self.grid_4: Grid = Grid(4, 2, GridType.unstructured) #Grid 1 is a 2 dimensional grid
+
+                self.grid_4._grid_y = self._WrfHydroGeoMeta.latitude_grid
+                self.grid_4._grid_x = self._WrfHydroGeoMeta.longitude_grid
+
+                self.grid_4._size = len(self._WrfHydroGeoMeta.latitude_grid)
+
+                self._grids = [self.grid_4]
+
+                self._grid_map = {'CAT-ID': self.grid_4, 'U2D_ELEMENT': self.grid_4, 'V2D_ELEMENT': self.grid_4, 'LWDOWN_ELEMENT': self.grid_4, 'SWDOWN_ELEMENT': self.grid_4, 'T2D_ELEMENT': self.grid_4, 'Q2D_ELEMENT': self.grid_4, 'PSFC_ELEMENT': self.grid_4, 'RAINRATE_ELEMENT': self.grid_4}
 
 
         # ----- Create some lookup tabels from the long variable names --------#

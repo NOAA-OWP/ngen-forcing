@@ -1,15 +1,14 @@
 import math
-
-try:
-    import esmpy as ESMF
-except ImportError:
-    import ESMF
-
 import numpy as np
 from netCDF4 import Dataset
 from scipy import spatial
 from os import listdir
 from os.path import join
+
+try:
+    import esmpy as ESMF
+except ImportError:
+    import ESMF
 
 class GeoMetaWrfHydro:
     """
@@ -324,37 +323,21 @@ class GeoMetaWrfHydro:
             varSubTmp = None
             varTmp = None
 
-            if(ConfigOptions.hgt_var != None):
-                # Read in a scatter the WRF-Hydro elevation, which is used for downscaling
-                # purposes.
-                if MpiConfig.rank == 0:
-                    varTmp = idTmp.variables[ConfigOptions.hgt_var][0, :, :]
-                else:
-                    varTmp = None
-                #MpiConfig.comm.barrier()
-
-                varSubTmp = MpiConfig.scatter_array(self, varTmp, ConfigOptions)
-                #MpiConfig.comm.barrier()
-                self.height = varSubTmp
-                varSubTmp = None
-                varTmp = None
+        if(ConfigOptions.hgt_var != None):
+            # Read in a scatter the WRF-Hydro elevation, which is used for downscaling
+            # purposes.
+            if MpiConfig.rank == 0:
+                varTmp = idTmp.variables[ConfigOptions.hgt_var][0, :, :]
             else:
-                print('Warning, no height data specified for grid, assign height fields as 10 meters but would advise not to rely on downscaling and bias calibration methods')
-                # Read in a scatter the WRF-Hydro elevation, which is used for downscaling
-                # purposes.
-                if MpiConfig.rank == 0:
-                    varTmp = np.empty(idTmp.variables[ConfigOptions.lat_var].shape[0],idTmp.variables[ConfigOptions.lon_var].shape[0],dtype=float)
-                    varTmp[:] = 10.0
-                else:
-                    varTmp = None
-                #MpiConfig.comm.barrier()
-
-                varSubTmp = MpiConfig.scatter_array(self, varTmp, ConfigOptions)
-                #MpiConfig.comm.barrier()
-                self.height = varSubTmp
-                varSubTmp = None
                 varTmp = None
+            #MpiConfig.comm.barrier()
 
+            varSubTmp = MpiConfig.scatter_array(self, varTmp, ConfigOptions)
+            #MpiConfig.comm.barrier()
+            self.height = varSubTmp
+            varSubTmp = None
+            varTmp = None
+        
         if(ConfigOptions.cosalpha_var != None and ConfigOptions.sinalpha_var != None):
             # Calculate the slope from the domain using elevation on the WRF-Hydro domain. This will
             # be used for downscaling purposes.
@@ -367,7 +350,30 @@ class GeoMetaWrfHydro:
                 slopeTmp = None
                 slp_azi_tmp = None
             #MpiConfig.comm.barrier()
-        else:
+
+            slopeSubTmp = MpiConfig.scatter_array(self,slopeTmp,ConfigOptions)
+            self.slope = slopeSubTmp[:,:]
+            slopeSubTmp = None
+
+            slp_azi_sub = MpiConfig.scatter_array(self,slp_azi_tmp,ConfigOptions)
+            self.slp_azi = slp_azi_sub[:,:]
+            slp_azi_tmp = None
+
+        elif(ConfigOptions.slope != None and ConfigOptions.slp_azi != None):
+
+            slopeTmp = idTmp.variables[ConfigOptions.slope_var][:].data
+
+            slp_azi_tmp = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data
+
+            slopeSubTmp = MpiConfig.scatter_array(self,slopeTmp,ConfigOptions)
+            self.slope = slopeSubTmp[:,:]
+            slopeSubTmp = None
+
+            slp_azi_sub = MpiConfig.scatter_array(self,slp_azi_tmp,ConfigOptions)
+            self.slp_azi = slp_azi_sub[:,:]
+            slp_azi_tmp = None
+
+        elif(ConfigOptions.hgt_var != None):
             # Calculate the slope from the domain using elevation of the gridded model and other approximations
             if MpiConfig.rank == 0:
                 try:
@@ -379,16 +385,13 @@ class GeoMetaWrfHydro:
                 slp_azi_tmp = None
             #MpiConfig.comm.barrier()
 
+            slopeSubTmp = MpiConfig.scatter_array(self,slopeTmp,ConfigOptions)
+            self.slope = slopeSubTmp[:,:]
+            slopeSubTmp = None
 
-        slopeSubTmp = MpiConfig.scatter_array(self,slopeTmp,ConfigOptions)
-        self.slope = slopeSubTmp[:,:]
-        slopeSubTmp = None
-        #MpiConfig.comm.barrier()
-
-        slp_azi_sub = MpiConfig.scatter_array(self,slp_azi_tmp,ConfigOptions)
-        self.slp_azi = slp_azi_sub[:,:]
-        slp_azi_tmp = None
-        #MpiConfig.comm.barrier()
+            slp_azi_sub = MpiConfig.scatter_array(self,slp_azi_tmp,ConfigOptions)
+            self.slp_azi = slp_azi_sub[:,:]
+            slp_azi_tmp = None
 
         if MpiConfig.rank == 0:
             # Close the geogrid file
@@ -654,8 +657,9 @@ class GeoMetaWrfHydro:
         try:
             heights = idTmp.variables[ConfigOptions.hgt_var][:]
         except:
-            heights = np.empty((idTmp.variables[ConfigOptions.lat_var].shape[0],idTmp.variables[ConfigOptions.lon_var].shape[0]),dtype=float)
-            heights[:] = 10.0
+            ConfigOptions.errMsg = "Unable to extract heights of grid cells " + \
+                                   "in " + ConfigOptions.geogrid
+            raise Exception
 
         idTmp.close()
 
@@ -800,34 +804,52 @@ class GeoMetaWrfHydro:
         pet_elementcoords = None
         distance = None
 
-        # Read in a scatter the mesh node elevation, which is used for downscaling
-        self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_node_inds]
-       
-        # Read in a scatter the mesh element elevation, which is used for downscaling
-        # purposes.
-        self.height_elem = idTmp.variables[ConfigOptions.hgt_elem_var][:].data[pet_element_inds]
+        # Not accepting cosalpha and sinalpha at this time for unstructured meshes, only
+        # accepting the pre-calculated slope and slope azmiuth variables if available, 
+        # otherwise calculate slope from height estimates
+        #if(ConfigOptions.cosalpha_var != None and ConfigOptions.sinalpha_var != None):
+            #self.cosa_grid = idTmp.variables[ConfigOptions.cosalpha_var][:].data[pet_node_inds]
+            #self.sina_grid = idTmp.variables[ConfigOptions.sinalpha_var][:].data[pet_node_inds]
+            #slopeTmp, slp_azi_tmp = self.calc_slope(idTmp,ConfigOptions)
+            #self.slope = slope_node_Tmp[pet_node_inds]
+            #self.slp_azi = slp_azi_node_tmp[pet_node_inds]
+        if(ConfigOptions.slope_var != None and ConfigOptions.slp_azi_var != None):
+            self.slope = idTmp.variables[ConfigOptions.slope_var][:].data[pet_node_inds]
+            self.slp_azi = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data[pet_node_inds]
+            self.slope_elem = idTmp.variables[ConfigOptions.slope_var_elem][:].data[pet_element_inds]
+            self.slp_azi_elem = idTmp.variables[ConfigOptions.slope_azimuth_var_elem][:].data[pet_element_inds]
+            
+            # Read in a scatter the mesh node elevation, which is used for downscaling purposes
+            self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_node_inds]
+            # Read in a scatter the mesh element elevation, which is used for downscaling purposes.
+            self.height_elem = idTmp.variables[ConfigOptions.hgt_elem_var][:].data[pet_element_inds]
 
-        idTmp.close()
+        elif(ConfigOptions.hgt_var != None):
+
+            # Read in a scatter the mesh node elevation, which is used for downscaling purposes
+            self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_node_inds]
        
-        # Calculate the slope from the domain using elevation on the WRF-Hydro domain. This will
-        # be used for downscaling purposes.
-        try:
-            slope_node_Tmp, slp_azi_node_tmp, slope_elem_Tmp, slp_azi_elem_tmp = self.calc_slope_unstructured(idTmp,ConfigOptions)
-        except Exception:
-            raise Exception
+            # Read in a scatter the mesh element elevation, which is used for downscaling purposes.
+            self.height_elem = idTmp.variables[ConfigOptions.hgt_elem_var][:].data[pet_element_inds]
+
+            # Calculate the slope from the domain using elevation on the WRF-Hydro domain. This will
+            # be used for downscaling purposes.
+            try:
+                slope_node_Tmp, slp_azi_node_tmp, slope_elem_Tmp, slp_azi_elem_tmp = self.calc_slope_unstructured(idTmp,ConfigOptions)
+            except Exception:
+                raise Exception
      
-        self.slope = slope_node_Tmp[pet_node_inds]
-        slope_node_Tmp = None
+            self.slope = slope_node_Tmp[pet_node_inds]
+            slope_node_Tmp = None
 
-        self.slp_azi = slp_azi_node_tmp[pet_node_inds]
-        slp_azi__node_tmp = None
+            self.slp_azi = slp_azi_node_tmp[pet_node_inds]
+            slp_azi__node_tmp = None
         
-        self.slope_elem = slope_elem_Tmp[pet_element_inds]
-        slope_elem_Tmp = None
-        #MpiConfig.comm.barrier()
+            self.slope_elem = slope_elem_Tmp[pet_element_inds]
+            slope_elem_Tmp = None
 
-        self.slp_azi_elem = slp_azi_elem_tmp[pet_element_inds]
-        slp_azi_elem_tmp = None
+            self.slp_azi_elem = slp_azi_elem_tmp[pet_element_inds]
+            slp_azi_elem_tmp = None
 
         # save indices where mesh was partition for future scatter functions
         self.mesh_inds = pet_node_inds
