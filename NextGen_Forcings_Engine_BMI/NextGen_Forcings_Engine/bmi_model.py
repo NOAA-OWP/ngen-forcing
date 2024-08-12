@@ -515,8 +515,12 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         self._values['time_step_size'] = self.cfg_bmi['time_step_seconds']
 
         # ------------- Initialize a model ------------------------------#
-        #self._model = ngen_model(self._values.keys())
         self._model = NWMv3_Forcing_Engine_model()
+
+        # Now set the catchment ids to the BMI output field
+        # so they're initialized for the model engine to reference
+        if(self._grid_type == "hydrofabric"):
+            self._values['CAT-ID'] = self._WrfHydroGeoMeta.element_ids
 
     #------------------------------------------------------------ 
     def update(self):
