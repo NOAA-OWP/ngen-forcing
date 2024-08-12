@@ -395,7 +395,6 @@ class NWMv3_Forcing_Engine_model():
                 model[variable+'_ELEMENT'] = OutputObj.output_local_elem[count,:].flatten()
                 model[variable+'_NODE'] = OutputObj.output_local[count,:].flatten()
         elif(ConfigOptions.grid_type == "hydrofabric"):
-            model['CAT-ID'] = wrfHydroGeoMeta.element_ids
             for count, variable in enumerate(variables):
                 model[variable+'_ELEMENT'] = OutputObj.output_local[count,:].flatten()
 
