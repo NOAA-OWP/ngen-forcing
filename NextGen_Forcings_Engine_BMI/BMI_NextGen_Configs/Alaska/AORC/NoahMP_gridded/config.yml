@@ -9,7 +9,6 @@ InputMandatory: [1]
 OutputFrequency: 60
 SubOutputHour: 0
 SubOutFreq: 0
-OutDir: "./Unit_Test_Output/AORC"
 ScratchDir: "./Unit_Test_Output/AORC"
 compressOutput: 0
 floatOutput: 0
