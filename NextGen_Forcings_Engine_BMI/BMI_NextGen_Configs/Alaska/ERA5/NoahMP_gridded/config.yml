@@ -7,17 +7,14 @@ InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/E
 InputForcingTypes: ["NETCDF"]
 InputMandatory: [1]
 OutputFrequency: 60
-OutDir: "./Unit_Test_Output/ERA5"
+OutputFrequency: 60
+SubOutputHour: 0
 ScratchDir: "./Unit_Test_Output/ERA5"
 compressOutput: 0
 floatOutput: 0
-RetroFlag: 0
 AnAFlag: 0
-BDateProc: -9999
-EDateProc: -9999
-LookBack : 262200
+LookBack : -9999
 RefcstBDateProc: "202007010000"
-RefcstEDateProc: "202008010000"
 ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [14400]
