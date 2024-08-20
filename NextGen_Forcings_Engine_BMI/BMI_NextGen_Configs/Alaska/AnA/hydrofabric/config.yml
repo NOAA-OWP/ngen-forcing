@@ -25,6 +25,7 @@ GRID_TYPE: "hydrofabric"
 NodeCoords: 'nodeCoords'
 ElemCoords: 'centerCoords'
 ElemConn: 'elementConn'
+ElemID: 'element_id'
 NumElemConn: 'numElementConn'
 HGTVAR: 'Element_Elevation'
 SLOPE: 'Element_Slope'
