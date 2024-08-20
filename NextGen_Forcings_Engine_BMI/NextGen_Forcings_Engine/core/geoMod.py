@@ -299,7 +299,10 @@ class GeoMetaWrfHydro:
         if(ConfigOptions.cosalpha_var != None and ConfigOptions.sinalpha_var != None):
             # Scatter the COSALPHA,SINALPHA grids to the processors.
             if MpiConfig.rank == 0:
-                varTmp = idTmp.variables[ConfigOptions.cosalpha_var][0,:,:]
+                if(idTmp.variables[ConfigOptions.cosalpha_var].ndim == 3):
+                    varTmp = idTmp.variables[ConfigOptions.cosalpha_var][0,:,:]
+                else:
+                    varTmp = idTmp.variables[ConfigOptions.cosalpha_var][:,:]                
             else:
                 varTmp = None
             #MpiConfig.comm.barrier()
@@ -312,7 +315,10 @@ class GeoMetaWrfHydro:
             varTmp = None
 
             if MpiConfig.rank == 0:
-                varTmp = idTmp.variables[ConfigOptions.sinalpha_var][0, :, :]
+                if(idTmp.variables[ConfigOptions.sinalpha_var].ndim == 3):
+                    varTmp = idTmp.variables[ConfigOptions.sinalpha_var][0,:,:]
+                else:
+                    varTmp = idTmp.variables[ConfigOptions.sinalpha_var][:,:]                
             else:
                 varTmp = None
             #MpiConfig.comm.barrier()
@@ -327,7 +333,10 @@ class GeoMetaWrfHydro:
             # Read in a scatter the WRF-Hydro elevation, which is used for downscaling
             # purposes.
             if MpiConfig.rank == 0:
-                varTmp = idTmp.variables[ConfigOptions.hgt_var][0, :, :]
+                if(idTmp.variables[ConfigOptions.hgt_var].ndim == 3):
+                    varTmp = idTmp.variables[ConfigOptions.hgt_var][0,:,:]
+                else:
+                    varTmp = idTmp.variables[ConfigOptions.hgt_var][:,:]                
             else:
                 varTmp = None
             #MpiConfig.comm.barrier()
@@ -361,17 +370,29 @@ class GeoMetaWrfHydro:
 
         elif(ConfigOptions.slope != None and ConfigOptions.slp_azi != None):
 
-            slopeTmp = idTmp.variables[ConfigOptions.slope_var][:].data
+            if MpiConfig.rank == 0:
+                if(idTmp.variables[ConfigOptions.slope_var].ndim == 3):
+                    varTmp = idTmp.variables[ConfigOptions.slope_var][0,:,:]
+                else:
+                    varTmp = idTmp.variables[ConfigOptions.slope_var][:,:]
+            else:
+                varTmp = None
+                
+            slopeSubTmp = MpiConfig.scatter_array(self,varTmp,ConfigOptions)
+            self.slope = slopeSubTmp
+            varTmp = None
 
-            slp_azi_tmp = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data
-
-            slopeSubTmp = MpiConfig.scatter_array(self,slopeTmp,ConfigOptions)
-            self.slope = slopeSubTmp[:,:]
-            slopeSubTmp = None
-
-            slp_azi_sub = MpiConfig.scatter_array(self,slp_azi_tmp,ConfigOptions)
+            if MpiConfig.rank == 0:
+                if(idTmp.variables[ConfigOptions.slope_azimuth_var].ndim == 3):
+                    varTmp = idTmp.variables[ConfigOptions.slope_azimuth_var][0,:,:]
+                else:
+                    varTmp = idTmp.variables[ConfigOptions.slope_azimuth_var][:,:]
+            else:
+                varTmp = None
+                
+            slp_azi_sub = MpiConfig.scatter_array(self,varTmp,ConfigOptions)
             self.slp_azi = slp_azi_sub[:,:]
-            slp_azi_tmp = None
+            varTmp = None
 
         elif(ConfigOptions.hgt_var != None):
             # Calculate the slope from the domain using elevation of the gridded model and other approximations
