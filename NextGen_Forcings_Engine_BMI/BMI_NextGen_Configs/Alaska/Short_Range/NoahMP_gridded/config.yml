@@ -7,17 +7,14 @@ InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/H
 InputForcingTypes: ["GRIB2"]
 InputMandatory: [1]
 OutputFrequency: 60
-OutDir: "/scratch2/NCEPDEV/ohd/Jason.Ducker/ngen-master/extern/test_bmi_NextGen_Forcings_Engine/Unit_Test_Output/Short_range"
+SubOutputHour: 0
+SubOutFreq: 0
 ScratchDir: "/scratch2/NCEPDEV/ohd/Jason.Ducker/ngen-master/extern/test_bmi_NextGen_Forcings_Engine/Unit_Test_Output/Short_range"
 compressOutput: 0
 floatOutput: 0
-RetroFlag: 0
 AnAFlag: 0
-BDateProc: -9999
-EDateProc: -9999
 LookBack : -9999
 RefcstBDateProc: "202309260600"
-RefcstEDateProc: "202309261200"
 ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [2880]
@@ -59,4 +56,4 @@ RqiMethod: 0
 RqiThreshold: 0.9
 cfsEnsNumber: ''
 custom_input_fcst_freq: []
-includeLQFraq: 0
+includeLQFrac: 0
