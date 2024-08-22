@@ -35,6 +35,10 @@ from .core import ioMod
 from .core import parallel
 from .core import suppPrecipMod
 
+from typing import TYPE_CHECKING, Any
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 # If less than 0, then ESMF.__version__ is greater than 8.7.0
 if ESMF.version_compare('8.7.0', ESMF.__version__) < 0:
     manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
@@ -622,7 +626,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         return len(self._output_var_names)
 
     #------------------------------------------------------------ 
-    def get_value(self, var_name: str, dest: np.ndarray) -> np.ndarray:
+    def get_value(self, var_name: str, dest: NDArray[Any]) -> NDArray[Any]:
         """Copy of values.
         Parameters
         ----------
@@ -659,7 +663,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         return dest
 
     #-------------------------------------------------------------------
-    def get_value_ptr(self, var_name: str) -> np.ndarray:
+    def get_value_ptr(self, var_name: str) -> NDArray[Any]:
         """Reference to values.
         Parameters
         ----------
@@ -785,33 +789,33 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         return np.int16(0)
 
     #-------------------------------------------------------------------
-    def get_start_time( self ):
+    def get_start_time(self) -> float:
     
         return self._start_time 
 
     #-------------------------------------------------------------------
-    def get_end_time( self ) -> float:
+    def get_end_time(self) -> float:
 
         return self._end_time 
 
 
     #-------------------------------------------------------------------
-    def get_current_time( self ):
+    def get_current_time(self) -> float:
 
         return self._values['current_model_time']
 
     #-------------------------------------------------------------------
-    def get_time_step( self ):
+    def get_time_step(self) -> float:
 
         return self._values['time_step_size']
 
     #-------------------------------------------------------------------
-    def get_time_units( self ):
+    def get_time_units(self) -> str:
 
         return self.get_attribute( 'time_units' ) 
        
     #-------------------------------------------------------------------
-    def set_value(self, var_name, values: np.ndarray):
+    def set_value(self, var_name: str, values: NDArray[Any]):
         """
         Set model values for the provided BMI variable.
 
@@ -819,7 +823,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         ----------
         var_name : str
             Name of model variable for which to set values.
-        values : np.ndarray
+        values : NDArray[Any]
               Array of new values.
         """
         if var_name == 'bmi_mpi_comm':
@@ -828,7 +832,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             self._values[var_name][:] = values
 
     #------------------------------------------------------------ 
-    def set_value_at_indices(self, var_name: str, indices: np.ndarray, src: np.ndarray):
+    def set_value_at_indices(self, var_name: str, indices: NDArray[np.int_], src: NDArray[Any]):
         """
         Set model values for the provided BMI variable at particular indices.
 
@@ -862,22 +866,22 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         return self.get_value_ptr(var_name).nbytes
 
     #------------------------------------------------------------ 
-    def get_value_at_indices(self, var_name: str, dest: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    def get_value_at_indices(self, var_name: str, dest: NDArray[Any], indices: NDArray[np.int_]) -> NDArray[Any]:
         """Get values at particular indices.
         Parameters
         ----------
         var_name : str
             Name of variable as CSDMS Standard Name.
-        dest : np.ndarray
+        dest : NDArray[Any]
             A numpy array into which to place the values.
-        indices : np.ndarray
+        indices : NDArray[np.int_]
             Array of indices.
         Returns
         -------
-        np.ndarray
+        NDArray[Any]
             Values at indices.
         """
-        original: np.ndarray = self.get_value_ptr(var_name)
+        original: NDArray[Any] = self.get_value_ptr(var_name)
         for i in range(indices.shape[0]):
             value_index = indices[i]
             dest[i] = original[value_index]
@@ -887,7 +891,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     #   Yet all functions in the BMI must be implemented 
     #   See https://bmi.readthedocs.io/en/latest/bmi.best_practices.html          
     #------------------------------------------------------------ 
-    def get_grid_edge_count(self, grid_id):
+    def get_grid_edge_count(self, grid_id: int) -> int:
         for grid in self._grids:
             if grid_id != 1:
                 mesh = nc.Dataset(self._job_meta.geogrid)
@@ -922,7 +926,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                 raise NotImplementedError("get_grid_edge_count")
 
     #------------------------------------------------------------ 
-    def get_grid_edge_nodes(self, grid_id):
+    def get_grid_edge_nodes(self, grid_id: int, edge_nodes: NDArray[np.int_]) -> NDArray[np.int_]:
         for grid in self._grids:
             if grid_id != 1:
                 mesh = nc.Dataset(self._job_meta.geogrid)
@@ -940,14 +944,14 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                         if(loop+1 == numelem_conn[i]):
                             mesh_edge_first_node.append(elem_conn[i,numelem_conn[i]-1])
                             mesh_edge_second_node.append(elem_conn[i,0])
-                edge_nodes = np.empty((len(mesh_edge_first_node),2),dtype=int)
-                edge_nodes[:,0] = mesh_edge_first_node
-                edge_nodes[:,1] = mesh_edge_second_node
-                edge_nodes = list(edge_nodes)
+                edge_nodes_ = np.empty((len(mesh_edge_first_node),2),dtype=int)
+                edge_nodes_[:,0] = mesh_edge_first_node
+                edge_nodes_[:,1] = mesh_edge_second_node
+                edge_nodes_ = list(edge_nodes_)
                 seen = set()
                 node_list = []
                 count = 1
-                for item in edge_nodes:
+                for item in edge_nodes_:
                     t = tuple(item)
                     if t not in seen:
                         node_list.append(t)
@@ -956,13 +960,13 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                     else:
                         edge_data = list(seen)
                         node_list.append(edge_data[edge_data.index(t)])
-                edge_nodes = np.array(node_list).flatten()
+                edge_nodes[:] = np.array(node_list).flatten()
                 return edge_nodes
             else:
                 raise NotImplementedError("get_grid_edge_nodes")
 
     #------------------------------------------------------------ 
-    def get_grid_face_count(self, grid_id):
+    def get_grid_face_count(self, grid_id: int) -> int:
         for grid in self._grids:
             if grid_id != 1:
                 mesh = nc.Dataset(self._job_meta.geogrid)
@@ -974,7 +978,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
 
     
     #------------------------------------------------------------ 
-    def get_grid_face_edges(self, grid_id):
+    def get_grid_face_edges(self, grid_id: int, face_edges: NDArray[np.int_]) -> NDArray[np.int_]:
         for grid in self._grids:
             if grid_id != 1:
                 mesh = nc.Dataset(self._job_meta.geogrid)
@@ -1008,13 +1012,13 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                     else:
                         edge_data = list(seen)
                         edge_list.append(edge_data.index(t))
-                face_edges = np.array(edge_list)
+                face_edges[:] = np.array(edge_list)
                 return face_edges
             else:
                 raise NotImplementedError("get_grid_face_edges")
 
     #------------------------------------------------------------ 
-    def get_grid_face_nodes(self, grid_id):
+    def get_grid_face_nodes(self, grid_id: int, face_nodes: NDArray[np.int_]) -> NDArray[np.int_]:
         for grid in self._grids:
             if grid_id != 1:
                 mesh = nc.Dataset(self._job_meta.geogrid)
@@ -1023,7 +1027,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                 node_conn_num = 0
                 for i in range(elem_conn.shape[0]):
                     node_conn_num += numelem_conn[i]
-                face_nodes = np.empty(node_conn_num,dtype=int)
+                face_nodes[:] = np.empty(node_conn_num,dtype=int)
                 index = 0
                 for i in range(elem_conn.shape[0]):
                     for j in range(numelem_conn[i]):
@@ -1035,7 +1039,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
 
     
     #------------------------------------------------------------
-    def get_grid_node_count(self, grid_id):
+    def get_grid_node_count(self, grid_id: int) -> int:
         for grid in self._grids:
             if grid_id != 1:
                 mesh = nc.Dataset(self._job_meta.geogrid)
@@ -1047,13 +1051,13 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
 
 
     #------------------------------------------------------------ 
-    def get_grid_nodes_per_face(self, grid_id):
+    def get_grid_nodes_per_face(self, grid_id: int, nodes_per_face: NDArray[np.int_]) -> NDArray[np.int_]:
         for grid in self._grids:
             if grid_id != 1:
                 mesh = nc.Dataset(self._job_meta.geogrid)
                 elem_conn = mesh.variables[self._job_meta.elemconn_var][:]
                 numelem_conn = mesh.variables[self._job_meta.numelemconn_var][:]
-                nodes_per_face = np.empty(elem_conn.shape[0],dtype=int)
+                nodes_per_face[:] = np.empty(elem_conn.shape[0],dtype=int)
                 for i in range(elem_conn.shape[0]):
                     nodes_per_face[i] = numelem_conn[i]
                 return nodes_per_face
@@ -1061,65 +1065,71 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                 raise NotImplementedError("get_grid_nodes_per_face")
     
     #------------------------------------------------------------ 
-    def get_grid_origin(self, grid_id):
+    def get_grid_origin(self, grid_id: int, origin: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id: 
+            if grid_id == grid.id:
+                origin[:] = grid.origin
                 return grid.origin
         raise ValueError(f"get_grid_origin: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
-    def get_grid_rank(self, grid_id):
+    def get_grid_rank(self, grid_id: int) -> int:
         for grid in self._grids:
             if grid_id == grid.id: 
                 return grid.rank
         raise ValueError(f"get_grid_rank: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
-    def get_grid_shape(self, grid_id):
+    def get_grid_shape(self, grid_id: int, shape: NDArray[np.int_]) -> NDArray[np.int_]:
         for grid in self._grids:
             if grid_id == grid.id:
+                shape[:] = grid.shape
                 return grid.shape
         raise ValueError(f"get_grid_shape: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
-    def get_grid_size(self, grid_id):
+    def get_grid_size(self, grid_id: int) -> int:
         for grid in self._grids:
             if grid_id == grid.id: 
                 return grid.size
         raise ValueError(f"get_grid_size: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
-    def get_grid_spacing(self, grid_id):
+    def get_grid_spacing(self, grid_id: int, spacing: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id: 
+            if grid_id == grid.id:
+                spacing[:] = grid.spacing
                 return grid.spacing
         raise ValueError(f"get_grid_spacing: grid_id {grid_id} unknown")  
 
     #------------------------------------------------------------ 
-    def get_grid_type(self, grid_id):
+    def get_grid_type(self, grid_id: int) -> int:
         for grid in self._grids:
             if grid_id == grid.id: 
                 return grid.type
         raise ValueError(f"get_grid_type: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
-    def get_grid_x(self, grid_id):
+    def get_grid_x(self, grid_id: int, x: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
             if grid_id == grid.id:
+                x[:] = grid.grid_x
                 return grid.grid_x
         raise ValueError(f"get_grid_x: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
-    def get_grid_y(self, grid_id):
+    def get_grid_y(self, grid_id: int, y: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id: 
+            if grid_id == grid.id:
+                y[:] = grid.grid_y
                 return grid.grid_y
         raise ValueError(f"get_grid_y: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
-    def get_grid_z(self, grid_id):
+    def get_grid_z(self, grid_id: int, z: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id: 
+            if grid_id == grid.id:
+                z[:] = grid.grid_z
                 return grid.grid_z
         raise ValueError(f"get_grid_z: grid_id {grid_id} unknown")
 
