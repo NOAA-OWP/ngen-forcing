@@ -144,7 +144,8 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         if(self._job_meta.grid_type=='gridded'):
             try:
                 self._WrfHydroGeoMeta.initialize_destination_geo_gridded(self._job_meta, self._mpi_meta)
-            except Exception:
+            except Exception as e:
+                raise e
                 err_handler.err_out_screen_para(self._job_meta.errMsg, self._mpi_meta)
         elif(self._job_meta.grid_type=='unstructured'):
             try:
@@ -1102,7 +1103,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         raise ValueError(f"get_grid_spacing: grid_id {grid_id} unknown")  
 
     #------------------------------------------------------------ 
-    def get_grid_type(self, grid_id: int) -> int:
+    def get_grid_type(self, grid_id: int) -> str:
         for grid in self._grids:
             if grid_id == grid.id: 
                 return grid.type
