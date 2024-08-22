@@ -35,9 +35,8 @@ from .core import ioMod
 from .core import parallel
 from .core import suppPrecipMod
 
-from typing import TYPE_CHECKING, Any
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
+from typing import Any
+from numpy.typing import NDArray
 
 # If less than 0, then ESMF.__version__ is greater than 8.7.0
 if ESMF.version_compare('8.7.0', ESMF.__version__) < 0:
