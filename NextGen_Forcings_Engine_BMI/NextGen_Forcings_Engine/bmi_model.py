@@ -1069,7 +1069,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         for grid in self._grids:
             if grid_id == grid.id:
                 origin[:] = grid.origin
-                return grid.origin
+                return origin
         raise ValueError(f"get_grid_origin: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
@@ -1084,7 +1084,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         for grid in self._grids:
             if grid_id == grid.id:
                 shape[:] = grid.shape
-                return grid.shape
+                return shape
         raise ValueError(f"get_grid_shape: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
@@ -1099,7 +1099,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         for grid in self._grids:
             if grid_id == grid.id:
                 spacing[:] = grid.spacing
-                return grid.spacing
+                return spacing
         raise ValueError(f"get_grid_spacing: grid_id {grid_id} unknown")  
 
     #------------------------------------------------------------ 
@@ -1114,7 +1114,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         for grid in self._grids:
             if grid_id == grid.id:
                 x[:] = grid.grid_x
-                return grid.grid_x
+                return x
         raise ValueError(f"get_grid_x: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
@@ -1122,7 +1122,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         for grid in self._grids:
             if grid_id == grid.id:
                 y[:] = grid.grid_y
-                return grid.grid_y
+                return y
         raise ValueError(f"get_grid_y: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
@@ -1130,7 +1130,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         for grid in self._grids:
             if grid_id == grid.id:
                 z[:] = grid.grid_z
-                return grid.grid_z
+                return z
         raise ValueError(f"get_grid_z: grid_id {grid_id} unknown")
 
     #------------------------------------------------------------ 
