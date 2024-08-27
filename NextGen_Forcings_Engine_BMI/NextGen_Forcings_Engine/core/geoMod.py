@@ -368,7 +368,7 @@ class GeoMetaWrfHydro:
             self.slp_azi = slp_azi_sub[:,:]
             slp_azi_tmp = None
 
-        elif(ConfigOptions.slope_var != None and ConfigOptions.slp_azi != None):
+        elif(ConfigOptions.slope_var != None and ConfigOptions.slope_azimuth_var != None):
 
             if MpiConfig.rank == 0:
                 if(idTmp.variables[ConfigOptions.slope_var].ndim == 3):
