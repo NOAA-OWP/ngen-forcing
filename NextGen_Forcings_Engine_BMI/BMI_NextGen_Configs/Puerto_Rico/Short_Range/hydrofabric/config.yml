@@ -7,17 +7,15 @@ InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/N
 InputForcingTypes: ["GRIB2", "GRIB2"]
 InputMandatory: [1,1]
 OutputFrequency: 60
-OutDir: "/scratch2/NCEPDEV/ohd/Jason.Ducker/ngen-master/extern/test_bmi_NextGen_Forcings_Engine/Unit_Test_Output/Short_range"
-ScratchDir: "/scratch2/NCEPDEV/ohd/Jason.Ducker/ngen-master/extern/test_bmi_NextGen_Forcings_Engine/Unit_Test_Output/Short_range"
+SubOutputHour: 0
+SubOutFreq: 0
+ScratchDir: "./Unit_Test_Output/Short_range"
+Output: 0
 compressOutput: 0
 floatOutput: 0
-RetroFlag: 0
 AnAFlag: 0
-BDateProc: -9999
-EDateProc: -9999
 LookBack : -9999
 RefcstBDateProc: "202302280600"
-RefcstEDateProc: "202303010600"
 ForecastFrequency: 720
 ForecastShift: 0
 ForecastInputHorizons: [2880, 2880]
@@ -28,6 +26,7 @@ GRID_TYPE: "hydrofabric"
 NodeCoords: 'nodeCoords'
 ElemCoords: 'centerCoords'
 ElemConn: 'elementConn'
+ElemID: 'element_id'
 NumElemConn: 'numElementConn'
 HGTVAR: 'Element_Elevation'
 SLOPE: 'Element_Slope'
@@ -60,4 +59,4 @@ RqiMethod: 0
 RqiThreshold: 0.9
 cfsEnsNumber: '1'
 custom_input_fcst_freq: []
-includeLQFraq: 0
+includeLQFrac: 0
