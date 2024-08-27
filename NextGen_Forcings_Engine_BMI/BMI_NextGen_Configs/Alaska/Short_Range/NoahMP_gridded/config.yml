@@ -9,7 +9,8 @@ InputMandatory: [1]
 OutputFrequency: 60
 SubOutputHour: 0
 SubOutFreq: 0
-ScratchDir: "/scratch2/NCEPDEV/ohd/Jason.Ducker/ngen-master/extern/test_bmi_NextGen_Forcings_Engine/Unit_Test_Output/Short_range"
+ScratchDir: "./Unit_Test_Output/Short_range"
+Output: 0
 compressOutput: 0
 floatOutput: 0
 AnAFlag: 0
