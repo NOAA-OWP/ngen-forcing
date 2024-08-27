@@ -10,6 +10,7 @@ OutputFrequency: 60
 SubOutputHour: 0
 SubOutFreq: 0
 ScratchDir: "./Unit_Test_Output/Short_range"
+Output: 0
 compressOutput: 0
 floatOutput: 0
 AnAFlag: 0
@@ -19,7 +20,7 @@ ForecastFrequency: 720
 ForecastShift: 0
 ForecastInputHorizons: [2880, 2880]
 ForecastInputOffsets: [0, 0]
-GeogridIn: "./NextGen_Domains/hydrofabric/Alaska_ESMF_Mesh.nc"
+GeogridIn: "./NextGen_Domains/hydrofabric/Hawaii_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
 NodeCoords: 'nodeCoords'
