@@ -8,6 +8,7 @@ InputForcingTypes: ["GRIB2"]
 InputMandatory: [1]
 OutputFrequency: 60
 ScratchDir: "./Unit_Test_Output/extended_AnA"
+Output: 0
 compressOutput: 0
 floatOutput: 0
 AnAFlag: 1
