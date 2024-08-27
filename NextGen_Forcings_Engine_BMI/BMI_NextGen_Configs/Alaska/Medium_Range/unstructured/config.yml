@@ -10,6 +10,7 @@ OutputFrequency: 60
 SubOutputHour: 120
 SubOutFreq: 180
 ScratchDir: "./Unit_Test_Output/Medium_range"
+Output: 0
 compressOutput: 0
 floatOutput: 0
 AnAFlag: 0
