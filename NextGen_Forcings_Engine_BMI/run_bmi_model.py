@@ -1,11 +1,20 @@
 from pathlib import Path
-
+import datetime
+import pandas as pd
 import numpy as np
 import sys
 
-# This is the BMI LSTM that we will be running
+# This is the NextGen Forcings Engine BMI instance to execute
 from NextGen_Forcings_Engine.bmi_model import NWMv3_Forcing_Engine_BMI_model
 
+# User input to specify the start and end time of the 
+# NextGen Forcings Engine BMI standalone execution
+start_time = '2019-08-30 12:00:00'
+end_time = '2019-09-03 13:00:00'
+
+start_time = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+end_time = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+ngen_datetimes = pd.date_range(start=start_time.strftime('%Y-%m-%d %H:%M:%S'),end=end_time.strftime('%Y-%m-%d %H:%M:%S'),freq='h')
 
 def execute():
     # creating an instance of a model
@@ -69,8 +78,7 @@ def execute():
         if(model._job_meta.include_lqfrac == 1):
             LQFRAC_NODE = np.zeros(model._varsize,dtype=float)
             LQFRAC_ELEMENT = np.zeros(model._varsize_elem,dtype=float)
-
-    for x in range(3):
+    for x in range(len(ngen_datetimes)):
 
         #########################################
         # UPDATE THE MODEL AND GET REGRIDDED FORCINGS #
@@ -123,6 +131,7 @@ def execute():
                 print(model.get_current_time(), U2D.max(), V2D.max(), LWDOWN.max(), SWDOWN.max(), T2D.max(), Q2D.max(), PSFC.max(), RAINRATE.max())
                 print('model time', 'U2D_ELEMENT min', 'V2D_ELEMENT min', 'LWDOWN_ELEMENT min','SWDOWN_ELEMENT min','T2D_ELEMENT min','Q2D_ELEMENT min','PSFC_ELEMENT min','RAINRATE_ELEMENT min')
                 print(model.get_current_time(), U2D.min(), V2D.min(), LWDOWN.min(), SWDOWN.min(), T2D.min(), Q2D.min(), PSFC.min(), RAINRATE.min())
+
         else:
             U2D_NODE = model.get_value('U2D_NODE',U2D_NODE)
             V2D_NODE = model.get_value('V2D_NODE',V2D_NODE)

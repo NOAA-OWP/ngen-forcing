@@ -790,20 +790,20 @@ def open_netcdf_forcing(NetCdfFileIn, ConfigOptions, MpiConfig, open_on_all_proc
                                     NetCdfFileIn
             err_handler.log_critical(ConfigOptions, MpiConfig)
             idTmp = None
-
-        if idTmp is not None:
-            # Check for expected lat/lon variables.
-            if lat_var not in idTmp.variables.keys():
-                ConfigOptions.errMsg = f"Unable to locate {lat_var} from: " + \
-                                        NetCdfFileIn
-                err_handler.log_critical(ConfigOptions, MpiConfig)
-                idTmp = None
-        if idTmp is not None:
-            if lon_var not in idTmp.variables.keys():
-                ConfigOptions.errMsg = f"Unable to locate {lon_var} from: " + \
-                                        NetCdfFileIn
-                err_handler.log_critical(ConfigOptions, MpiConfig)
-                idTmp = None
+        if(ConfigOptions.nwm_geogrid == None):
+            if idTmp is not None:
+                # Check for expected lat/lon variables.
+                if lat_var not in idTmp.variables.keys():
+                    ConfigOptions.errMsg = f"Unable to locate {lat_var} from: " + \
+                                            NetCdfFileIn
+                    err_handler.log_critical(ConfigOptions, MpiConfig)
+                    idTmp = None
+            if idTmp is not None:
+                if lon_var not in idTmp.variables.keys():
+                    ConfigOptions.errMsg = f"Unable to locate {lon_var} from: " + \
+                                            NetCdfFileIn
+                    err_handler.log_critical(ConfigOptions, MpiConfig)
+                    idTmp = None
     else:
         idTmp = None
 

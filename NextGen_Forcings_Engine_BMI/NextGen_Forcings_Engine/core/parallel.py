@@ -1,13 +1,9 @@
 import numpy as np
 import mpi4py
-#mpi4py.rc.threaded = False
 mpi4py.rc.threads = False
 
 from mpi4py import MPI
-
 from . import err_handler
-
-#mpi4py.rc.threads = False
 
 # If MPI was initialized outside of python,
 # disable initialization/finalization behavior
@@ -29,7 +25,7 @@ class MpiConfig:
         self.comm = None
         self.rank = None
         self.size = None 
-
+     
     def initialize_comm(self, config_options, comm=None):
         """
         Initial function to initialize MPI.

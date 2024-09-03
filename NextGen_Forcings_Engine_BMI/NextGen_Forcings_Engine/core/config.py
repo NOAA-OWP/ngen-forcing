@@ -8,7 +8,7 @@ import numpy as np
 from . import time_handling
 from . import err_handler
 
-FORCE_COUNT = 26
+FORCE_COUNT = 27
 
 class ConfigOptions:
     """
@@ -123,11 +123,15 @@ class ConfigOptions:
         self.nwmConfig = None
         self.include_lqfrac = False
         self.forcing_output = None
-        self.aorc_aws = None
-        self.aorc_aws_obj = None
+        self.aws = None
+        self.aws_obj = None
         self.aorc_source = "s3://noaa-nws-aorc-v1-1-1km"
         self.aorc_year_url = "{source}/{year}.zarr"
-        self.aorc_year = None
+        self.nwm_source = "s3://noaa-nwm-retrospective-3-0-pds"
+        self.nwm_url = None
+        self.nwm_domain = None
+        self.aws_time = None
+        self.nwm_geogrid = None
 
     def read_config(self, cfg):
         """
@@ -173,6 +177,30 @@ class ConfigOptions:
                 if forceOpt == 10:
                     self.number_custom_inputs = self.number_custom_inputs + 1
 
+                # Flag to force mandatory configuration option to specify the NWM geogrid file if user requests
+                # NWM forcing files to be regridded to a given domain configuration
+                if forceOpt == 27:
+                    try:
+                        self.nwm_geogrid = cfg['NWM_Geogrid']
+                    except KeyError:
+                        err_handler.err_out_screen('Unable to locate NWM Geogrid file required for the NWM forcings module. Need to specify the pathway to the NWM geo_em_DOMAIN.nc file to the NWM_Geogrid configuration input option within the configuration file.')
+                    except configparser.NoOptionError:
+                        err_handler.err_out_screen('Unable to locate NWM Geogrid file required for the NWM forcings module. Need to specify the pathway to the NWM geo_em_DOMAIN.nc file to the NWM_Geogrid configuration input option within the configuration file.')
+                    except json.decoder.JSONDecodeError:
+                        err_handler.err_out_screen('Improper NWM Geogrid file option specified in configuration file')
+                    if(self.nwm_geogrid.split('/')[-1].split('_')[-1].split('.')[0] == 'CONUS'):
+                        self.nwm_domain = 'CONUS'
+                        self.nwm_url = "{source}/{domain}/zarr/forcing/{var}.zarr"
+                    elif(self.nwm_geogrid.split('/')[-1].split('_')[-1].split('.')[0] == 'HI'):
+                        self.nwm_domain = 'Hawaii'
+                        self.nwm_url = "{source}/{domain}/zarr/forcing.zarr"
+                    elif(self.nwm_geogrid.split('/')[-1].split('_')[-1].split('.')[0] == 'PRVI'):
+                        self.nwm_domain = 'PR'
+                        self.nwm_url = "{source}/{domain}/zarr/forcing.zarr"
+                    elif(self.nwm_geogrid.split('/')[-1].split('_')[-1].split('.')[0] == 'AK'):
+                        self.nwm_domain = 'Alaska'
+                        self.nwm_url = "{source}/{domain}/zarr/forcing.zarr"
+
             # Read in the input forcings types (GRIB[1|2], NETCDF)
             try:
                 #self.input_force_types = config.get('Input', 'InputForcingTypes').strip("[]").split(',')
@@ -190,7 +218,7 @@ class ConfigOptions:
                 err_handler.err_out_screen('Number of InputForcingTypes must match the number '
                                            'of InputForcings in the configuration file.')
             for fileType in self.input_force_types:
-                if fileType not in ['GRIB1', 'GRIB2', 'NETCDF', 'NETCDF4']:
+                if fileType not in ['GRIB1', 'GRIB2', 'NETCDF', 'NETCDF4','NWM']:
                     err_handler.err_out_screen('Invalid forcing file type "{}" specified. '
                                                'Only GRIB1, GRIB2, and NETCDF are supported'.format(fileType))
 
@@ -210,12 +238,12 @@ class ConfigOptions:
             # or new line characters.
             for dirTmp in range(0, len(self.input_force_dirs)):
                 self.input_force_dirs[dirTmp] = self.input_force_dirs[dirTmp].strip()
-                if(os.path.isdir(self.input_force_dirs[dirTmp]) == False and self.input_forcings[dirTmp] != 12 and self.input_forcings[dirTmp] != 21):
+                if(os.path.isdir(self.input_force_dirs[dirTmp]) == False and self.input_forcings[dirTmp] != 12 and self.input_forcings[dirTmp] != 21 and self.input_forcings[dirTmp] != 27):
                     err_handler.err_out_screen('Unable to locate forcing directory: ' +
                                                self.input_force_dirs[dirTmp])
-                if(os.path.isdir(self.input_force_dirs[dirTmp]) == False and self.input_forcings[dirTmp] == 12 or self.input_forcings[dirTmp] == 21):
-                    self.aorc_aws = True
-                
+                if(os.path.isdir(self.input_force_dirs[dirTmp]) == False and self.input_forcings[dirTmp] in [12,21,27]):
+                    self.aws = True
+     
             # Read in the mandatory enforcement options for input forcings.
             try:
                 self.input_force_mandatory = cfg['InputMandatory']
@@ -728,7 +756,8 @@ class ConfigOptions:
                 # Read weight file directory (optional)
                 self.weightsDir = cfg['RegridWeightsDir']
             except:
-                self.weightsDir = None
+                # Assign the weights directory then to the temporary scratch directory
+                self.weightsDir = self.scratch_dir
             if self.weightsDir is not None:
                 # if we do have one specified, make sure it exists
                 if not os.path.exists(self.weightsDir):
@@ -884,7 +913,7 @@ class ConfigOptions:
             if not os.path.isdir(self.dScaleParamDirs[dirTmp]):
                 err_handler.err_out_screen('Unable to locate parameter directory: ' + self.dScaleParamDirs[dirTmp])
 
-        if(self.q2dDownscaleOpt != 0 or self.swDownscaleOpt != 0 or self.psfcDownscaleOpt != 0 or self.t2dDownscaleOpt != 0):
+        if([1] in self.q2dDownscaleOpt or [1] in self.swDownscaleOpt or [1] in self.psfcDownscaleOpt or [1,2] in self.t2dDownscaleOpt):
              # Process the geogrid information for downscaling
             try:
                 self.sinalpha_var = cfg['SINALPHA']

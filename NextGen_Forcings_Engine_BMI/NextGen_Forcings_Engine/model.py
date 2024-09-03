@@ -7,8 +7,8 @@ import dask.delayed
 import numpy as np
 import s3fs
 import xarray as xr
-import multiprocessing
-from mpi4py.futures import MPIPoolExecutor
+#from mpi4py.futures import MPIPoolExecutor
+from mpi4py.futures import MPICommExecutor
 
 from .core import bias_correction
 from .core import downscale
@@ -16,11 +16,16 @@ from .core import err_handler
 from .core import layeringMod
 from .core import disaggregateMod
 
+
 class NWMv3_Forcing_Engine_model():
     # TODO: refactor the bmi_model.py file and this to have this type maintain its own state.
     #def __init__(self):
     #    super(ngen_model, self).__init__()
     #    #self._model = model
+    
+    #@dask.delayed
+    #def aws_obj(files):        
+    #    return xr.open_mfdataset(files, engine="zarr", parallel=True, consolidated=True)
 
     def run(self, model: dict, future_time: float, ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMod, MpiConfig, OutputObj):
         """
@@ -68,18 +73,21 @@ class NWMv3_Forcing_Engine_model():
 
         disaggregate_fun = disaggregateMod.disaggregate_factory(ConfigOptions)
 
+        # Calculate current time stamp based on operational configuration
         if (ConfigOptions.ana_flag):
+            # If we're in an AnA configuration, then must offset the BMI future
+            # timestamp to account for the "lookback" period being properly iterated
+            # over between 3-28 hour look back time period and operation configuration
             if(ConfigOptions.input_forcings[0] ==20 or ConfigOptions.input_forcings[0] ==22):
-                ConfigOptions.current_fcst_cycle = ConfigOptions.b_date_proc + pd.TimedeltaIndex(np.array([future_time],dtype=float),'s')[0] - pd.TimedeltaIndex(np.array([ConfigOptions.look_back],dtype=float),'m')[0]
+                ConfigOptions.current_fcst_cycle = ConfigOptions.b_date_proc + pd.TimedeltaIndex(np.array([future_time-7200.0],dtype=float),'s')[0]
+                ConfigOptions.current_time = ConfigOptions.b_date_proc + pd.TimedeltaIndex(np.array([future_time-7200.],dtype=float),'s')[0]
                 ConfigOptions.future_time = future_time
+            # Puerto Rico/Hawaii AnA operational configuration lookback based on 6-hourly forecast cycles
             else:
-                ConfigOptions.current_fcst_cycle = ConfigOptions.b_date_proc + pd.TimedeltaIndex(np.array([future_time],dtype=float),'s')[0] - pd.TimedeltaIndex(np.array([ConfigOptions.look_back],dtype=float),'m')[0]
-            ConfigOptions.current_time = ConfigOptions.b_date_proc + pd.TimedeltaIndex(np.array([future_time-3600.0],dtype=float),'s')[0] - pd.TimedeltaIndex(np.array([ConfigOptions.look_back],dtype=float),'m')[0]
+                ConfigOptions.current_fcst_cycle = ConfigOptions.b_date_proc + pd.TimedeltaIndex(np.array([future_time-3600.0],dtype=float),'s')[0]
+                ConfigOptions.current_time = ConfigOptions.b_date_proc + pd.TimedeltaIndex(np.array([future_time-3600.0],dtype=float),'s')[0]
         else:
             ConfigOptions.current_fcst_cycle = ConfigOptions.b_date_proc
-
-
-            # Get current datetime stamp
             ConfigOptions.current_time = pd.Timestamp(ConfigOptions.b_date_proc) + pd.TimedeltaIndex(np.array([future_time],dtype=float),'s')[0]
 
         print("NextGen Forcings Engine processing meteorological forcings for BMI timestamp")
@@ -194,7 +202,7 @@ class NWMv3_Forcing_Engine_model():
             for forceKey in ConfigOptions.input_forcings:
                 # Pass these methods for AORC data is ERA5-Interim blend is requested
                 # so we can finish filling in the missing gaps
-                if(forceKey == 23 and 12 in ConfigOptions.input_forcings or 21 in ConfigOptions.input_forcings):
+                if(forceKey == 23 and [12,21] in ConfigOptions.input_forcings):
                     AORC_mask = input_forcings.regridded_mask_AORC
                     AORC_elem_mask = input_forcings.regridded_mask_elem_AORC
 
@@ -207,32 +215,45 @@ class NWMv3_Forcing_Engine_model():
                     AORC_elem_mask = None
                 else:
                     input_forcings = inputForcingMod[forceKey]
-                
-               
-                # Flag to indicate whether or not AORC AWS option is initialized
-                if(ConfigOptions.aorc_aws == None):
+     
+                # Flag to indicate whether or not AORC/NWM Forcings AWS option is initialized
+                if(forceKey in [12,21,27] and ConfigOptions.aws == None):
                     # Calculate the previous and next input cycle files from the inputs.
                     input_forcings.calc_neighbor_files(ConfigOptions, OutputObj.outDate, MpiConfig)
                     err_handler.check_program_status(ConfigOptions, MpiConfig)
                 else:
-                    dask.config.set(pool=MPIPoolExecutor())
-                    if(ConfigOptions.aorc_aws_obj == None):              
-                        ConfigOptions.aorc_year = ConfigOptions.current_time.year
-                        _s3 = s3fs.S3FileSystem(anon=True)
-                        files = [s3fs.S3Map(root=ConfigOptions.aorc_year_url.format(source=ConfigOptions.aorc_source, year=year),s3=_s3,check=False,) for year in [ConfigOptions.aorc_year]]
-                        ConfigOptions.aorc_aws_obj = xr.open_mfdataset(files, engine="zarr", parallel=True, consolidated=True)
-                    else:
-                        if(ConfigOptions.current_time.year != ConfigOptions.aorc_year):
-                            ConfigOptions.aorc_year = ConfigOptions.current_time.year
+                    # Flag to indicate the AWS .zarr AORC method
+                    if(forceKey == 12 or forceKey == 21):
+                        if(ConfigOptions.aws_time == None or ConfigOptions.current_time.year != ConfigOptions.aws_time.year):
+                            ConfigOptions.aws_time = ConfigOptions.current_time
                             _s3 = s3fs.S3FileSystem(anon=True)
-                            files = [s3fs.S3Map(root=ConfigOptions.aorc_year_url.format(source=ConfigOptions.aorc_source, year=year),s3=_s3,check=False,) for year in [ConfigOptions.aorc_year]]
-                            ConfigOptions.aorc_aws_obj = xr.open_mfdataset(files, engine="zarr", parallel=True, consolidated=True)
-
+                            files = [s3fs.S3Map(root=ConfigOptions.aorc_year_url.format(source=ConfigOptions.aorc_source, year=year),s3=_s3,check=False,) for year in [ConfigOptions.aws_time.year]]
+                            with MPICommExecutor(comm=MpiConfig.comm, root=0) as executor:
+                                with dask.config.set(scheduler=executor):
+                                    if(MpiConfig.rank == 0):
+                                        ConfigOptions.aws_obj = xr.open_mfdataset(files, engine="zarr", parallel=True, consolidated=True)
+                            MpiConfig.comm.barrier()
+                    # Flag to indicate the AWS .zarr NWMv3 Forcing file method
+                    # Which grabs the entire timeseries based on s3 bucket organizations
+                    elif(forceKey==27):
+                        if(ConfigOptions.aws_time == None):
+                            ConfigOptions.aws_time = ConfigOptions.current_time
+                            _s3 = s3fs.S3FileSystem(anon=True)
+                            if(ConfigOptions.nwm_domain == 'CONUS'):
+                                nwm_vars = ['lwdown', 'precip', 'psfc', 'q2d', 'swdown', 't2d', 'u2d', 'v2d']
+                                files = [s3fs.S3Map(root=ConfigOptions.nwm_url.format(source=ConfigOptions.nwm_source, domain=ConfigOptions.nwm_domain, var=var),s3=_s3,check=False,) for var in nwm_vars]
+                            else:
+                                files = [s3fs.S3Map(root=ConfigOptions.nwm_url.format(source=ConfigOptions.nwm_source, domain=ConfigOptions.nwm_domain),s3=_s3,check=False,)]
+                            with MPICommExecutor(comm=MpiConfig.comm, root=0) as executor:
+                                with dask.config.set(scheduler=executor):
+                                    if(MpiConfig.rank == 0):
+                                        ConfigOptions.aws_obj = xr.open_mfdataset(files, engine="zarr", parallel=True, consolidated=True)
+                            MpiConfig.comm.barrier()
+              
                 # break loop if done early
                 if input_forcings.skip is True:
                     show_message = False            # just to avoid confusion
                     break
-
                 # Regrid forcings.
                 input_forcings.regrid_inputs(ConfigOptions, wrfHydroGeoMeta, MpiConfig)
                 err_handler.check_program_status(ConfigOptions, MpiConfig)

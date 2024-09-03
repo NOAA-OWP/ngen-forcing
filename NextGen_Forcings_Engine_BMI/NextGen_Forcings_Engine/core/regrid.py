@@ -7,6 +7,9 @@ import sys
 import traceback
 import time
 from datetime import datetime, timedelta
+#from mpi4py.futures import MPIPoolExecutor
+from mpi4py.futures import MPICommExecutor
+#import mpi4py.util.pool as mpi_pool
 
 try:
     import esmpy as ESMF
@@ -20,6 +23,10 @@ import pandas as pd
 from . import err_handler
 from . import ioMod
 from . import timeInterpMod
+
+import dask
+import dask.delayed
+import time
 
 if "WGRIB2" not in os.environ:
     WGRIB2_env = False
@@ -59,6 +66,9 @@ def create_link(name, input_file, tmpFile, config_options, mpi_config):
             err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
+@dask.delayed
+def compute(id_tmp,nc_var):
+    return id_tmp[nc_var].to_masked_array()
 
 def regrid_ak_ext_ana(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
     """
@@ -1458,9 +1468,9 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                 err_handler.log_msg(config_options, mpi_config)
                 try:
                     if 0 < input_forcings.cycleFreq < 60:
-                        var_tmp = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][sub_id, :, :]
+                        var_tmp_elem = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][sub_id, :, :]
                     else:
-                        var_tmp = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][0, :, :]
+                        var_tmp_elem = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][0, :, :]
                     if grib_var == "APCP":
                         var_tmp_elem /= 3600     # convert hourly accumulated precip to instantaneous rate
                     if grib_var == 'CPOFP':
@@ -2966,6 +2976,490 @@ def regrid_cfsv2(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config)
             err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
+def regrid_nwm(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
+    """
+    Function for handling regridding of custom input NetCDF hourly forcing files.
+    :param input_forcings:
+    :param config_options:
+    :param wrf_hydro_geo_meta:
+    :param mpi_config:
+    :return:
+    """
+
+    ## Flag to jump to different regridding module for AWS NWM Forcing data
+    if(config_options.aws):
+        regrid_nwm_aws(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config)
+        return
+
+    # If the expected file is missing, this means we are allowing missing files, simply
+    # exit out of this routine as the regridded fields have already been set to NDV.
+    if not os.path.isfile(input_forcings.file_in2):
+        return
+
+    # Check to see if the regrid complete flag for this
+    # output time step is true. This entails the necessary
+    # inputs have already been regridded and we can move on.
+    if input_forcings.regridComplete:
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "No NWM NetCDF regridding required for this timestep."
+            err_handler.log_msg(config_options, mpi_config)
+        return
+
+    # Open the input NetCDF file containing necessary data.
+    id_tmp = ioMod.open_netcdf_forcing(input_forcings.file_in2, config_options, mpi_config, open_on_all_procs=True)
+
+    for force_count, nc_var in enumerate(input_forcings.netcdf_var_names):
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "Processing Custom NetCDF Forcing Variable: " + nc_var
+            err_handler.log_msg(config_options, mpi_config)
+        calc_regrid_flag = check_regrid_status(id_tmp, force_count, input_forcings,
+                                               config_options, wrf_hydro_geo_meta, mpi_config)
+
+        if calc_regrid_flag:
+            calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_config, wrf_hydro_geo_meta)
+
+        input_forcings.height = None
+        if mpi_config.rank == 0:
+            config_options.statusMsg = f"Unable to locate HGT_surface in: {input_forcings.file_in2}. " \
+                                       f"Downscaling will not be available."
+            err_handler.log_msg(config_options, mpi_config)
+
+        if(config_options.grid_type == "gridded"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp.variables[nc_var][:][0, :, :]
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :, :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+        elif(config_options.grid_type == "unstructured"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp.variables[nc_var][:][0, :, :]
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Regrid the input variables.
+            var_tmp_elem = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp_elem = id_tmp.variables[nc_var][:][0, :, :]
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp_elem = mpi_config.scatter_array(input_forcings, var_tmp_elem, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out_elem = input_forcings.regridObj_elem(input_forcings.esmf_field_in_elem,
+                                                                         input_forcings.esmf_field_out_elem)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2_elem[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.esmf_field_out_elem.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1_elem[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2_elem[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+        elif(config_options.grid_type == "hydrofabric"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp.variables[nc_var][:][0, :, :]
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+          
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+    # Close the NetCDF file
+    if mpi_config.rank == 0:
+        try:
+            id_tmp.close()
+        except OSError:
+            config_options.errMsg = "Unable to close NetCDF file: " + input_forcings.tmpFile
+            err_handler.err_out(config_options)
+
+def regrid_nwm_aws(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
+    """
+    Function for handling regridding of AWS NWM Forcing Data Downloaded from Server.
+    :param input_forcings:
+    :param config_options:
+    :param wrf_hydro_geo_meta:
+    :param mpi_config:
+    :return:
+    """
+
+    # Check to see if the regrid complete flag for this
+    # output time step is true. This entails the necessary
+    # inputs have already been regridded and we can move on.
+    if input_forcings.regridComplete:
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "No NWM NetCDF regridding required for this timestep."
+            err_handler.log_msg(config_options, mpi_config)
+        return
+
+
+    mpi_config.comm.barrier()
+    with MPICommExecutor(comm=mpi_config.comm, root=0) as executor:
+        with dask.config.set(scheduler=executor):
+            if mpi_config.rank == 0:
+                id_tmp = config_options.aws_obj.sel(time=config_options.current_time.strftime('%Y-%m-%d %H:%M:%S'))
+                id_tmp = id_tmp.compute()
+            else:
+                id_tmp = None
+    mpi_config.comm.barrier()
+
+
+    for force_count, nc_var in enumerate(input_forcings.netcdf_var_names):
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "Processing Custom NetCDF Forcing Variable: " + nc_var
+            err_handler.log_msg(config_options, mpi_config)
+        calc_regrid_flag = check_regrid_status(id_tmp, force_count, input_forcings,
+                                               config_options, wrf_hydro_geo_meta, mpi_config)
+
+        if calc_regrid_flag:
+            calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_config, wrf_hydro_geo_meta)
+
+        input_forcings.height = None
+        if mpi_config.rank == 0:
+            config_options.statusMsg = f"Unable to locate HGT_surface in: {input_forcings.file_in2}. " \
+                                       f"Downscaling will not be available."
+            err_handler.log_msg(config_options, mpi_config)
+
+        if(config_options.grid_type == "gridded"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp[nc_var].to_masked_array()
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :, :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+        elif(config_options.grid_type == "unstructured"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp[nc_var].to_masked_array()
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Regrid the input variables.
+            var_tmp_elem = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp_elem = id_tmp[nc_var].to_masked_array()
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp_elem = mpi_config.scatter_array(input_forcings, var_tmp_elem, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out_elem = input_forcings.regridObj_elem(input_forcings.esmf_field_in_elem,
+                                                                         input_forcings.esmf_field_out_elem)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2_elem[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.esmf_field_out_elem.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1_elem[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2_elem[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+
+        elif(config_options.grid_type == "hydrofabric"):
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Regridding Custom netCDF input variable: " + nc_var
+                err_handler.log_msg(config_options, mpi_config)
+                try:
+                    var_tmp = id_tmp[nc_var].to_masked_array()
+                except Exception as err:
+                    config_options.errMsg = "Unable to extract " + nc_var + \
+                                            " from: " + input_forcings.file_in2 + " (" + str(err) + ")"
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local array into local ESMF field: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.esmf_field_out = input_forcings.regridObj(input_forcings.esmf_field_in,
+                                                                         input_forcings.esmf_field_out)
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid input Custom netCDF forcing variables using ESMF: " + str(ve)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.esmf_field_out.data
+            except (ValueError, KeyError, AttributeError) as err:
+                config_options.errMsg = "Unable to place local ESMF regridded data into local array: " + str(err)
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1[input_forcings.input_map_output[force_count], :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :]
+            err_handler.check_program_status(config_options, mpi_config)
+    # Close the NetCDF file
+    if mpi_config.rank == 0:
+        try:
+            id_tmp.close()
+        except OSError:
+            config_options.errMsg = "Unable to close NetCDF file: " + input_forcings.tmpFile
+            err_handler.err_out(config_options)
+
+
 
 def regrid_custom_hourly_netcdf(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
     """
@@ -2978,7 +3472,7 @@ def regrid_custom_hourly_netcdf(input_forcings, config_options, wrf_hydro_geo_me
     """
    
     # Flag to jump to different regridding function soley for AORC AWS data
-    if(config_options.aorc_aws):
+    if(config_options.aws):
         regrid_aorc_aws(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config)
         return
 
@@ -3454,7 +3948,6 @@ def regrid_custom_hourly_netcdf(input_forcings, config_options, wrf_hydro_geo_me
 
             var_sub_tmp = mpi_config.scatter_array(input_forcings, var_tmp, config_options)
             err_handler.check_program_status(config_options, mpi_config)
-
             try:
                 input_forcings.esmf_field_in.data[:, :] = var_sub_tmp
             except (ValueError, KeyError, AttributeError) as err:
@@ -3549,7 +4042,7 @@ def regrid_era5(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
     time = nc.num2date(id_tmp.variables['time'][:].data,units=id_tmp.variables['time'].units,only_use_cftime_datetimes=False)
     # Find the timestamp index based on latest timestamp requested
     # by the forcings engine
-    seconds_index = np.abs((pd.to_datetime(time) - pd.to_datetime(input_forcings.fcst_date1)).total_seconds())
+    seconds_index = np.abs((pd.to_datetime(time) - pd.to_datetime(config_options.current_time)).total_seconds())
     ind = np.where(seconds_index == np.min(seconds_index))[0][0]
 
     for force_count, nc_var in enumerate(input_forcings.netcdf_var_names):
@@ -7981,7 +8474,30 @@ def regrid_aorc_aws(input_forcings, config_options, wrf_hydro_geo_meta, mpi_conf
     fill_values = {'TMP': 288.0, 'SPFH': 0.005, 'PRES': 101300.0, 'APCP': 0,
                    'UGRD': 1.0, 'VGRD': 1.0, 'DSWRF': 80.0, 'DLWRF': 310.0}
  
-    id_tmp = config_options.aorc_aws_obj.sel(time=config_options.current_time.strftime('%Y-%m-%d %H:%M:%S'))
+    mpi_config.comm.barrier()
+    with MPICommExecutor(comm=mpi_config.comm, root=0) as executor:
+        with dask.config.set(scheduler=executor):
+            if mpi_config.rank == 0:
+                xmax = np.max(wrf_hydro_geo_meta.lon_bounds)
+                xmin = np.min(wrf_hydro_geo_meta.lon_bounds)
+                ymax = np.max(wrf_hydro_geo_meta.lat_bounds)
+                ymin = np.min(wrf_hydro_geo_meta.lat_bounds)
+                id_tmp = config_options.aws_obj.sel(time=config_options.current_time.strftime('%Y-%m-%d %H:%M:%S'),longitude=slice(xmin, xmax),latitude=slice(ymin, ymax))
+                id_tmp = id_tmp.compute()
+            else:
+                id_tmp = None
+    mpi_config.comm.barrier()
+
+    #if mpi_config.rank == 0:
+    #    xmax = np.max(wrf_hydro_geo_meta.lon_bounds)
+    #    xmin = np.min(wrf_hydro_geo_meta.lon_bounds)
+    #    ymax = np.max(wrf_hydro_geo_meta.lat_bounds)
+    #    ymin = np.min(wrf_hydro_geo_meta.lat_bounds)
+    #    id_tmp = config_options.aws_obj.sel(time=config_options.current_time.strftime('%Y-%m-%d %H:%M:%S'),longitude=slice(xmin, xmax),latitude=slice(ymin, ymax))
+    #    id_tmp = id_tmp.compute()
+    #else:
+    #    id_tmp = None
+    #mpi_config.comm.barrier()
 
     for force_count, nc_var in enumerate(input_forcings.netcdf_var_names):
         if mpi_config.rank == 0:
@@ -8373,7 +8889,7 @@ def check_regrid_status(id_tmp, force_count, input_forcings, config_options, wrf
             calc_regrid_flag = True
         else:
             if mpi_config.rank == 0:
-                if(config_options.aorc_aws):
+                if(config_options.aws):
                     if id_tmp.variables[input_forcings.netcdf_var_names[force_count]].shape[0] \
                             != input_forcings.ny_global and \
                             id_tmp.variables[input_forcings.netcdf_var_names[force_count]].shape[1] \
@@ -8560,7 +9076,7 @@ def calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_c
     """
 
     if mpi_config.rank == 0:
-        if(config_options.aorc_aws):
+        if(config_options.aws):
             try:
                 input_forcings.ny_global = id_tmp.variables[input_forcings.netcdf_var_names[force_count]].shape[0]
             except (ValueError, KeyError, AttributeError) as err:
@@ -8656,25 +9172,32 @@ def calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_c
     lat_tmp = None
     lon_tmp = None
     if mpi_config.rank == 0:
-        # Process lat/lon values from the GFS grid.
-        if len(id_tmp.variables[lat_var].shape) == 3:
-            # We have 2D grids already in place.
-            lat_tmp = id_tmp.variables[lat_var][0, :, :]
-            lon_tmp = id_tmp.variables[lon_var][0, :, :]
-        elif len(id_tmp.variables[lon_var].shape) == 2:
-            # We have 2D grids already in place.
-            lat_tmp = id_tmp.variables[lat_var][:, :]
-            lon_tmp = id_tmp.variables[lon_var][:, :]
-        elif len(id_tmp.variables[lat_var].shape) == 1:
-            # We have 1D lat/lons we need to translate into
-            # 2D grids.
-            if(config_options.aorc_aws):
-                lat_tmp = id_tmp.variables[lat_var][:].values
-                lon_tmp = id_tmp.variables[lon_var][:].values
-            else:
-                lat_tmp = id_tmp.variables[lat_var][:]
-                lon_tmp = id_tmp.variables[lon_var][:]
-            lon_tmp, lat_tmp = np.meshgrid(lon_tmp,lat_tmp)
+        if(input_forcings.productName == 'NWM'):
+            nwm_geogrid = nc.Dataset(config_options.nwm_geogrid)
+            lat_tmp = nwm_geogrid.variables['XLAT_M'][:][0,:,:]
+            lon_tmp = nwm_geogrid.variables['XLONG_M'][:][0,:,:]
+            nwm_geogrid.close()
+        else:
+            # Process lat/lon values from the GFS grid.
+            if len(id_tmp.variables[lat_var].shape) == 3:
+                # We have 2D grids already in place.
+                lat_tmp = id_tmp.variables[lat_var][0, :, :]
+                lon_tmp = id_tmp.variables[lon_var][0, :, :]
+            elif len(id_tmp.variables[lon_var].shape) == 2:
+                # We have 2D grids already in place.
+                lat_tmp = id_tmp.variables[lat_var][:, :]
+                lon_tmp = id_tmp.variables[lon_var][:, :]
+            elif len(id_tmp.variables[lat_var].shape) == 1:
+                # We have 1D lat/lons we need to translate into
+                # 2D grids, one which would come from AORC AWS
+                # s3 bucket data we need to flag here for
+                if(config_options.aws):
+                    lat_tmp = id_tmp.variables[lat_var][:].values
+                    lon_tmp = id_tmp.variables[lon_var][:].values
+                else:
+                    lat_tmp = id_tmp.variables[lat_var][:]
+                    lon_tmp = id_tmp.variables[lon_var][:]
+                lon_tmp, lat_tmp = np.meshgrid(lon_tmp,lat_tmp)
 
     err_handler.check_program_status(config_options, mpi_config)
 
@@ -8757,7 +9280,7 @@ def calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_c
 
     # Scatter global grid to processors..
     if mpi_config.rank == 0:
-        if(config_options.aorc_aws):
+        if(config_options.aws):
             var_tmp = id_tmp[input_forcings.netcdf_var_names[force_count]].to_masked_array()
         else:
             var_tmp = id_tmp[input_forcings.netcdf_var_names[force_count]][0, :, :]
@@ -8858,7 +9381,6 @@ def calculate_weights(id_tmp, force_count, input_forcings, config_options, mpi_c
         err_handler.check_program_status(config_options, mpi_config)
         extrap_method = ESMF.ExtrapMethod.CREEP_FILL if fill else ESMF.ExtrapMethod.NONE
         regrid_method = (ESMF.RegridMethod.BILINEAR, ESMF.RegridMethod.NEAREST_STOD)[input_forcings.regridOpt - 1]
-        #regrid_method = ESMF.RegridMethod.CONSERVE
         try:
             begin = time.monotonic()
             input_forcings.regridObj = ESMF.Regrid(input_forcings.esmf_field_in,

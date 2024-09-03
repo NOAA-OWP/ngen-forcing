@@ -150,12 +150,14 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         elif(self._job_meta.grid_type=='unstructured'):
             try:
                 self._WrfHydroGeoMeta.initialize_destination_geo_unstructured(self._job_meta, self._mpi_meta)
-            except Exception:
+            except Exception as e:
+                raise e
                 err_handler.err_out_screen_para(self._job_meta.errMsg, self._mpi_meta)
         elif(self._job_meta.grid_type=='hydrofabric'):
             try:
                 self._WrfHydroGeoMeta.initialize_destination_geo_hydrofabric(self._job_meta, self._mpi_meta)
-            except Exception:
+            except Exception as e:
+                raise e
                 err_handler.err_out_screen_para(self._job_meta.errMsg, self._mpi_meta)
         else:
             self._job_meta.errMsg = "You must specify a proper grid_type (gridded,unstructured) within the config.yml file."
@@ -397,7 +399,6 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
 
                 self._grid_map = {'CAT-ID': self.grid_4, 'U2D_ELEMENT': self.grid_4, 'V2D_ELEMENT': self.grid_4, 'LWDOWN_ELEMENT': self.grid_4, 'SWDOWN_ELEMENT': self.grid_4, 'T2D_ELEMENT': self.grid_4, 'Q2D_ELEMENT': self.grid_4, 'PSFC_ELEMENT': self.grid_4, 'RAINRATE_ELEMENT': self.grid_4}
 
-
         # ----- Create some lookup tabels from the long variable names --------#
         self._var_name_map_long_first = {long_name:self._var_name_units_map[long_name][0] for long_name in self._var_name_units_map.keys()}
         self._var_name_map_short_first = {self._var_name_units_map[long_name][0]:long_name for long_name in self._var_name_units_map.keys()}
@@ -462,22 +463,6 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             self._suppPcpMod = None
         err_handler.check_program_status(self._job_meta, self._mpi_meta)
 
-        # Assign NWM domain grid information to BMI variables needed
-
-        # Assign fixed grid origin for AORC forcing data
-        #self._grid_origin = (-97.0,40.000008)
-
-        # Assign fixed pixel size for AORC forcing data
-        #self._grid_spacing = (self._WrfHydroGeoMeta.dx_meters,self._WrfHydroGeoMeta.dy_meters)
-
-        # Get variable grid dimensions
-        #self._grid_shape = self._WrfHydroGeoMeta.latitude_grid.shape
-
-        # Get grid coordinates for AORC Forcings BMI functions
-        #self._grid_x = self._WrfHydroGeoMeta.longitude_grid
-        #self._grid_y = self._WrfHydroGeoMeta.latitude_grid
-
-
         # ------------- Initialize the parameters, inputs and outputs ----------#
         for parm in self._model_parameters_list:
             self._values[self._var_name_map_short_first[parm]] = self.cfg_bmi[parm]
@@ -519,6 +504,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         self._values['time_step_size'] = self.cfg_bmi['time_step_seconds']
 
         # ------------- Initialize a model ------------------------------#
+        #self._model = ngen_model(self._values.keys())
         self._model = NWMv3_Forcing_Engine_model()
 
         # Now set the catchment ids to the BMI output field
@@ -562,7 +548,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         # storage issues for NextGen formulation run, but only on root thread
         if(self._mpi_meta.rank == 0):
             for filename in os.listdir(self._job_meta.scratch_dir):
-                file_path = os.path.join(self._job_meta.scratch_dir, filename)
+               file_path = os.path.join(self._job_meta.scratch_dir, filename)
                 if(os.path.isfile(file_path) and filename[0:23] != "NextGen_Forcings_Engine"):
                     os.remove(file_path)
                 elif(os.path.isdir(file_path)):
@@ -1067,7 +1053,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     #------------------------------------------------------------ 
     def get_grid_origin(self, grid_id: int, origin: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id:
+            if grid_id == grid.id: 
                 origin[:] = grid.origin
                 return origin
         raise ValueError(f"get_grid_origin: grid_id {grid_id} unknown")
@@ -1097,7 +1083,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     #------------------------------------------------------------ 
     def get_grid_spacing(self, grid_id: int, spacing: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id:
+            if grid_id == grid.id: 
                 spacing[:] = grid.spacing
                 return spacing
         raise ValueError(f"get_grid_spacing: grid_id {grid_id} unknown")  
@@ -1120,7 +1106,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     #------------------------------------------------------------ 
     def get_grid_y(self, grid_id: int, y: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id:
+            if grid_id == grid.id: 
                 y[:] = grid.grid_y
                 return y
         raise ValueError(f"get_grid_y: grid_id {grid_id} unknown")
@@ -1128,7 +1114,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     #------------------------------------------------------------ 
     def get_grid_z(self, grid_id: int, z: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
-            if grid_id == grid.id:
+            if grid_id == grid.id: 
                 z[:] = grid.grid_z
                 return z
         raise ValueError(f"get_grid_z: grid_id {grid_id} unknown")

@@ -297,7 +297,7 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         #    log_critical(ConfigOptions, MpiConfig)
         #    indCheck = None
         #    return
-        if(ConfigOptions.aorc_aws == None):
+        if(ConfigOptions.aws == None):
             src_file = input_forcings.file_in2
             if '%FIELD%' in src_file:
                 src_file = src_file.replace('%FIELD%', {'U2D': "[wdir|wspd]", 'V2D': "[wdir|wspd]", 'RAINRATE': "qpf", 'T2D': "tmp"}[varTmp])

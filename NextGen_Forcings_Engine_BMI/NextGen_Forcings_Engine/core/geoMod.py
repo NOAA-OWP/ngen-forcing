@@ -36,6 +36,8 @@ class GeoMetaWrfHydro:
         self.element_ids_global = None
         self.latitude_grid_elem = None
         self.longitude_grid_elem = None
+        self.lat_bounds = None
+        self.lon_bounds = None
         self.mesh_inds = None
         self.mesh_inds_elem = None
         self.height = None
@@ -242,6 +244,9 @@ class GeoMetaWrfHydro:
                 varTmp = np.meshgrid(lon,lat)[1]
                 lat = None
                 lon = None
+            # Flag to grab entire array for AWS slicing
+            if(ConfigOptions.aws):
+                self.lat_bounds = varTmp
         else:
             varTmp = None
 
@@ -276,6 +281,9 @@ class GeoMetaWrfHydro:
                 varTmp = np.meshgrid(lon,lat)[0]
                 lat = None
                 lon = None
+            # Flag to grab entire array for AWS slicing
+            if(ConfigOptions.aws):
+                self.lon_bounds = varTmp
         else:
             varTmp = None
 
@@ -302,7 +310,8 @@ class GeoMetaWrfHydro:
                 if(idTmp.variables[ConfigOptions.cosalpha_var].ndim == 3):
                     varTmp = idTmp.variables[ConfigOptions.cosalpha_var][0,:,:]
                 else:
-                    varTmp = idTmp.variables[ConfigOptions.cosalpha_var][:,:]                
+                    varTmp = idTmp.variables[ConfigOptions.cosalpha_var][:,:]
+
             else:
                 varTmp = None
             #MpiConfig.comm.barrier()
@@ -318,7 +327,7 @@ class GeoMetaWrfHydro:
                 if(idTmp.variables[ConfigOptions.sinalpha_var].ndim == 3):
                     varTmp = idTmp.variables[ConfigOptions.sinalpha_var][0,:,:]
                 else:
-                    varTmp = idTmp.variables[ConfigOptions.sinalpha_var][:,:]                
+                    varTmp = idTmp.variables[ConfigOptions.sinalpha_var][:,:]
             else:
                 varTmp = None
             #MpiConfig.comm.barrier()
@@ -336,7 +345,7 @@ class GeoMetaWrfHydro:
                 if(idTmp.variables[ConfigOptions.hgt_var].ndim == 3):
                     varTmp = idTmp.variables[ConfigOptions.hgt_var][0,:,:]
                 else:
-                    varTmp = idTmp.variables[ConfigOptions.hgt_var][:,:]                
+                    varTmp = idTmp.variables[ConfigOptions.hgt_var][:,:]
             else:
                 varTmp = None
             #MpiConfig.comm.barrier()
@@ -751,6 +760,12 @@ class GeoMetaWrfHydro:
                 ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
                                        "in " + ConfigOptions.geogrid
                 raise Exception
+
+            # Flag to grab entire array for AWS slicing
+            if(ConfigOptions.aws):
+                self.lat_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,1]
+                self.lon_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,0]
+
         #MpiConfig.comm.barrier()
 
         # Broadcast global dimensions to the other processors.
@@ -1007,6 +1022,12 @@ class GeoMetaWrfHydro:
                                            "in " + ConfigOptions.geogrid
                     raise Exception
 
+                # Flag to grab entire array for AWS slicing
+                if(ConfigOptions.aws):
+                    self.lat_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,1]
+                    self.lon_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,0]
+
+
             #MpiConfig.comm.barrier()
 
             # Broadcast global dimensions to the other processors.
@@ -1071,12 +1092,14 @@ class GeoMetaWrfHydro:
 
             u, c = np.unique(pet_element_inds,return_counts=True)
 
-            # Read in a scatter the mesh node elevation, which is used for downscaling
-            self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_element_inds]
+            # Read in a scatter the mesh node elevation, which is used for downscaling if available
+            if(ConfigOptions.hgt_var != None):
+                self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_element_inds]
 
-            self.slope = idTmp.variables[ConfigOptions.slope_var][:].data[pet_element_inds]
+            if(ConfigOptions.slope_var != None and ConfigOptions.slp_azi_var != None):
+                self.slope = idTmp.variables[ConfigOptions.slope_var][:].data[pet_element_inds]
+                self.slp_azi = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data[pet_element_inds]
 
-            self.slp_azi = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data[pet_element_inds]
 
             self.element_ids = idTmp.variables[ConfigOptions.element_id_var][:].data[pet_element_inds]
 
