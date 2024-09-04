@@ -548,7 +548,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
         # storage issues for NextGen formulation run, but only on root thread
         if(self._mpi_meta.rank == 0):
             for filename in os.listdir(self._job_meta.scratch_dir):
-               file_path = os.path.join(self._job_meta.scratch_dir, filename)
+                file_path = os.path.join(self._job_meta.scratch_dir, filename)
                 if(os.path.isfile(file_path) and filename[0:23] != "NextGen_Forcings_Engine"):
                     os.remove(file_path)
                 elif(os.path.isdir(file_path)):
