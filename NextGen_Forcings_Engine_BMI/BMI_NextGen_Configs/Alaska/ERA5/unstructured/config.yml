@@ -3,7 +3,7 @@ initial_time: 0
 NWM_VERSION: 4.0
 NWM_CONFIG: "ERA5"
 InputForcings: [21]
-InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/AORC_Alaska"]
+InputForcingDirectories: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/ERA5"]
 InputForcingTypes: ["NETCDF"]
 InputMandatory: [1]
 OutputFrequency: 60
