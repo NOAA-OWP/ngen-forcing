@@ -2,7 +2,7 @@
 
 Input options to the forcing engine include:
 1. Choices for input forcing files to use.
-2. Options for specifying date ranges and forecast intervals for input files.
+2. Options for specifying BMI start time and forecast intervals for input files.
 3. Choices for ESMF regridding techniques.
 4. Choices for optional downscaling techniques.
 5. Choices for optional bias correction techniques.
@@ -54,10 +54,12 @@ Choose a set of value(s) of forcing variables to be processed for WRF-Hydro. Ple
 23. ERA5-Interim
 24. National Blended Models
 25. National Digitial Forecast Database
+26. HRRR 15-minute
+27. National Water Model (NWM) v3 retrospective forcing files
 - Example- InputForcings: [3,25]
 
 ### InputForcingDirectories
-Specify the input directories for each forcing product. If a user has the ability to connect to the AWS servers and they specify configuration #12 (CONUS AORC data) then this specific configuration input can be left as a blank string ("").
+Specify the input directories for each forcing product. If a user has the ability to connect to the AWS servers and they specify configuration #12 (CONUS AORC data) or configuration #27 (NWM retrospective forcing data) then this specific configuration input can be left as a blank string ("").
 - Example- InputForcingDirectories: [./GFS,./NDFD]
 
 ### InputForcingTypes
@@ -101,11 +103,11 @@ If this is AnA run, set AnAFlag to 1, otherwise 0. Setting this flag will change
 - Example- AnAFlag: 1
 
 ### LookBack
-Specify a lookback period in minutes to process data. This is required if you are processing a restrospective dataset or an AnA operational configuration. This value should specify how far back you need to look in time from your "RefcstBDateProc" start date that you specified. In this instance, that start date will be your actual end date. If no LookBack specified, please specify -9999.
+Specify a lookback period in minutes to process data. This is required if you are only processing an AnA operational configuration. This value should specify how far back you need to look in time from your "RefcstBDateProc" start date that you specified. In this instance, that start date will be your actual end date. If no LookBack specified, please specify -9999.
 - Example- LookBack: 180
 
 ### RefcstBDateProc
-If running an operational configuration in realtime, this will be the defined start date for the NextGen Forcing Engine BMI which is assumed to be the beginning of the forecast cycle (i.e. hour 0). From there the first time step will be hour 1 from the start date specified here. If you're running an AnA or a retrospective dataset however, this variable becomes the end date of the simulation and the "LookBack" value specified above will be how far back you look in time for the AnA or retrospective dataset.
+If running an operational configuration in realtime or just using a retrospective dataset (NWM, AORC, ERA5), this will be the defined start date for the NextGen Forcing Engine BMI which is assumed to be the beginning of the forecast cycle (i.e. hour 0) or just the start date of the retrospective dataset. From there the first time step will be hour 1 from the start date specified here. If you're running an AnA configuration however, this variable becomes the end date of the simulation and the "LookBack" value specified above will be how far back you look in time for the AnA operational configuration.
 - Example- RefcstBDateProc: 202210071400
 
 ### ForecastFrequency
@@ -123,6 +125,9 @@ Specify how much (in minutes) of each input forcing is desires for each forecast
 ### ForecastInputOffsets
 This option is for applying an offset to input forcings to use a different forecasted interval. For example, a user may wish to use 4-5 hour forecasted fields from an NWP grid from one of their input forcings. In that instance the offset would be 4 hours, but 0 for other remaining forcings.
 - Example- ForecastInputOffsets: [0, 0]
+
+### NWM_Geogrid
+This option is only for the NWM v3 retorspective forcing module option (27) that requires the geo_em_NWM_DOMAIN.nc file as input for the NextGen Forcings Engine to properly setup up the ESMF grid object for the NWM forcing files since that information is not readily available in the NWM v3 retrospective forcing files. 
 
 ### GeogridIn
 Specify a geogrid file (e.g. latitude, longitude, mesh connectivity, elevation, slope) that defines domain to which the forcings are being processed to.
@@ -153,27 +158,27 @@ This variable is the naming convention of the elevation element variable (descri
 - Example- HGTVAR_ELEM: "Elevation_Element"
 
 ### SLOPE
-This variable is the naming convention of the slope variable (describes the slope estimate for each grid cell (gridded), mesh element (hydrofabric), or mesh node (unstructured)) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the slope variable (describes the slope estimate for each grid cell (gridded), mesh element (hydrofabric), or mesh node (unstructured)) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file and other variables are not readily available to calculate the slope estimates of grid cells or elements. 
 - Example- SLOPE: "Slope"
 
 ### SLOPE_AZIMUTH
-This variable is the naming convention of the slope azmuith variable (describes the slope tilt estimate for each grid cell (gridded), mesh element (hydrofabric), or mesh node (unstructured)) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the slope azmuith variable (describes the slope tilt estimate for each grid cell (gridded), mesh element (hydrofabric), or mesh node (unstructured)) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file and other variables are not readily available to calculate the slope angle estimates of grid cells or elements.
 - Example- SLOPE_AZIMUTH: "Slope_Tilt"
 
 ### SLOPE_ELEM
-This variable is the naming convention of the slope variable (which describes the slope estimate each mesh element ONLY for an unstructured mesh configuration) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the slope variable (which describes the slope estimate each mesh element ONLY for an unstructured mesh configuration) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file and other variables are not readily available to calculate the slope estimates of grid cells or elements.
 - Example- SLOPE: "Slope_Element"
 
 ### SLOPE_AZIMUTH_ELEM
-This variable is the naming convention of the slope azmuith variable (which describes the slope tilt estimates for each mesh element ONLY for an unstructured mesh configuration) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the slope azmuith variable (which describes the slope tilt estimates for each mesh element ONLY for an unstructured mesh configuration) within the "GeogridIn" file the user has specified. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file and other variables are not readily available to calculate the slope angle estimates of grid cells or elements.
 - Example- SLOPE_AZIMUTH: "Slope_Tilt_Element"
 - 
 ### SINALPHA
-This variable is the naming convention of the sine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions OR from a gridded domain configuration that has the same calculated variable. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the sine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions OR from a gridded domain configuration that has the same calculated variable. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file and other variables are not readily available to calculate the slope angle estimates of grid cells or elements.
 - Example- SINALHPA: "SINALPHA"
 
 ### COSALPHA
-This variable is the naming convention of the cosine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions OR from a gridded domain configuration that has the same calculated variable. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file. 
+This variable is the naming convention of the cosine angle of the grid cell slope variable (describes the slope tilt estimate for each grid cell or mesh element) within the "GeogridIn" file the user has specified. As of now, this variable is ONLY assumed to be in the original WRF-Hydro "GeogridIn" file from the older NWM versions OR from a gridded domain configuration that has the same calculated variable. This is optional for the NextGen Forcings Engine BMI ONLY if the user did not specify a downscaling method. If the user specifies a bias calibration or a downscaling method however, then this variable becomes mandatory and the NextGen Forcings Engine BMI will throw an error if this netcdf variable naming convention is not specified in the "GeogridIn" file and other variables are not readily available to calculate the slope angle estimates of grid cells or elements.
 - Example- COSALHPA: "COSALPHA"
 
 ### NodeCoords
@@ -275,6 +280,7 @@ Choose a set of supplemental precipitation file(s) to layer into the final LDASI
 11. Alaska Stage IV NWS Precip
 12. CONUS Stage IV NWS Precip
 13. MRMS PrecipFlag precipitation classification file
+14. Custom Frequency Supplementary Precipitation product (sub-hourly precip)
 - Example- SuppPcp: [1, 5, 13]
 
 ### SuppPcpForcingTypes
@@ -322,5 +328,5 @@ These are options for specifying custom input NetCDF forcing files (in minutes).
 - Example-  custom_input_fcst_freq: []
 
 ### includeLQFrac
-Include LQFRAC variable (liquid fraction of precipitation). Enable if using HRRR, RAP, GFS, MRMS, or NDFD. 
+Include LQFRAC variable (liquid fraction of precipitation). Enable if using HRRR, RAP, GFS, MRMS, or NDFD since the forcing field is readily available for use.  
 - Example- includeLQFrac: 1
