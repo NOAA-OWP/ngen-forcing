@@ -14,7 +14,7 @@ Output: 1
 compressOutput: 0
 floatOutput: 0
 AnAFlag: 0
-LookBack : 8700
+LookBack : -9999
 RefcstBDateProc: "202309030000"
 ForecastFrequency: 60
 ForecastShift: 0
