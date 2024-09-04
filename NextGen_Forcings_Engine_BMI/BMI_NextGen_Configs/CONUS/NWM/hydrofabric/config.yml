@@ -20,7 +20,7 @@ ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [14400]
 ForecastInputOffsets: [0]
-NWM_Geogrid: "./geo_em_AK.nc"
+NWM_Geogrid: "./NWMv3.0_config/parm/domain/geo_em_CONUS.nc"
 GeogridIn: "./NextGen_Domains/hydrofabric/NextGen_Hyfab_v2_VPU_01_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
