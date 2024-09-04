@@ -1099,7 +1099,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     def get_grid_x(self, grid_id: int, x: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
             if grid_id == grid.id:
-                x[:] = grid.grid_x
+                x[:] = np.unique(grid.grid_x)
                 return x
         raise ValueError(f"get_grid_x: grid_id {grid_id} unknown")
 
@@ -1107,7 +1107,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     def get_grid_y(self, grid_id: int, y: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
             if grid_id == grid.id: 
-                y[:] = grid.grid_y
+                y[:] = np.unique(grid.grid_y)
                 return y
         raise ValueError(f"get_grid_y: grid_id {grid_id} unknown")
 
@@ -1115,7 +1115,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
     def get_grid_z(self, grid_id: int, z: NDArray[np.float64]) -> NDArray[np.float64]:
         for grid in self._grids:
             if grid_id == grid.id: 
-                z[:] = grid.grid_z
+                z[:] = np.unique(grid.grid_z)
                 return z
         raise ValueError(f"get_grid_z: grid_id {grid_id} unknown")
 
