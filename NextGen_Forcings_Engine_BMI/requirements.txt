@@ -3,7 +3,10 @@ pandas
 pyyaml
 bmipy
 netCDF4
-os
-pathlib
 esmpy
 scipy
+mpi4py
+dask
+zarr
+s3fs
+xarray
