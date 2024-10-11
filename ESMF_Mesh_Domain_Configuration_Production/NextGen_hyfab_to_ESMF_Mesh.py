@@ -89,12 +89,12 @@ def main(args):
     # Allocate element arrays for center point calculations
     # within hyrofabric data
     element_num_nodes = np.empty(element_count,dtype=np.int32)
-    element_x_coord = np.empty(element_count,dtype=np.float64)
-    element_y_coord = np.empty(element_count,dtype=np.float64)
+    element_x_coord = np.empty(element_count,dtype=np.double)
+    element_y_coord = np.empty(element_count,dtype=np.double)
     if(args.hyfab_parquet != None):
-        element_elevation = np.empty(element_count,dtype=np.float64)
-        element_slope = np.empty(element_count,dtype=np.float64)
-        element_slope_azmuith = np.empty(element_count,dtype=np.float64)
+        element_elevation = np.empty(element_count,dtype=np.double)
+        element_slope = np.empty(element_count,dtype=np.double)
+        element_slope_azmuith = np.empty(element_count,dtype=np.double)
 
     # Get the total number of nodes
     # throughout the entire hydrofabric domain
@@ -115,8 +115,8 @@ def main(args):
     # assign current node id and allocate node arrays to extract
     # data from hydrofabric below
     node_id = np.arange(total_num_nodes)+1
-    node_x_coord = np.empty(total_num_nodes,dtype=np.float128)
-    node_y_coord = np.empty(total_num_nodes,dtype=np.float128)
+    node_x_coord = np.empty(total_num_nodes,dtype=np.double)
+    node_y_coord = np.empty(total_num_nodes,dtype=np.double)
     node_start = 0
 
     # Extract node coordinates, calculate element data,
@@ -153,11 +153,11 @@ def main(args):
             element_slope_azmuith[i] = hyfab.slope_azmuith[i]
 
         if(ccw):
-            node_x_coord[node_start:node_start+num_nodes] = np.array(node_x,dtype=np.float128)
-            node_y_coord[node_start:node_start+num_nodes] = np.array(node_y,dtype=np.float128)
+            node_x_coord[node_start:node_start+num_nodes] = np.array(node_x,dtype=np.double)
+            node_y_coord[node_start:node_start+num_nodes] = np.array(node_y,dtype=np.double)
         else:
-            node_x_coord[node_start:node_start+num_nodes] = np.array(np.concatenate([[node_x[0]],np.flip(node_x[1:])]),dtype=np.float128)
-            node_y_coord[node_start:node_start+num_nodes] = np.array(np.concatenate([[node_y[0]],np.flip(node_y[1:])]),dtype=np.float128)
+            node_x_coord[node_start:node_start+num_nodes] = np.array(np.concatenate([[node_x[0]],np.flip(node_x[1:])]),dtype=np.double)
+            node_y_coord[node_start:node_start+num_nodes] = np.array(np.concatenate([[node_y[0]],np.flip(node_y[1:])]),dtype=np.double)
         node_start += num_nodes
 
     # Assign node data to pandas dataframe
