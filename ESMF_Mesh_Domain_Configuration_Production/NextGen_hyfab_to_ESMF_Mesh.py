@@ -44,13 +44,13 @@ def main(args):
     hyfab_cart = hyfab_cart.reset_index()
 
     # Flag to see if user specified the hydrofabric parquet file for either VPU, subset, of CONUS
-    if(args.hyfab_parquet != None):
+    if(args.parquet != None):
 
         # Open hydrofabric v2 parquet file containing the forcing
         # metadata that highlights catchment characteristics that
         # are needed to implement NCAR bias calibration and
         # downscaling methods within the forcings engine
-        forcing_metadata = pd.read_parquet(args.hyfab_parquet)
+        forcing_metadata = pd.read_parquet(args.parquet)
         forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean','aspect_c_mean','X', 'Y']]
         forcing_metadata = forcing_metadata.sort_values('divide_id')
         forcing_metadata = forcing_metadata.reset_index()
@@ -91,7 +91,7 @@ def main(args):
     element_num_nodes = np.empty(element_count,dtype=np.int32)
     element_x_coord = np.empty(element_count,dtype=np.double)
     element_y_coord = np.empty(element_count,dtype=np.double)
-    if(args.hyfab_parquet != None):
+    if(args.parquet != None):
         element_elevation = np.empty(element_count,dtype=np.double)
         element_slope = np.empty(element_count,dtype=np.double)
         element_slope_azmuith = np.empty(element_count,dtype=np.double)
@@ -147,7 +147,7 @@ def main(args):
         element_x_coord[i] = hyfab.geometry[i].centroid.coords.xy[0][0]
         element_y_coord[i] = hyfab.geometry[i].centroid.coords.xy[1][0]
 
-        if(args.hyfab_parquet != None):
+        if(args.parquet != None):
             element_elevation[i] = hyfab.elevation[i]
             element_slope[i] = hyfab.slope[i]
             element_slope_azmuith[i] = hyfab.slope_azmuith[i]
@@ -230,7 +230,7 @@ def main(args):
     nc.version = "0.9"
 
     # Flag to whether include hydrofabric metadata if parquet file was specified
-    if(args.hyfab_parquet != None):
+    if(args.parquet != None):
         hgt_elem_var = nc.createVariable("Element_Elevation","f8",("elementCount"))
         hgt_elem_var.long_name = "Catchment height above sea level"
         hgt_elem_var.units = "meters"
@@ -257,7 +257,7 @@ def get_options():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('hyfab_gpkg', type=pathlib.Path, help="Hydrofabric geopackage file pathway")
-    parser.add_argument('-parquet',type=pathlib.Path, nargs='?', default = None, help="Hydrofabric parquet file pathway containing the hydrofabric model attributes")
+    parser.add_argument('-parquet',type=pathlib.Path, nargs='?', default = None, help="Hydrofabric parquet file pathway containing the model-attributes of the VPU or subset. This is only required if a user wants to utilize downscaling methods within the NextGen Forcings Engine")
     parser.add_argument("esmf_mesh_output", type=pathlib.Path, help="File pathway to save ESMF netcdf mesh file for hydrofabric")
 
     return parser.parse_args()
