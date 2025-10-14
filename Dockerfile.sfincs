@@ -9,6 +9,9 @@ ENV PYTHON_VERSION=3.11
 ENV MINICONDA_VERSION="latest"
 ENV MINICONDA_INSTALLER_URL="https://github.com/conda-forge/miniforge/releases/${MINICONDA_VERSION}/download/Miniforge3-Linux-x86_64.sh"
 
+ENV NETCDF_C_VERSION="4.7.4" 
+ENV NETCDF_FORTRAN_VERSION="4.5.4" 
+
 # basic tools (works whether the base is apt or dnf)
 RUN set -eux; \
   if command -v apt-get >/dev/null 2>&1; then \
@@ -36,6 +39,44 @@ RUN set -eux; \
   "${CONDA_DIR}/bin/conda" config --system --set always_yes yes --set changeps1 no; \
   "${CONDA_DIR}/bin/conda" install "python=${PYTHON_VERSION}" pip; \
   "${CONDA_DIR}/bin/conda" clean --all --yes
+
+RUN set -eux; \
+    \
+    curl --location --output netcdf-c.tar.gz "https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_C_VERSION%%[a-z]*}.tar.gz"; \
+    mkdir --parents /usr/src/netcdf-c; \
+    tar --extract --directory /usr/src/netcdf-c --strip-components=1 --file netcdf-c.tar.gz; \
+    rm netcdf-c.tar.gz; \
+    \
+    cd /usr/src/netcdf-c; \
+    cmake -B cmake_build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DENABLE_TESTS=OFF \
+    ; \
+    nproc="$(nproc)"; \
+    cmake --build cmake_build --parallel "$nproc" \
+    ; \
+    cmake --build cmake_build --target install ; \
+    \
+    rm --recursive --force /usr/src/netcdf-c
+
+RUN set -eux; \
+    \
+    curl --location --output netcdf-fortran.tar.gz "https://github.com/Unidata/netcdf-fortran/archive/refs/tags/v${NETCDF_FORTRAN_VERSION%%[a-z]*}.tar.gz"; \
+    mkdir --parents /usr/src/netcdf-fortran; \
+    tar --extract --directory /usr/src/netcdf-fortran --strip-components=1 --file netcdf-fortran.tar.gz; \
+    rm netcdf-fortran.tar.gz; \
+    \
+    cd /usr/src/netcdf-fortran; \
+    cmake -B cmake_build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DENABLE_TESTS=OFF \
+    -DCMAKE_Fortran_COMPILER=/opt/rh/gcc-toolset-10/root/usr/bin/gfortran \
+    ; \
+    nproc="$(nproc)"; \
+    cmake --build cmake_build --parallel "$nproc" \
+    ; \
+    cmake --build cmake_build --target install ; \
+    \
+    rm --recursive --force /usr/src/netcdf-fortran
+
+#Env for netcdf-fortran
+ENV LD_LIBRARY_PATH=/usr/local/lib64
 
 # venv
 ENV VENV_DIR=/opt/venv
