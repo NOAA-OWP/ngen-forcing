@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1.7-labs
+
+ARG TARGETPLATFORM=linux/amd64
+ARG SFINCS_CPU_IMAGE_TAG=latest
+
+FROM --platform=$TARGETPLATFORM deltares/sfincs-cpu:${SFINCS_CPU_IMAGE_TAG}
+
+ENV PYTHON_VERSION=3.11
+ENV MINICONDA_VERSION="latest"
+ENV MINICONDA_INSTALLER_URL="https://github.com/conda-forge/miniforge/releases/${MINICONDA_VERSION}/download/Miniforge3-Linux-x86_64.sh"
+
+# basic tools (works whether the base is apt or dnf)
+RUN set -eux; \
+  if command -v apt-get >/dev/null 2>&1; then \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates curl bash bzip2 unzip tar findutils; \
+    rm -rf /var/lib/apt/lists/*; \
+  elif command -v dnf >/dev/null 2>&1; then \
+    dnf -y install --setopt=install_weak_deps=False --setopt=deltarpm=false \
+      ca-certificates curl bash bzip2 unzip tar findutils; \
+    dnf clean all && rm -rf /var/cache/dnf; \
+  fi
+
+# locale & python env
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+    PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
+
+# Miniforge (Conda)
+ENV CONDA_DIR=/opt/conda
+ENV PATH="${CONDA_DIR}/bin:${CONDA_DIR}/condabin:${PATH}"
+RUN set -eux; \
+  curl -fsSL -o /tmp/miniforge.sh ${MINICONDA_INSTALLER_URL} ; \
+  bash /tmp/miniforge.sh -b -p "${CONDA_DIR}"; \
+  rm /tmp/miniforge.sh; \
+  "${CONDA_DIR}/bin/conda" config --system --set always_yes yes --set changeps1 no; \
+  "${CONDA_DIR}/bin/conda" install "python=${PYTHON_VERSION}" pip; \
+  "${CONDA_DIR}/bin/conda" clean --all --yes
+
+# venv
+ENV VENV_DIR=/opt/venv
+ENV PATH=${VENV_DIR}/bin:$PATH
+RUN set -eux; python -m venv "${VENV_DIR}"; \
+  "${VENV_DIR}/bin/pip" install --no-cache-dir --upgrade pip setuptools wheel
+
+# python deps
+COPY coastal/SFINCS/requirements.txt /tmp/requirements.sfincs.txt
+RUN --mount=type=cache,target=/root/.cache/pip,id=sfincs-pip \
+  set -eux; pip install --no-cache-dir -r /tmp/requirements.sfincs.txt; rm /tmp/requirements.sfincs.txt
+
+# workspace & default shell
+RUN set -eux; mkdir -p /workspace /data
+WORKDIR /
+VOLUME ["/data"]
+
+# keep it simple so overrides behave
+CMD ["/bin/bash","-l"]

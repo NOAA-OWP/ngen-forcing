@@ -1,0 +1,8 @@
+# This file is intended to be an example of how one could list domains available to run
+domain:
+  - name: texas_example
+    path: ..\..\..\coastalmodels\sfincs\texas_example\ # path to base model files
+    region: texas   # General region or basin group
+    epsg: 32615
+    notes: >
+      Example SFINCS domain covering an area of Texas coastline

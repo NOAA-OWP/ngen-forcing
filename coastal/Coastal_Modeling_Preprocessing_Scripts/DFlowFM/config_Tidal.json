@@ -1,0 +1,8 @@
+{
+    "region": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Pacific.pol",
+    "output_directory": "./test",
+    "global_pli":  "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Pacific/D-Flow/CONT_BND.pli",
+    "tidal": "true",
+    "start_time": "2014-07-31_00:00",
+    "stop_time": "2014-08-09_00:00"
+}

@@ -1,133 +1,55 @@
-# Quick and dirty program to pull down operational 
-# NBM data on the Gaussian grid in GRIB2 format. 
-
-# Logan Karsten
-# National Center for Atmospheric Research
-# Research Applications Laboratory
-
-import datetime
-import urllib
-from urllib import request
-import http
-from http import cookiejar
 import os
-import sys
-import shutil
-import time
-import requests
-from bs4 import BeautifulSoup
-import argparse
 
-def get_url_paths(url, ext='', params={}):
-    response = requests.get(url, params=params)
-    if response.ok:
-        response_text = response.text
-    else:
-        return response.raise_for_status()
-    soup = BeautifulSoup(response_text, 'html.parser')
-    parent = [url + node.get('href') for node in soup.find_all('a') if node.get('href').endswith(ext)]
-    return parent
-
-def main(args):
-    outDir = args.outDir
-    lookBackHours = args.lookBackHours
-    cleanBackHours = args.cleanBackHours
-    lagBackHours = args.lagBackHours
-
-    dNowUTC = datetime.datetime.utcnow()
-    dNow = datetime.datetime(dNowUTC.year,dNowUTC.month,dNowUTC.day,dNowUTC.hour)
-    ncepHTTP = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/v4.1"
-
-    pid = os.getpid()
-    lockFile = outDir + "/GET_NBM_Full.lock"
-
-    # First check to see if lock file exists, if it does, throw error message as
-    # another pull program is running. If lock file not found, create one with PID.
-    if os.path.isfile(lockFile):
-        fileLock = open(lockFile,'r')
-        pid = fileLock.readline()
-        print("ERROR: Another NBM Alaska Fetch Program Running. PID: " + pid + ". Please remove lockfile before attempting to execute another file extraction. Exiting script")
-        sys.exit(1)
-    else:
-        fileLock = open(lockFile,'w')
-        fileLock.write(str(os.getpid()))
-        fileLock.close()
-
-    for hour in range(cleanBackHours,lookBackHours,-1):
-        # Calculate current hour.
-        dCurrent = dNow - datetime.timedelta(seconds=3600*hour)
-
-        # Compose path to directory containing data. 
-        nbmCleanDir = outDir + "/blend." + dCurrent.strftime('%Y%m%d') + "/" + dCurrent.strftime('%H') + "/core"
-
-        # Check to see if directory exists. If it does, remove it. 
-        if os.path.isdir(nbmCleanDir):
-            print("Removing old NBM data from: " + nbmCleanDir)
-            shutil.rmtree(nbmCleanDir)
-
-        # Check to see if parent directory is empty.
-        nbmCleanDir = outDir + "/blend." + dCurrent.strftime('%Y%m%d')
-        if os.path.isdir(nbmCleanDir):
-            if len(os.listdir(nbmCleanDir)) == 0:
-                print("Removing empty directory: " + nbmCleanDir)
-                shutil.rmtree(nbmCleanDir)
+from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 
 
-    # Now that cleaning is done, download files within the download window. 
-    for hour in range(lookBackHours,lagBackHours,-1):
-        # Calculate current hour.
-        dCurrent = dNow - datetime.timedelta(seconds=3600*hour)
+class NBMAlaskaDownloader(ForecastDownloader):
+    """
+    Downloader for Alaska NBM forecast data.
 
-        nbmOutDir1 = outDir + "/blend." + dCurrent.strftime('%Y%m%d')
-        if not os.path.isdir(nbmOutDir1):
-            print("Making directory: " + nbmOutDir1)
-            os.mkdir(nbmOutDir1)
+    - Files are located under: blend.YYYYMMDD/HH/core/
+    - Files of interest end with .ak.grib2
+    """
 
-        nbmOutDir2 = nbmOutDir1 + "/" + dCurrent.strftime('%H') + "/core"
-        
-        httpDownloadDir = ncepHTTP + "/blend." + dCurrent.strftime('%Y%m%d') + "/" + dCurrent.strftime('%H') + "/core/"
-        if not os.path.isdir(nbmOutDir2):
-            print('Making directory: ' + nbmOutDir2)
-            os.makedirs(nbmOutDir2)
+    @property
+    def base_url(self):
+        return "https://noaa-nbm-grib2-pds.s3.amazonaws.com"
 
-        # Request list of NBM Alaska files in directory since
-        # their forecast output intervals are inconsistent
-        ext = ".ak.grib2"
-        nbm_urls = get_url_paths(httpDownloadDir,ext)
-        for i in range(len(nbm_urls)):
-            fileDownload = nbm_urls[i].split('/')[-1]
-            outFile = nbmOutDir2 + "/" + fileDownload
-            if not os.path.isfile(outFile):
-                download_complete = False
-                start_time = time.time()
-                timer = 0.0
-                print("Pulling Alaska NBM file: " + nbm_urls[i])
-                while(download_complete == False and timer < 600.0):
-                    try:
-                        request.urlretrieve(nbm_urls[i],outFile)
-                        download_complete = True
-                    except:
-                        timer = time.time() - start_time
+    def should_process_hour(self, d_start):
+        return d_start.hour in [0, 6, 12, 18]
 
-                if(download_complete == False):
-                    print("Unable to retrieve: " + nbm_urls[i])
-                    print("Data may not available yet...")
+    def get_download_targets(self, d_start):
+        hourly = range(1, 37)  # 1 through 36
+        every_3h = range(36, 193, 3)  # 123 through 240, step of 3
+        every_6h = range(198, 265, 6)  # 198 through 264, step of 6
+        return list(hourly) + list(every_3h) + list(every_6h) if d_start.hour in [0, 6, 12, 18] else []
+        # return range(1, 265) if d_start.hour in [0, 6, 12, 18] else []
 
-    # Remove the LOCK file.
-    os.remove(lockFile)
+    def build_output_dir(self, d_start, _):
+        return os.path.join(
+            self.out_dir,
+            f"blend.{d_start.strftime('%Y%m%d')}",
+            d_start.strftime('%H'),
+            "core"
+        )
 
-def get_options():
-    parser = argparse.ArgumentParser()
+    def build_file_url_and_name(self, d_start, target, _):
+        fhr_str = f"f{str(target).zfill(3)}"
+        filename = f"blend.t{d_start.strftime('%H')}z.core.{fhr_str}.ak.grib2"
+        url = os.path.join(
+            self.base_url,
+            f"blend.{d_start.strftime('%Y%m%d')}",
+            d_start.strftime('%H'),
+            "core",
+            filename,
+        )
+        return url, filename
 
-    parser.add_argument('outDir', type=str, help="Output directory pathway where the NOMADS data will be downloaded to")
-    parser.add_argument('--lookBackHours', type=int, default=24, help="How many hours to look back for forecast data cycles")
-    parser.add_argument('--cleanBackHours', type=int, default=240, help="Period between this time and the beginning of the lookback period to cleanout old data")
-    parser.add_argument('--lagBackHours', type=int, default=6, help="Wait at least this long back before searching for files")
+    @property
+    def recursive_cleanup(self) -> bool:
+        return True
 
-
-    return parser.parse_args()
 
 if __name__ == "__main__":
-    args = get_options()
-    main(args)
-
+    downloader = NBMAlaskaDownloader.from_cli_args()
+    downloader.run()

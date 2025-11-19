@@ -2,10 +2,10 @@ import datetime
 import os
 
 from . import bias_correction
+from . import disaggregateMod
 from . import downscale
 from . import err_handler
 from . import layeringMod
-from . import disaggregateMod
 
 
 def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMod, MpiConfig, OutputObj):
@@ -74,9 +74,8 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
                 if not os.path.isdir(fcstCycleOutDir):
                     try:
                         os.mkdir(fcstCycleOutDir)
-                    except:
-                        ConfigOptions.errMsg = "Unable to create output " \
-                                               "directory: " + fcstCycleOutDir
+                    except Exception:
+                        ConfigOptions.errMsg = "Unable to create output directory: " + fcstCycleOutDir
                         err_handler.err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)
 
@@ -89,15 +88,14 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
             else:
                 log_time = ConfigOptions.current_fcst_cycle
 
-            ConfigOptions.logFile = ConfigOptions.scratch_dir + "/LOG_" + ConfigOptions.nwmConfig + \
-                                    ('_' if ConfigOptions.nwmConfig != "long_range" else "_mem" + str(ConfigOptions.cfsv2EnsMember)+ "_") + \
-                                    ConfigOptions.d_program_init.strftime('%Y%m%d%H%M') + \
-                                    "_" + log_time.strftime('%Y%m%d%H%M')
+            ConfigOptions.logFile = ConfigOptions.scratch_dir + "/LOG_" + ConfigOptions.nwmConfig + (
+                '_' if ConfigOptions.nwmConfig != "long_range" else "_mem" + str(
+                    ConfigOptions.cfsv2EnsMember) + "_") + ConfigOptions.d_program_init.strftime('%Y%m%d%H%M') + "_" + log_time.strftime('%Y%m%d%H%M')
 
             # Initialize the log file.
             try:
                 err_handler.init_log(ConfigOptions, MpiConfig)
-            except:
+            except Exception:
                 err_handler.err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)
 
@@ -127,7 +125,7 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
 
             ConfigOptions.current_output_step = outStep
             OutputObj.outDate = ConfigOptions.current_fcst_cycle + datetime.timedelta(
-                    seconds=ConfigOptions.output_freq * 60 * outStep
+                seconds=ConfigOptions.output_freq * 60 * outStep
             )
             ConfigOptions.current_output_date = OutputObj.outDate
 
@@ -142,7 +140,7 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
                 ConfigOptions.prev_output_date = ConfigOptions.current_output_date
             else:
                 ConfigOptions.prev_output_date = ConfigOptions.current_output_date - datetime.timedelta(
-                        seconds=ConfigOptions.output_freq * 60
+                    seconds=ConfigOptions.output_freq * 60
                 )
             if MpiConfig.rank == 0 and show_message:
                 ConfigOptions.statusMsg = '========================================='
@@ -154,14 +152,12 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
 
             # Compose the expected path to the output file. Check to see if the file exists,
             # if so, continue to the next time step. Also initialize our output arrays if necessary.
-            OutputObj.outPath = fcstCycleOutDir + "/" + file_date.strftime('%Y%m%d%H%M') + \
-                                ".LDASIN_DOMAIN1"
+            OutputObj.outPath = fcstCycleOutDir + "/" + file_date.strftime('%Y%m%d%H%M') + ".LDASIN_DOMAIN1"
             # MpiConfig.comm.barrier()
 
             if os.path.isfile(OutputObj.outPath):
                 if MpiConfig.rank == 0:
-                    ConfigOptions.statusMsg = "Output file: " + OutputObj.outPath + " exists. Moving " + \
-                                              " to the next output timestep."
+                    ConfigOptions.statusMsg = "Output file: " + OutputObj.outPath + " exists. Moving to the next output timestep."
                     err_handler.log_msg(ConfigOptions, MpiConfig)
                 err_handler.check_program_status(ConfigOptions, MpiConfig)
                 continue
@@ -177,7 +173,7 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
 
                     # break loop if done early
                     if input_forcings.skip is True:
-                        show_message = False            # just to avoid confusion
+                        show_message = False  # just to avoid confusion
                         break
 
                     # Regrid forcings.
@@ -229,7 +225,7 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
 
                     if forceKey == 10:
                         ConfigOptions.currentCustomForceNum = ConfigOptions.currentCustomForceNum + 1
-                
+
                 else:
                     # Process supplemental precipitation if we specified in the configuration file.
                     if ConfigOptions.number_supp_pcp > 0:
@@ -259,7 +255,7 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
 
                                 # Layer in the supplemental precipitation into the current output object.
                                 layeringMod.layer_supplemental_forcing(OutputObj, suppPcpMod[suppPcpKey],
-                                                                    ConfigOptions, MpiConfig)
+                                                                       ConfigOptions, MpiConfig)
                                 err_handler.check_program_status(ConfigOptions, MpiConfig)
 
                     # Call the output routines
@@ -281,14 +277,14 @@ def process_forecasts(ConfigOptions, wrfHydroGeoMeta, inputForcingMod, suppPcpMo
                 # Close the log file.
                 try:
                     err_handler.close_log(ConfigOptions, MpiConfig)
-                except:
+                except Exception:
                     err_handler.err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
 
             # Success.... Now touch an empty complete file for this forecast cycle to indicate
             # completion in case the code is re-ran.
             try:
                 open(completeFlag, 'a').close()
-            except:
+            except Exception:
                 ConfigOptions.errMsg = "Unable to create completion file: " + completeFlag
                 err_handler.log_critical(ConfigOptions, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)

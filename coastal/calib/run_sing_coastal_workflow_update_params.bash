@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+
+# User specific aliases and functions
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/opt/conda/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
+        . "/opt/conda/etc/profile.d/conda.sh"
+    else
+        export PATH="/opt/conda/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+#
+
+#conda activate ${CONDA_ENVS_PATH}/$CONDA_ENV_NAME
+conda activate $CONDA_ENV_NAME
+
+source ./update_param.bash
+
+export RESTART_WRITE_HR=2
+
+nwm_coastal_update_params ${STARTPDY}${STARTCYC} $COASTAL_DOMAIN $FCST_LENGTH_HRS $HOT_START_FILE 
+
+
+

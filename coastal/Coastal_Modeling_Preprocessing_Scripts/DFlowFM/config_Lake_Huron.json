@@ -1,0 +1,16 @@
+{
+    "region_US": "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Lake_Michigan-Huron/D-Flow/Huron/Enclosure_Huron_M2024_1_close.pol",
+    "region_Can": "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Lake_Michigan-Huron/D-Flow/Huron/Enclosure_Huron_M2024_1_close.pol",
+    "boundary_csv_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/LMH_InflowsOutflows_conus.csv",
+    "boundary_csv_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/LMH_InflowsOutflows_gl.csv",
+    "NWM_shpfile_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/Lake_Michigan_Huron_US_Semi_Circle/LMH_InflowsOutflows_CCBuff_conus.shp",
+    "NWM_shpfile_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/Lake_Michigan_Huron_Canada_Semi_Circle/LMH_InflowsOutflows_CCBuff_gl.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/DFlowFM_Huron",
+    "TRoute_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/TRoute_Lake_Michigan_Huron_US",
+    "TRoute_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/TRoute_Lake_Michigan_Huron_Canada",
+    "FVCOM": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Michigan_Huron/FVCOM",
+    "lake" : "Michigan_Huron",
+    "global_pli":  "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Lake_Michigan-Huron/D-Flow/Huron/Michigan_Huron_BND.pli",
+    "start_time": "2020-06-01_00:00",
+    "stop_time": "2020-07-21_00:00"
+}

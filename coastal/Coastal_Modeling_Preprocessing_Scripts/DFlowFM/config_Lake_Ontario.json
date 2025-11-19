@@ -1,0 +1,16 @@
+{
+    "region_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Lake_Ontario_Enclosure.pol",
+    "region_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Lake_Ontario_Enclosure.pol",
+    "boundary_csv_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/LO_InflowsOutflows_conus.csv",
+    "boundary_csv_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/LO_InflowsOutflows_gl.csv",
+    "NWM_shpfile_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/Lake_Ontario_US_Semi_Circle/LO_InflowsOutflows_CCBuff_conus.shp",
+    "NWM_shpfile_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/Lake_Ontario_Canada_Semi_Circle/LO_InflowsOutflows_CCBuff_gl.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/DFlowFM",
+    "TRoute_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/TRoute_Lake_Ontario_US",
+    "TRoute_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/TRoute_Lake_Ontario_Canada",
+    "FVCOM": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Ontario/FVCOM/Lake_Ontario",
+    "lake" : "Ontario",
+    "global_pli":  "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Lake_Ontario/D-Flow/Ontario_BND.pli",
+    "start_time": "2019-04-01_00:00",
+    "stop_time": "2019-09-01_00:00"
+}

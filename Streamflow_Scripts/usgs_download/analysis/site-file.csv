@@ -1,0 +1,324 @@
+NIDID,Office,gage,gagedFlowl,NHDWaterbo,lakeLink,RFC,Reviewer,Status,Corrected_,Comments
+CO01281,NWDM,CHFI.Flow-Out.Inst.1Hour.0.Best-NWO,188657,188031,188743,MBRFC,KMS, ,0,This is total Outflow
+CO01280,NWDM,CHCR.Flow-Out.Inst.1Hour.0.Best-NWO,230705,229217,230705,MBRFC,KMS, ,0,There is a DA gage on the next downstream flowline
+CA00265,SPK,SJR TUL-Tulloch-Stanislaus R.Flow-Res Out.Ave.~1Day.1Day.Calc-usbr,349887,347987,349887,CNRFC,SK, ,349887,Moved to lake outlet. Good lake assoc.
+OK10313,SWT,HEYB.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,373089,371555,373089,ABRFC,MC, ,0, 
+OK10316,SWT,CANT.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,390140,389804,390140,ABRFC,MC, ,390140,Moved to lake outflow from interior flowline. DA gage two flowlines downstream
+OK10311,SWT,TENK.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,402464,402142,402464,ABRFC,LKR, ,0,Tenkiller Lake
+OK02504,SWT,THUN.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,482124,481656,482124,ABRFC,MC, ,0,DA gage two flowlines downstream
+KY03027,LRL,Buckhorn.Flow-Outflow.Ave.1Hour.1Hour.lrldlb-comp,487134,486928,487986,OHRFC,GID 2, ,0, 
+OK10300,SWT,HUGO.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,592836,591880,592836,ABRFC,LKR, ,592836,Hugo Lake; link is inside WB. FlowlineID 592836 is the outlet link.
+PCLO2,SWT,PINE.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,617464,617546,617698,ABRFC,LKR, ,0,Pine Creek Lake
+OK10307,SWT,BROK.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,630139,630011,630371,ABRFC,MC, ,0, 
+OK02502,SWT,FCOB.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,683617,681831,683617,ABRFC,MC, ,0,DA gage one flowline downstream
+KS00009,NWDM,PERY.Flow-Out.Ave.1Day.1Day.Best-NWK,747785,746373,748101,MBRFC,MC, ,0,co-located with a USGS DA 06890900
+OK10302,SWT,NEWT.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,833544,832544,833542,ABRFC,LKR, ,0,Newt Graham
+OK20508,SWT,BIRC.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,846662,846266,846662,ABRFC,MC, ,0, 
+KY03029,LRH,Dewey-Outflow.Flow.Inst.1Hour.0.OBS,886789,885333,886789,OHRFC,GID 2, ,0, 
+CO00050,SPA,Trinidad-Trinidad DS.Flow.Inst.~1Hour.0.MRS,938210,936750,938210,ABRFC,LKR, ,938210,move to lake outlet; gaged flowline is directly downstream ; Trinidad Lake
+CO00299,SPA,Pueblo.Flow.Inst.~1Hour.0.ResData,952539,950159,952539,ABRFC,LKR, ,952539,move to lake outlet link; current is interior
+TX00020,MVK,Jferson_BigC_Bay.Flow.Inst.15Minutes.0.DCP-rev,1011780,1010832,1011780,LMRFC,KMS, ,0,Keeping gage this beacuse high temporal res outflow data (15 minutes vs JFNT2 1 hrs)
+KY03028,LRH,Fishtrap-Outflow.Flow.Inst.1Hour.0.OBS,1089105,1086587,1089105,OHRFC,GID 2, ,0,Linked to interior flowline.
+VA195001,LRH,NoFkPound-Outflow.Flow.Inst.1Hour.0.OBS,1089209,1086597,1089209,OHRFC,GID 2, ,0, 
+TX00015,SWF,TBLT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1111449,1111211,1111447,WGRFC,MC, ,0,DA gage one flowline downstream
+TX00021,SWF,TXKT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1128563,1127701,1128669,LMRFC,KMS, ,0,There is a DA gage two flowlines downstream
+TX00011,SWF,JSPT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1159213,1158647,1159739,WGRFC,MC, ,0, 
+TX00003,SWF,BNBT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1269108,1267968,1269108,WGRFC,MC, ,0,DA gage one flowline downstream
+TX00007,SWF,LVNT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1292396,1291638,1292396,WGRFC,KMS, ,0, 
+TX00699,SWF,BCAT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1306447,1304859,1306447,WGRFC,MC, ,0, 
+CO01691,SPK,Paonia.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,1338026,1336910,1338026,CBRFC,SK, ,0,There is a DA gage on the next downstream flowline
+TX00001,SWF,BDWT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1446926,1445978,1447048,WGRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 08063800
+MO12084,NWDM,SMIE.Flow-Out.Ave.1Day.1Day.Best-NWK,2530631,2529647,2530631,MBRFC,KMS, ,0,There is a DA gage 2 flowlines downstream
+TX00002,SWF,BLNT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,2572334,2571688,2572334,WGRFC,MC, ,0,DA gage three flowlines downstream
+PA00011,NAP,PromptonDS.Flow.Inst.1Hour.0.Rev-DCP,2739772,2739068,2739824,MARFC,MC, ,0,"Removed """"""""DSPRP.""""""""  because there are very high negative values (-2147480957).  redundant with DSPRP.Flow-Reg.Inst.1Hour.0.DCP-rev"
+CA10186,SPK,SAC SHA-Shasta Dam-Sacramento R.Flow-Res Out.Ave.~1Day.1Day.Calc-usbr,2782699,2781987,7966205,CNRFC,SK, ,0, 
+MT00560,NWDM,HSMT.Flow.Inst.1Hour.0.Best-NWDM,3024846,3022162,3024850,MBRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 06065500
+MT00134,NWDM,HEBN.Flow-Out.Ave.1Day.1Day.Raw-USBR,3059980,3056866,3059980,MBRFC,MC, ,0,DA gage two flowlines downstream
+OK02503,SWT,FOSS.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,678897,3140356,3142766,ABRFC,LKR, ,0,"gaged flowline below, link 678895."
+CO01675,SPK,Blue Mesa.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,3254269,3252975,3254269,CBRFC,KMS, ,0, 
+OH00008,LRH,DeerCr-Outflow.Flow.Inst.1Hour.0.OBS,3484055,3483493,3484527,OHRFC,GID 2, ,0, 
+TX00004,SWF,SMCT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,3589578,3588682,3589578,WGRFC,MC, ,0,DA gage two flowlines downstream
+KS00026,NWDM,CLIN.Flow-Out.Ave.1Day.1Day.Best-NWK,24668460,3730511,24668460,MBRFC,MC, ,0,DA gage seven flowlines downstream
+AR01200,SWL,Gillham_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,3745746,3745418,3746224,ABRFC,MC, ,0, 
+AR01202,SWL,Dierks_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,3745814,3745478,3746252,ABRFC,KMS, ,0,Redundant with Dierks_Saline_R. Dierks_Saline_R is not in the list. SK
+AR01201,SWL,DeQueen_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,3745840,3745526,3746272,ABRFC,MC, ,0, 
+PA01939,LRP,LakeLynn-Outflow.Flow.Inst.1Hour.0.OBS,3773975,3773141,3773977,OHRFC,GID 2, ,0, 
+CA00173,SPK,SJR CMN-Camanche Res-Mokelumne R.Flow-Res Out.Ave.~1Day.1Day.MANUAL,3953573,3950979,3953573,CNRFC,MC, ,0, 
+WV09901,LRH,EastLynn-Outflow.Flow.Inst.1Hour.0.OBS,3964916,3964366,3964916,OHRFC,GID 2, ,0,Linked to interior flowline.
+OH00028,LRL,CJBrown.Flow-Outflow.Ave.1Hour.1Hour.lrldlb-comp,3985570,3984810,3985570,OHRFC,GID 2, ,0, 
+KY03007,LRL,Green.Flow-Outflow.Inst.0.0.lrldlb-comp,4003242,3999688,4003242,OHRFC,GID 2, ,0, 
+KY03011,LRL,Nolin.Flow-Outflow.Inst.0.0.lrldlb-comp,4005074,4003290,4005074,OHRFC,KMS, ,0, 
+MN00581,MVP,Highway75_Dam-ServiceSpillway.Flow-Out.Inst.~1Day.0.CEMVP-Legacy,4086200,4083202,4085966,NCRFC,MC, ,0, 
+MN00579,MVP,MarshLake_Dam.Flow.Inst.1Hour.0.Fcst-CEMVP,4086016,4083248,4086000,NCRFC,MC, ,0, 
+TX00009,SWF,DAWT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,4133217,4132531,4133643,WGRFC,MC, ,0,DA gage one flowline downstream
+MT00569,NWDM,CLCA.Flow-Out.Ave.1Day.1Day.Raw-USBR,4165978,4167440,4170578,MBRFC,KMS, ,0, 
+MT00905,NWDM,LRMT.Flow-Out.Ave.1Day.1Day.Raw-USBR,4169038,4167460,4170626,MBRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 06012500
+PA00008,NAP,WhiteHaven.Flow.Inst.1Hour.0.Rev-DCP,4186403,4185065,4186393,MARFC,MC, ,0,link is co-located with USGS DA gauge 01447800;  name: Francis E. Walter Dam
+PA00010,NAP,BeltzvilleDS.Flow.Inst.1Hour.0.Rev-DCP,4187341,4186689,4188143,MARFC,KS, ,0,"SK removed """"""""Beltzville.Flow"""""""" because it is computed flow. redundant with Beltzville.Flow-In.Inst.1Hour.0.Computed.link is co-located with USGS DA gauge 01449800"
+WV06702,LRH,Summersville-Outflow.Flow.Inst.1Hour.0.OBS,4548090,4547794,4548090,OHRFC,GID 2, ,0, 
+MN00582,MVP,MissHW_PineRiver.Flow-Out.Inst.~1Day.0.CEMVP-Legacy,4622350,4620258,4622350,NCRFC,MC, ,0, 
+PA00003,NAB,Curwensville.Flow-Reg.Inst.1Hour.0.computed outflow,4675099,4672717,4675099,MARFC,KMS, ,0, 
+PA00921,NAP,BlueMarshDS.Flow.Inst.1Hour.0.Rev-DCP,4783213,4782813,4783457,MARFC,MC, ,0,Snapped to DA gage flowline. Gage ID 01470960
+MN00585,MVP,MissHW_Leech.Flow-Out.Inst.~1Day.0.CEMVP-Legacy,4819627,4817675,4819627,NCRFC,MC, ,0, 
+OH00017,LRH,PaintCr-Outflow.Flow.Inst.1Hour.0.OBS,5232686,5231436,5233352,OHRFC,GID 2, ,0, 
+TX00016 ,SWF,ACTT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5523882,5531274,5531594,WGRFC,MC, ,0, 
+TX00013,SWF,SOMT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5570841,5569731,5570785,WGRFC,MC, ,0,DA gage two flowlines downstream
+TX08006,SWF,GGLT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5671667,5670445,5671667,WGRFC,KMS, ,0,DA gage on next downstream flowline
+TX00022,SWF,TBRT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5702763,5702167,5702849,WGRFC,KMS, ,0, 
+TX00006,SWF,HORT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5741918,5741244,5742086,WGRFC,MC, ,0, 
+KS00025,NWDM,WEBR.Flow-Out.Ave.1Day.1Day.Best-NWK,5954109,5943595,5945295,MBRFC,KMS, ,0, 
+OK10315,SWT,WIST.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,6048164,6043008,6047652,ABRFC,MC, ,0, 
+CT00506,NAE,CRD.Flow.Ave.15Minutes.6Hours.DCP-rev,6107093,6106841,6107211,NERFC,MC, ,0,DA gage four flowlines downstream
+GA00821,SAM,Carters.Flow-Out.Ave.1Hour.1Hour.Raw-SCADA_SAM,6479573,6479321,6479573,SERFC,AM, ,0, 
+GA00824,SAM,Buford.Flow-Out.Inst.15Minutes.0.Raw-UR,2045337,6495106,2051313,SERFC,MC, ,0,Snapped to DA gage flowline. Gage ID 02334430
+GA03742,SAM,Allatoona.Flow-Out.Inst.15Minutes.0.Raw-UR,6499244,6495140,6505972,SERFC,AM, ,0, 
+IA00017,MVR,SAYI4.Flow-Out.Inst.30Minutes.0.rev,6597700,6597410,6597700,NCRFC,MC / KMS, ,6597700,Moved to lake outlet (KMS). Correct lake association. DA gage nine flowlines downstream
+MN00576,MVP,TraverseWR_Dam.Flow-Out.Inst.15Minutes.0.rev-working,909020730,6639922,6641256,NCRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 05050000
+MN00574,MVP,Orwell_Dam.Flow-Out.Inst.15Minutes.0.rev,909020763,6657709,909020763,NCRFC,MC, ,0,There is a DA gage on the next downstream flowline
+WV08902,LRH,Bluestone-Outflow.Flow.Inst.1Hour.0.OBS,6906513,6906421,6906513,OHRFC,GID 2, ,0,Linked to interior flowline.
+WV10924,LRH,RDBailey-Outflow.Flow.Inst.1Hour.0.OBS,6935786,6933708,6935752,OHRFC,GID 2, ,0, 
+KS00013,NWDM,WILN.Flow-Out.Ave.1Day.1Day.Best-NWK,7331754,7330556,7331754,MBRFC,KMS, ,0,There is a DA gage on the next downstream flowline
+KS00022,NWDM,KIRN.Flow-Out.Ave.1Day.1Day.Best-NWK,7347909,7344817,7347909,MBRFC,KMS, ,7347909,Moved to lake outlet
+MO30201,NWDM,PODT.Flow-Out.Ave.1Day.1Day.Best-NWK,7387495,7387259,7388811,MBRFC,KMS, ,0,There is a DA gage on the next downstream flowline
+MO30203,SWL,Clearwater_Dam.Flow-Res Out.Ave.1Hour.1Hour.Regi-Comp,7669162,7666880,7669104,LMRFC,KMS, ,0,This A2W record represents outflow. Another two flowlines up represents tailwater
+AR00162,SWL,Dardanelle.Flow.Inst.1Hour.0.CCP-Comp,7790194,7767759,7771859,ABRFC,KMS, ,0,Removed redundant point (LD10 Dardanelle)
+AR00157,SWL,Blue_Mtn_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,7803225,7801259,7803225,ABRFC,MC, ,0, 
+AR00158,SWL,Nimrod_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,7830220,7827790,7830220,ABRFC,MC, ,0, 
+CA10102,SPK,BLB BLB-Black Butte Lake-Stony Cr.Flow-Res Out.Ave.1Hour.1Hour.Calc-val,12074514,7989989,7992981,CNRFC,SK / KMS, ,12074514,"This represents total lake outflow. Redundant with """"""""BLB BLB-North Diversion-Stony"""""""". KMS"
+CA01107,SPK,SAC INV-Indian Valley-NF Cache Cr.Flow-Res Out.Ave.~1Day.1Day.MANUAL,8007863,8005383,8007863,CNRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 11451300
+CA00863,SPK,SAC BUL-Bullards Bar Res-Yuba R.Flow-Res Out.Ave.~1Day.1Day.Calc-cdec,8060745,8060079,8062451,CNRFC,SK, ,0, 
+CA10303,SPK,WRS WRS-Lake Sanoma-Russian.Flow-Res Out.Ave.1Hour.1Hour.Calc-val,8276453,8271433,8276453,CNRFC,SK, ,8276453,Moved to lake outlet. Good lake assoc.
+LA00180,MVK,Wallace Lake.Flow.Inst.1Hour.0.DCP-rev,8342721,8341399,8342801,LMRFC,KMS, ,0, 
+TX04359,SWT,PATM.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,8348337,8347705,8348979,ABRFC,MC, ,0,DA gage two flowlines downstream
+OK22203,SWT,WAUR.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,8358571,8357843,8358571,ABRFC,KMS, ,0, 
+VA089001,SAW,ROA PLP.Flow-Out.Inst.1Hour.0.DSS,8675539,8674019,8675539,SERFC,AM, ,0, 
+CA10179,SPK,TRK PRS-Prosser-Prosser Cr.Flow-Res Out.Ave.~1Day.1Day.MANUAL,8933720,8932974,8934488,CNRFC,SK, ,0, 
+NC00300,SAW,YAD WKS.Flow-Out.Inst.1Hour.0.DSS,9251746,9250140,9251746,SERFC,AM, ,0, 
+NY01055,NAB,Whitney Point.Flow-Reg.Inst.1Hour.0.computed outflow OLD,9423843,9422503,9424107,MARFC,KMS, ,0, 
+UT10125,SPK,Lost Creek.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,10090806,10089124,10090806,CBRFC,SK, ,0,There is a DA gage on the next downstream flowline
+UT10120,SPK,Echo.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,10093132,10091588,10093132,CBRFC,SK, ,0,There is a DA gage on the next downstream flowline
+UT10131,SPK,Rockport.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,10093168,10091800,10093168,CBRFC,SK, ,0,There is a DA gage on the next downstream flowline
+KS00010,NWDM,POMA.Flow-Out.Ave.1Day.1Day.Best-NWK,10116002,10114004,940290180,MBRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 06912500
+TN15901,LRN,COHT1-CORDELL_HULL.Flow.Ave.1Hour.1Hour.man-rev,10177405,10175533,10177367,OHRFC,KMS, ,0, 
+IN03003,LRL,CMHarden.Flow-Outflow.Inst.0.0.lrldlb-comp,10209503,10208007,10210097,OHRFC,GID 2, ,0, 
+KY00051,LRL,Taylorsville.Flow-Outflow.Inst.0.0.lrldlb-comp,10264636,10263686,10264636,OHRFC,GID 2, ,0, 
+UT10132,SPK,Pineview.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,10275998,10273702,10275998,CBRFC,SK, ,10275998,Moved to lake outlet. Good lake assoc.
+UT10119,SPK,East Canyon.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,10277316,10276260,10277316,CBRFC,SK, ,0,There is a DA gage on the next downstream flowline
+FL00435,SAM,JimWoodruff.Flow-Out.Inst.15Minutes.0.Raw-UR,2293124,10361596,2311949,SERFC,MC, ,0,Snapped to DA gage flowline. Gage ID 02358000
+WY01380,NWDM,KEYO.Flow-Out.Ave.1Day.1Day.Raw-USBR,10906553,10904095,10906421,MBRFC,KMS, ,0, 
+PA00273,LRP,Portersville.Flow.Inst.1Hour.0.OBS,10926383,10925571,10926455,OHRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 03106300
+SD01092,NWDM,BEND.Flow-Out.Ave.~1Day.1Day.Best-MRBWM,11546856,11546100,11546856,MBRFC,KMS, ,11546856,Moved to lake outlet. Correct lake association.
+KY03012,LRL,Rough.Flow-Outflow.Inst.0.0.lrldlb-comp,11621250,11620502,11621434,OHRFC,KMS, ,0, 
+CO01300,NWDM,BONY.Flow-Out.Ave.1Day.1Day.Best-NWK,11699250,11699074,11700174,MBRFC,KMS, ,0, 
+SC00706,SAS,Keowee.Flow.Ave.1Hour.1Hour.Rev-SHEF_SAS,11749087,11748535,11749981,SERFC,AM, ,0, 
+SD01094,NWDM,GAPT.Flow-Out.Ave.~1Day.1Day.Best-MRBWM,11761568,11758154,11761566,MBRFC,KMS, ,0,Removed duplicates
+UT10136,SPK,Starvation.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,11966427,11965847,11967775,CBRFC,SK, ,0, 
+CA00035,SPK,SAC ORO-Oroville Dam-Feather R.Flow-Res Out.Ave.~1Day.1Day.MANUAL,2778598,12076080,2778598,CNRFC,KMS, ,0,This is the reservoir outflow. I eliminated the other record.
+MT00571,NWDM,GDMT.Flow-Out.Ave.1Day.1Day.Raw-USBR,12395588,12394600,12395588,MBRFC,KMS, ,0, 
+WY01300,NWDM,BUBI.Flow-Out.Ave.1Day.1Day.Raw-USBR,4425887,12793741,12794325,MBRFC,KMS, ,0, 
+WY01299,NWDM,BOYN.Flow-Out.Ave.1Day.1Day.Raw-USBR,12870023,12869679,12871081,MBRFC,SK, ,0,"SK removed """"""""BYWY.Flow."""""""" because no outflow data. Redundant lake iwth BYWY.Flow.Inst.1Hour.0.Best-NWDM"
+WY01378,NWDM,BULA.Flow-Out.Ave.1Day.1Day.Raw-USBR,12901134,12898716,12901134,MBRFC,KMS, ,0, 
+TX04358,SWT,KEMP.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,13732942,13732800,13733430,ABRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 07312100
+OK02500,SWT,ALTU.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,13757101,13756271,13757101,ABRFC,MC, ,0,DA gage one flowline downstream
+MD00014,NAB,Savage.Flow-Reg.Inst.1Hour.0.computed outflow,14364126,14363834,14364126,MARFC,KMS, ,0,There is a DA gage on the next downstream flowline
+CA10113,SPK,SCC SCC-Success Lake-Tule.Flow-Res Out.Inst.1Hour.0.Calc-val,17159700,14930103,14931007,CNRFC,SK, ,0, 
+AR00150,MVK,Blakely.Flow.Inst.1Day.0.Manual,15234446,15231972,15234506,LMRFC,KMS, ,0, 
+AR00535,MVK,Remmel Dam.Flow.Inst.15Minutes.0.DCP-rev,15237620,15237526,15237620,LMRFC,KMS, ,0,There is a DA gage on the next downstream flowline
+MS01496,MVK,Arkabutla Lake.Flow.Inst.1Hour.0.Total Gate Flow,15256580,15252778,15256386,LMRFC,KMS, ,0,Removed redundant gages
+OH00002,LRH,WillsCr-Outflow.Flow.Inst.1Hour.0.OBS,15371872,15370770,15371872,OHRFC,GID 2, ,0, 
+OH00020,LRH,CharlesMill-Outflow.Flow.Inst.1Hour.0.OBS,15410097,15408897,15411519,OHRFC,GID 2, ,0, 
+OH00001,LRH,PleasantHill-Outflow.Flow.Inst.1Hour.0.OBS,15411575,15408959,15411575,OHRFC,GID 2, ,0, 
+OH00018,LRH,TomJenkins-Outflow.Flow.Inst.1Hour.0.OBS,15419085,15417757,15419565,OHRFC,GID 2, ,0, 
+WY01295,NWDM,PATR.Flow-Out.Ave.1Day.1Day.Raw-USBR,15976270,15975492,15976270,MBRFC,KMS, ,0, 
+ND00148,NWDM,DIND.Flow-Out.Ave.1Day.1Day.Raw-USBR,940130592,16235047,16237447,MBRFC,MC, ,0, 
+CA10167,SPK,SJR LBN-Los Banos-Los Banos Cr.Flow-Res Out.Ave.~1Day.1Day.MANUAL,16604219,16603633,16610547,CNRFC,SK, ,948040343, 
+CO01688,SPK,Lemon.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,17014767,17014523,17015277,CBRFC,KMS, ,0, 
+CO01695,SPK,Vallecito.Flow-Res Out.Ave.~1Day.1Day.Raw-USBRSLC;MANUAL,17034231,17034145,17034971,CBRFC,MC, ,0, 
+CA10109,SPK,NHG NHG-New Hogan Lake-Calaveras.Flow-Res Out.Inst.1Hour.0.Calc-val,17067086,17065952,17068300,CNRFC,SK, ,0, 
+CA00281,SPK,SJR DNP-Don Pedro Res-Tuolumne R.Flow-Res Out.Ave.~1Day.1Day.MANUAL,17080371,17080041,17080371,CNRFC,SK, ,17080371,Moved to lake outlet. Good lake assoc.
+NE01518,NWDM,PA11.Flow-Out.Ave.1Hour.6Hours.Best-NWO,17217954,17216840,17217954,MBRFC,KMS, ,17217954,Moved down to lake outlet. Correct lake association.
+NE01063,NWDM,SC18.Flow-Out.Ave.~1Day.1Day.Best-NWO,17405437,17404931,17405909,MBRFC,KMS, ,0, 
+NE01057,NWDM,SC14.Flow-Out.Ave.~1Day.1Day.Best-NWO,17405923,17404975,17405923,MBRFC,KMS, ,0, 
+IA00012,MVR,CRVI4.Flow-Out.Inst.30Minutes.0.rev,17540805,17539821,17540805,NCRFC,MC, ,0,DA gage is two flowlines downstream
+NM00404,SPA,Cochiti.Flow.Inst.~1Hour.0.MRS,17834674,17833136,17834674,WGRFC,MC, ,0,DA gage two flowlines downstream
+NM00001,SPA,Abiquiu-Abiquiu DS.Flow.Inst.~1Hour.0.MRS,17848800,17845306,17848996,WGRFC,MC, ,0,DA gage one flowline downstream
+CO01671,SPA,Platoro.Flow.Inst.~1Hour.0.ResData,17876153,17875083,17876241,WGRFC,MC, ,0, 
+MS01494,MVK,Grenada Lake.Flow.Inst.1Hour.0.Total Gate Flow,18019788,18014672,18019788,LMRFC,KMS, ,0, 
+TN03722,LRN,OHIT1-OLD_HICKORY.Flow.Ave.1Hour.1Hour.man-rev,18415989,18415569,18416017,OHRFC,GID 2, ,0,Duplicate gage removed by SK. Duplicate gages near each other (OHHT1-OLD_HICKORY)
+IN03002,LRL,CaglesMill.Flow-Outflow.Inst.0.0.lrldlb-comp,18465682,18465136,18465682,OHRFC,GID 2, ,0, 
+IN03005,LRL,Salamonie.Flow-Outflow.Inst.0.0.lrldlb-comp,18505918,18505514,18505918,OHRFC,GID 2, ,0, 
+KS00012,NWDM,TUCR.Flow-Out.Ave.1Day.1Day.Best-NWK,24646277,18880944,2281171,MBRFC,KMS, ,0,There is a DA gage 3 flowlines downstream
+KS00019,NWDM,CEBL.Flow-Out.Ave.1Day.1Day.Best-NWK,18951675,18950909,18951675,MBRFC,KMS, ,0, 
+KS00023,NWDM,LOVL.Flow-Out.Ave.1Day.1Day.Best-NWK,19017185,19016317,19017757,MBRFC,KMS, ,0, 
+NE01066,NWDM,HACO.Flow-Out.Ave.1Day.1Day.Best-NWK,19043517,19040443,19043517,MBRFC,MC, ,0, 
+NE01073,NWDM,MECR.Flow-Out.Ave.1Day.1Day.Best-NWK,19063672,19063074,19063672,MBRFC,KMS, ,0, 
+NE01076,NWDM,REWI.Flow-Out.Ave.1Day.1Day.Best-NWK,19070261,19069455,19070261,MBRFC,KMS, ,19070261,Re-snapped to lake outlet flowline
+NE01070,NWDM,ENDS.Flow-Out.Ave.1Day.1Day.Best-NWK,19081483,19080361,19081483,MBRFC,KMS, ,0, 
+NE01078,NWDM,TREN.Flow-Out.Ave.1Day.1Day.Best-NWK,19093175,19091673,19093175,MBRFC,KMS, ,0, 
+WV00701,LRH,Sutton-Outflow.Flow.Inst.1Hour.0.OBS,19322231,19322053,19322229,OHRFC,GID 2, ,0, 
+OH00010,LRH,Tappan-Lake.Flow.Inst.1Hour.0.OBS,19392734,19390686,19392734,OHRFC,GID 2, ,0, 
+OH00012,LRH,Clendening-Outflow.Flow.Inst.1Hour.0.OBS,19392806,19390726,19392806,OHRFC,GID 2, ,0, 
+TX00023,SWT,MERE.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,19981020,19980072,19981020,ABRFC,MC, ,19981020,Moved to lake outflow from interior flowline. Correct lake association
+NM00006,SPA,Conchas.Flow.Inst.~1Hour.0.MRS,20031197,20052547,20052833,ABRFC,LKR, ,0,"Conchas Lake, Lake outlet link is 20052833"
+KS00027,SWT,ELDR.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,20082038,20079044,20082038,ABRFC,MC, ,0, 
+CA10148,SPK,SAC FOL-Folsom Lake-American R.Flow-Reservoir Outflow.Inst.1Hour.0.CDEC-confidential-raw,15022453,20194524,15025029,CNRFC,SK, ,0, 
+AZ10308,SPL,Bartlett DS-Verde R.Flow.Inst.15Minutes.0.GOES-rev,20439512,20438850,20440790,CBRFC,MC, ,0, 
+NV10002,SPL,Mathews Cnyn DS-Mathews Cnyn W.Flow.Inst.15Minutes.0.GOES-rev,20603438,20603248,20603440,CBRFC,SK, ,0, 
+NV10001,SPL,Pine Cnyn DS-Pine Cnyn W.Flow.Inst.15Minutes.0.GOES-rev,20600566,20603252,20603436,CBRFC,SK, ,0, 
+NM00130,SPA,Sumner.Flow.Inst.~1Hour.0.ResData,20818460,20818104,20818460,WGRFC,MC, ,0,DA gage one flowline downstream
+KS00006,SWT,MARI.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,20919169,20917521,20919169,ABRFC,LKR, ,0,gaged flowline below
+KS00002,SWT,ELKC.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,20943898,20943110,20943984,ABRFC,KMS, ,0, 
+KS00011,SWT,TORO.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,20955434,20953830,20955434,ABRFC,MC, ,0, 
+OK10309,SWT,KEYS.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,369129,20971700,20973380,ABRFC,MC, ,0, 
+OK10319,SWT,GSAL.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21001215,21000069,21001215,ABRFC,MC, ,0, 
+OK20509,SWT,KAWL.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21038211,21038107,21038211,ABRFC,KMS, ,21038211,Moved to lake outlet
+KS00017,SWT,CHEN.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21160795,21160241,21161233,ABRFC,MC, ,0,redundant with CHE2.Flow.Inst.1Hour.0.Ccp-Rev
+AZ10436,SPL,Coolidge DS-Gila R.Flow.Inst.15Minutes.0.GOES-rev,21274156,21318615,21320525,CBRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 09469500
+AZ10315,SPL,Laguna DS-Colorado R.Flow.Inst.15Minutes.0.GOES-rev,21412675,21411435,21412649,CBRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 09429600
+KS00003,SWT,FALL.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21517708,21514748,21517708,ABRFC,MC, ,0, 
+CA00240,SPK,SJR EXC-New Exchequer-Merced R.Flow-Res Out.Ave.~1Day.1Day.MANUAL,21608661,21606665,21608661,CNRFC,SK, ,0,Moved to lake outlet. Good lake assoc.
+OK00134,SWT,HUDS.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21773255,21772239,21773125,ABRFC,LKR, ,0,gaged flowline below
+OK21489,SWT,COPA.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21784744,21783714,21784744,ABRFC,LKR, ,0, 
+OK10312,SWT,HULA.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21785290,21784832,21785290,ABRFC,LKR, ,0,Hulah Lake
+KS00049,SWT,BIGH.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21797549,21795481,21797721,ABRFC,KMS, ,0, 
+ND00147,NWDM,BOHA.Flow-Out.Ave.~1Day.1Day.Best-NWO,21850337,21849419,21850337,MBRFC,KMS, ,0, 
+SD01141,NWDM,SHHI.Flow-Out.Ave.~1Day.1Day.Best-NWO,16188778,21861936,16188778,MBRFC,MC, ,0, 
+CA10112,SPK,PNF PNF-Pine Flat Lake-Kings.Flow-Res Out.Inst.1Hour.0.Calc-val,22063199,22050039,22063199,CNRFC,SK / KMS, ,0,Moved to lake outlet. Good lake assoc.
+WY01290,NWDM,ALCR.Flow-Out.Ave.1Day.1Day.Raw-USBR,22106341,22103649,22107769,MBRFC,KMS, ,0, 
+AR00172,SWL,LD06-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,25239921,22845449,25239921,ABRFC,MC, ,25239921,Moved to lake outflow from interior flowline
+MT00652,NWDP,LIB.Flow-Out.Ave.1Hour.1Hour.CBT-REV,22878297,22886855,22878297,NWRFC,AM, ,0,DA gage two flowlines downstream
+MT00565,NWDP,HGH.Flow-Out.Ave.1Hour.1Hour.CBT-REV,22965002,22971534,22965004,NWRFC,AM, ,0, 
+ID00222,NWDP,CAB.Flow-Out.Ave.~1Day.1Day.CBT-REV,22975982,22983738,25073152,NWRFC,AM, ,0,DA gage one flowlines downstream
+MT00223,NWDP,NOX.Flow-Out.Ave.~1Day.1Day.CBT-REV,22976070,22983840,22976094,NWRFC,AM, ,0, 
+WA00004,NWDP,CHL.Flow-Out.Ave.1Hour.1Hour.CBT-REV,23073739,23077959,23073871,NWRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 12452500
+WY01385,NWDP,JCK.Flow-Out.Ave.~1Day.1Day.USBR-COMPUTED-REV,23123437,23127757,23123437,NWRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 13011000
+ID00287,NWDP,DWR.Flow-Out.Ave.~6Hours.6Hours.CBT-COMPUTED-REV,23630892,23634782,23630892,NWRFC,AM /LKR, ,0,This is the main outflow record; There are many gages here; LKR - none of the other A2W locations in the area are in this Excel list.  There are 2 A2W sites together.
+OR00381,NWDP,CREO.Flow.Ave.~1Day.1Day.USBR-RAW,23706308,23707652,23706312,NWRFC,MC, ,0, 
+OR00098,NWDP,OCH.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23713984,23717064,23713984,NWRFC,AM, ,0, 
+OR00007,NWDP,FAL.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23752600,23756162,23752600,NWRFC,AM, ,0,DA gage one flowlines downstream
+OR00006,NWDP,DEX.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23751844,23756168,23751844,NWRFC,AM, ,0, 
+OR00009,NWDP,LOP.Flow-Out.Ave.1Hour.1Hour.CBT-REV,23751850,23756172,23751852,NWRFC,AM, ,0, 
+OR00014,NWDP,HCR.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23751946,23756364,23751946,NWRFC,AM, ,0, 
+OR00008,NWDP,DOR.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23759588,23761332,23759588,NWRFC,AM, ,0, 
+OR00005,NWDP,COT.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23759310,23761342,23759312,NWRFC,AM, ,0, 
+OR00016,NWDP,FRN.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23763141,23769069,23763141,NWRFC,AM, ,0, 
+OR00013,NWDP,BLU.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23773407,23777375,23773407,NWRFC,KMS, ,23773407,Moved to lake outlet. DA gage on next downstream flowline
+OR00015,NWDP,CGR.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23773011,23777431,23773011,NWRFC,AM, ,0,DA gage one flowlines downstream
+OR00004,NWDP,DET.Flow-Out.Ave.1Hour.1Hour.CBT-REV,23780525,23783629,23780525,NWRFC,AM, ,0, 
+OR00010,NWDP,GPR.Flow-Out.Ave.1Hour.1Hour.CBT-REV,23785923,23788951,23785925,NWRFC,AM, ,0, 
+OR00012,NWDP,FOS.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23785767,23788981,23785769,NWRFC,AM, ,0,DA gage two flowlines downstream
+OR10020,NWDP,SCO.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23805106,23807386,23805110,NWRFC,AM, ,0, 
+WA00302,NWDP,WYN.Flow-Out.Ave.1Hour.1Hour.CENWS-COMPUTED-RAW,23856921,23859017,23856923,NWRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 12035400
+OR00612,NWDP,LOS.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23923436,23927716,23923436,NWRFC,AM, ,0, 
+OR00624,NWDP,APP.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,23936035,23938563,23936037,NWRFC,AM, ,0, 
+WA00260,NWDP,KAC.Flow-Out.Ave.~1Day.1Day.USBR-RAW,24126099,24136753,24126101,NWRFC,AM, ,0, 
+WA00274,NWDP,CLE.Flow-Out.Ave.~1Day.1Day.USBR-RAW,24125829,24136807,24125831,NWRFC,AM, ,0, 
+OR00578,NWDP,BULO.Flow.Ave.~1Day.1Day.USBR-RAW,24150401,24152927,24150401,NWRFC,AM, ,24150401,Linked to interior flowline. Changed to lake outflow
+OR00592,NWDP,THFO.Flow.Inst.15Minutes.0.OWRD-RAW,24208009,24215369,24208611,NWRFC,AM, ,0, 
+OR00577,NWDP,PHL.Flow-Out.Ave.~1Day.1Day.USBR-RAW,24208367,24215523,24208369,NWRFC,AM, ,0, 
+WA00169,NWDP,ROS.Flow-Loc.Ave.1Hour.1Hour.SCL-RAW,24255291,24260289,24255291,NWRFC,AM, ,24255291,Linked to interior flowline. Changed to lake outflow
+WA00173,NWDP,UBK.Flow-Out.Inst.1Hour.0.PSE-RAW,24255913,24260671,24255915,NWRFC,AM, ,24255915,Linked to inflow flowline to downstream lake. Changed to lake outflow
+WA00170,NWDP,DIA.Flow-Out.Ave.~1Day.1Day.CBT-REV,24255201,24260717,24255205,NWRFC,AM, ,0, 
+WA00172,NWDP,SHA.Flow-Out.Inst.1Hour.0.PSE-RAW,24255877,24260837,25184464,NWRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 12193400
+WA00263,NWDP,BUM.Flow-Out.Ave.~1Day.1Day.USBR-RAW,24423025,24428511,24423025,NWRFC,AM, ,0, 
+WA00273,NWDP,RIM.Flow-Out.Ave.~1Day.1Day.USBR-RAW,24423307,24428693,24423307,NWRFC,AM, ,0, 
+OR00579,NWDP,PRV.Flow-Out.Inst.0.0.MIXED-COMPUTED-REV,24515510,24518496,24515510,NWRFC,AM, ,0, 
+WA00256,NWDP,MOR.Flow-Out-Total.Ave.1Hour.1Hour.SCL-RAW,24537960,24539838,24537962,NWRFC,AM, ,0, 
+WV00707,LRH,Burnsville-Outflow.Flow.Inst.1Hour.0.OBS,19417491,76669453,19417491,OHRFC,GID 2, ,0, 
+CA10246,SPK,SJR NWM-New Melones Res-Stanislaus R.Flow-Res Out.Ave.~1Day.1Day.Calc-usbr,349829,120051899,349829,CNRFC,KMS, ,0, 
+MN00594,MVP,LockDam_02.Flow.Inst.15Minutes.0.comp,1101436,120051919,1101436,NCRFC,MC, ,0,DA gage is three flowlines downstream
+TX00005,SWF,GPVT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1287057,120051934,1287177,WGRFC,MC, ,0,DA gage three flowlines downstream
+MT00559,NWDM,HOLM.Flow.Inst.1Hour.0.Best-NWDM,3021998,120051950,3022000,MBRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 06066500
+AR00159,SWL,Norfork_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,7653861,120052259,7653895,LMRFC,KMS, ,0, 
+AR00164,SWL,LD12_Ozark-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,7754500,120052270,7754492,ABRFC,MC, ,0, 
+KY03009,LRL,Barren.Flow-Outflow.Inst.0.0.lrldlb-comp,4036902,120052316,4037084,OHRFC,KMS, ,0, 
+KY05017,LRN,KYDK2-KENTUCKY.Flow.Ave.1Hour.1Hour.tva-raw,10575371,120052349,10575371,LMRFC,KMS, ,0, 
+ND00332,MVP,LakeDarling.Flow-Out.Inst.15Minutes.0.comp,14049291,120052509,14049291,NCRFC,MC, ,14049291,Moved to lake outlet. Correct lake association.
+CA10114,SPK,TRM TRM-Lake Kaweah-Kaweah.Flow-Res Out.Ave.1Hour.1Hour.Calc-val,24758173,120052624,24758173,CNRFC,SK, ,14922787,Moved to lake outlet. Good lake assoc.
+TN03701,LRN,JPPT1-J_PERCY_PRIEST.Flow.Ave.1Hour.1Hour.man-rev,18401827,120052688,18401827,OHRFC,GID 2, ,18401827,Redundant gage removed by SK. Redundant gages with JHPHT1-J_PERCY_PRIEST
+KY03030,LRH,Grayson-Outflow.Flow.Inst.1Hour.0.OBS,1936384,120052749,1936720,OHRFC,MC, ,0, 
+AZ10312,SPL,Parker DS-Colorado R.Flow.Inst.15Minutes.0.GOES-rev,9998136,120052758,21439479,CBRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 09427520
+KS00021,NWDM,GLEL.Flow-Out.Ave.1Day.1Day.Best-NWK,3537261,120052972,3537261,MBRFC,KMS, ,3537261,Moved to lake outlet. There is a DA gage 2 flowlines downstream
+ND00309,MVP,Baldhill_Dam.Flow-Out.Inst.15Minutes.0.rev,26873869,120052979,14270822,NCRFC,MC, ,0,DA gage is one flowline downstream
+TX00008,SWF,LEWT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,1278690,120053021,1278674,WGRFC,MC, ,0,DA gage three flowlines downstream
+TX00010,SWF,PCTT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,2569756,120053201,2569848,WGRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 08099500
+TX00017,SWF,WTYT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5513700,120053204,5513692,WGRFC,MC, ,0,DA gage four flowlines downstream
+PREW3,MVP,PREW3.Flow.Inst.15Minutes.0.comp,2651896,120053219,2651896,NCRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 05344490
+IA00016,NWDM,RATN.Flow-Out.Ave.1Day.1Day.Best-NWK,940280012,120053324,940280011,MBRFC,KMS, ,0,There is a DA gage on the next downstream flowline
+TX00014,SWF,STIT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5587560,120053388,5587560,WGRFC,KMS, ,0,There is a DA gage on the next downstream flowline
+TX01087,SWF,MSDT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,5781955,120053393,5781955,WGRFC,MC, ,5781955,Moved to lake outlet from interior flowline
+PA00005,NAB,Sayers.Flow-Reg.Inst.1Hour.0.computed outflow,8139718,120053440,8139718,MARFC,KMS, ,0,There is a DA gage on the next downstream flowline
+VA005001,NAO,Gathright DS.Flow.Inst.0.0.DCP-rev,8521381,120053459,8523459,MARFC,MC, ,0,Snapped to DA gage flowline. Gage ID 02011800
+CA10192,SPK,TRK STP-Stampede-Little Truckee R.Flow-Res Out.Ave.~1Day.1Day.MANUAL,8933230,120053476,8934442,CNRFC,SK, ,0,Moved to lake outlet. Good lake assoc.
+ND00146,NWDM,PIST.Flow-Out.Ave.~1Day.1Day.Best-NWO,11505172,120053541,11505172,MBRFC,KMS, ,0, 
+SD01093,NWDM,FTRA.Flow-Out.Ave.~1Day.1Day.Best-MRBWM,11550820,120053557,11550820,MBRFC,KMS, ,11550820,Moved to lake outlet. Correct lake association.
+SC00529,SAS,Jocassee.Flow.Ave.1Hour.1Hour.Rev-SHEF_SAS,11748743,120053566,11749815,SERFC,KMS, ,0, 
+MO30202,SWL,Table_Rock_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,7625336,120053569,8586112,LMRFC,KMS, ,0, 
+ND00151,NWDM,JATO.Flow-Out.Ave.~1Day.1Day.Best-NWO,12577680,120053643,12577680,MBRFC,KMS, ,0, 
+CA10154,SPK,SJR MIL-Friant Dam-San Joaquin R.Flow-Res Out.Ave.~1Day.1Day.Calc-usbr,17116483,120053836,17116483,CNRFC,SK, ,0,There is a DA gage on the 6th downstream flowline
+ID00288,NWDP,LUC.Flow-Out.Ave.~1Day.1Day.USBR-RAW,23382135,120053990,23382135,NWRFC,AM, ,0, 
+ID00283,NWDP,CSCI.Flow.Ave.~1Day.1Day.USBR-COMPUTED-REV,24177101,120054056,24177561,NWRFC,KMS, ,0, 
+CO02677,NWDM,SMCL.Flow.Inst.1Hour.0.Raw-NWDM-Backup,5241186,127819344,940190123,MBRFC,KMS, ,0, 
+NH00003,NAE,FFD.Flow.Inst.15Minutes.0.DCP-rev,166174264,166174267,166174264,NERFC,MC, ,166174264,Linked to interior flowline. Changed to lake outflow
+TX06194,SWF,ALAT2.Flow-Out.Inst.1Hour.0.Rev-SWF-REGI,166414852,166414857,166414852,WGRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 08093360
+NC01713,SAW,NEU FLP.Flow-Out.Inst.1Hour.0.DSS,166737579,166737717,166737584,SERFC,MC, ,0,Snapped to DA gage flowline. Gage ID 02087183
+NC00173,SAW,CFR BEJ.Flow-Out.Inst.1Hour.0.DSS,26325148,166755060,8898132,SERFC,AM, ,0,"DA Gage on next downstream link. Not marked as inflow or outflow, so questionable"
+GA00820,SAM,WestPoint.Flow-Out.Inst.15Minutes.0.Rev-CCP,3298918,166758703,3298566,SERFC,AM, ,0, 
+AL01432,SAM,WalterFGeorge.Flow-Out.Ave.1Hour.1Hour.Raw-SCADA_SAM,3443790,166758723,3443790,SERFC,AM, ,0,DA gage one flowline downstream
+AL01420,SAM,Smith.Flow-Out.Inst.1Hour.0.Raw-APCO,18581863,166759211,18584047,SERFC,AM, ,0, 
+AL01426,SAM,Holt.Flow-Out.Inst.1Hour.0.Raw-APCO,18232675,166759236,18232675,SERFC,AM, ,0, 
+MS01491,SAM,Okatibbee-Spillway.Flow-Discharge.Inst.15Minutes.0.Raw-CCP,18193961,166759324,18195393,LMRFC,KMS, ,0, 
+GA01702,SAS,Hartwell.Flow-Out.Ave.1Hour.1Hour.Raw-SCADA_SAS,11737635,166759840,6270218,SERFC,KMS, ,0, 
+KY03055,LRL,CaveRun.Flow-Outflow.Inst.0.0.lrldlb-comp,2091969,166830448,2091969,OHRFC,GID 2, ,0, 
+OH00007,LRH,Dillon-Outflow.Flow.Inst.1Hour.0.OBS,15365719,166899180,15365765,OHRFC,GID 2, ,0, 
+IN03017,LRL,Brookville.Flow-Outflow.Ave.1Hour.1Hour.lrldlb-comp,3925161,166899200,3925161,OHRFC,GID 2, ,0, 
+OH00929,LRL,WHHarsha.Flow-Outflow.Inst.0.0.lrldlb-comp,3936190,166899203,3936190,OHRFC,GID 2, ,0,Linked to interior flowline.
+OH00927,LRL,CaesarCreek.Flow-Outflow.Inst.0.0.lrldlb-comp,3935906,166899204,3935906,OHRFC,GID 2, ,3935906, 
+IN03001,LRL,Monroe.Flow-Outflow.Inst.0.0.lrldlb-comp,18444024,166899251,18447480,OHRFC,GID 2, ,0, 
+KY03046,LRN,LAPK2-LAUREL.Flow.Ave.1Hour.1Hour.man-rev,10190256,166899298,10191966,OHRFC,GID 2, ,0, 
+KY03010,LRN,RWNK2-WOLF_CREEK.Flow.Ave.1Hour.1Hour.man-rev,3577500,166899300,3577512,OHRFC,KMS, ,0,Redundant gage removed by SK. Redundant with WLCK2-WOLF_Creek
+TN02702,LRN,DLHT1-DALE_HOLLOW.Flow.Ave.1Hour.1Hour.man-rev,10184623,166899333,10184625,OHRFC,GID 2, ,0, 
+KY03001,LRN,BARK2-BARKLEY.Flow.Ave.1Hour.1Hour.man-rev,11878940,166899385,11878948,LMRFC,KMS, ,0,Redundant with another gage just upstream (BAHK2)
+MN00583,MVP,MissHW_Sandy.Flow-Out.Inst.~1Day.0.CEMVP-Legacy,4841534,167120397,4841848,NCRFC,MC, ,0, 
+IA00013,MVR,PELI4.Flow-Out.Inst.30Minutes.0.rev,4995175,167121028,22249819,NCRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 05488110
+MN00586,MVP,MissHW_Winni.Flow-Out.Inst.~1Day.0.CEMVP-Legacy,22328037,167122141,22328037,NCRFC,KMS, ,0, 
+MN00169,MVP,ORTM5.Flow.Inst.15Minutes.0.rev,4084418,167122203,4085926,NCRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 05292000
+IL00118,MVS,Lk Shelbyville-Kaskaskia.Flow-Out.Ave.~1Day.1Day.lakerep-rev,13772418,167122256,13772400,NCRFC,MC, ,0,Redundant site removed by SK. Redundant with another point downstream. DA gage is two flowlines downstream
+IL00113,MVS,Carlyle Lk-Kaskaskia.Flow-Out.Ave.~1Day.1Day.lakerep-rev,13871378,167122265,13876230,NCRFC,MC, ,0,This is total outflow compared with CWMS timeseries_SK. Redundant site is marked by SK and will be removed. There is a DA gage 2 flowlines downstream. Redundant with some other gages
+TN04102,LRN,CETT1-CENTER_HILL.Flow.Ave.1Hour.1Hour.man-rev,18434275,167122309,18434275,OHRFC,GID 2, ,0, 
+IL00117,MVS,Rend Lk-Big Muddy.Flow-Out.Ave.~1Day.1Day.lakerep-rev,13779254,167156996,13779550,NCRFC,MC, ,0, 
+MS01495,MVK,Enid Lake.Flow.Inst.1Hour.0.Total Gate Flow,15276792,167166404,15276792,LMRFC,KMS, ,0, 
+MS01493,MVK,Sardis Lake.Flow.Inst.1Hour.0.Total Gate Flow,15290344,167182317,15290344,LMRFC,KMS, ,0, 
+MN00573,MVP,RedLake.Flow-Out.Inst.15Minutes.0.rev,7043255,167201419,22194346,NCRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 05074500
+MT00568,NWDM,CAFE.Flow-Out.Ave.1Day.1Day.Raw-USBR,3024978,167204871,3024978,MBRFC,KMS, ,0, 
+MT00025,NWDM,FTPK.Flow-Out.Ave.~1Day.1Day.Best-MRBWM,12461756,167204901,940040008,MBRFC,KMS, ,0, 
+MT00576,NWDM,YETL.Flow-Out.Ave.1Day.1Day.Raw-USBR,12801362,167204997,12801364,MBRFC,KMS, ,0,There is a DA gage 2 flowlines downstream
+WY01297,NWDM,SEMR.Flow-Out.Ave.1Day.1Day.Raw-USBR,15976386,167245825,15976386,MBRFC,KMS, ,0,Moved to lake outlet
+CO00351,NWDM,ATCO.Flow-Out.Ave.1Day.0.Raw-CODWR,5242018,167246015,5242018,MBRFC,KMS, ,0,Poor gage placement. Adjusted to correct location
+KS00024,NWDM,NORN.Flow-Out.Ave.1Day.1Day.Best-NWK,8367756,167266511,8367756,MBRFC,KMS, ,8367756,Moved to lake outlet. Correct lake association.
+KS00005,NWDM,KANS.Flow-Out.Ave.1Day.1Day.Best-NWK,25068602,167266519,25068602,MBRFC,MC, ,0,DA gage one flowline downstream
+MO30200,NWDM,STON.Flow-Out.Ave.1Day.1Day.Best-NWK,7372051,167267899,7373063,MBRFC,KMS, ,0, 
+KS00004,SWT,JOHN.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,20932440,167297255,20932366,ABRFC,LKR, ,0, 
+AR00174,SWL,Beaver_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,8589764,167299813,8589608,LMRFC,KMS, ,0, 
+AR00160,SWL,Bull_Shoals_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,7637444,167299818,7637444,LMRFC,KMS, ,7637444,Moved to lake outlet. Good lake assoc.
+AR00173,SWL,GreersFerry_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,11774999,167299819,11774971,LMRFC,KMS, ,0, 
+OK10310,SWT,OOLO.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,833360,167299904,21799057,ABRFC,KMS, ,0, 
+OK00135,SWT,PENS.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,7586119,167299912,7586119,ABRFC,LKR, ,0, 
+OK10314,SWT,FGIB.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,21773859,167299918,21773859,ABRFC,MC, ,0, 
+OK20502,SWT,TOMS.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,562485,167300241,562485,ABRFC,MC, ,0, 
+OK10317,SWT,DENI.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,426416,167300255,426416,ABRFC,LKR, ,0,gaged flowline directly downstream; Lake Texoma
+OK02501,SWT,ARBU.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,19959986,167300271,19959986,ABRFC,KMS, ,19959986,link is inside WB. FlowlineID 19959986 is the outlet link.  Also cant find in A2W.
+AR00536,SWL,Millwood_Dam-Tailwater.Flow.Inst.1Hour.0.CCP-Comp,3747834,167300345,3747820,ABRFC,MC, ,0, 
+LA00181,MVK,Caddo Lake.Flow.Inst.1Hour.0.DCP-rev,1016769,167300381,1016769,LMRFC,KMS, ,0,Moved the gage to lake outflow
+GA01701,SAS,Thurmond.Flow-Out.Ave.1Hour.1Hour.Raw-SCADA_SAS,22720897,167484077,6290331,SERFC,AM, ,0, 
+OH00019,LRH,Mohicanville-Outflow.Flow.Inst.1Hour.0.OBS,167484497,167484552,167484498,OHRFC,GID 2, ,0, 
+OH00016,LRH,Mohawk-Outflow.Flow.Inst.1Hour.0.OBS,167484595,167484603,167484595,OHRFC,GID 2, ,0,Linked to interior flowline.
+OK22194,SWT,MCGE.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,167484717,167484743,167484717,ABRFC,KMS, ,0, 
+VA117001,SAW,ROA JHK.Flow-Out.Inst.1Hour.0.DSS,8653306,167496465,8653306,SERFC,KMS, ,0, 
+NE01048,NWDM,LAMC.Flow-Out.Ave.~1Day.1Day.Raw-CNPPID,17462840,167794979,17462840,MBRFC,KMS, ,0,Moved upstream to the lake outflow
+KS00008,NWDM,MILD.Flow-Out.Ave.1Day.1Day.Best-NWK,5927298,167800866,5927296,MBRFC,MC, ,0,DA gage five flowlines downstream
+OK10308,SWT,EUFA.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,512899,167801019,512899,ABRFC,LKR, ,0,Eufaula Lake
+OK10301,SWT,ROBE.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,1543609,167801029,1543627,ABRFC,LKR, ,0, 
+MO82201,MVS,Mark Twain Lk-Salt.Flow-Out.Ave.~1Day.1Day.lakerep-rev,4867723,937110111,4867727,NCRFC,MC, ,0,DA gage 7 flowlines downstream
+OK22200,SWT,SKIA.Flow-Res Out.Ave.1Hour.1Hour.Rev-Regi-Flowgroup,941070051,941070128,941070050,ABRFC,LKR, ,0,Skiatook Lake
+PortHuron,LRE,PortHuron.Flow.Inst.0.0.shef-raw,13196034,4800004,13196034,NCRFC,MC, ,0,Snapped to DA gage flowline. Gage ID 04159130

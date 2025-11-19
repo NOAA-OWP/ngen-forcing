@@ -1,0 +1,13 @@
+{
+    "region": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Hawaii.pol",
+    "boundary_csv": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Hawaii_Data/HI_InflowsOutflows_hfv2_noAnomalies.csv",
+    "NWM_shpfile": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Hawaii_Data/HI_inflows_noAnomalies/HI_InflowsOutflows_hfv2_noAnomalies_CCbuff.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Hawaii_Data/DFlowFM",
+    "TRoute": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Hawaii_Data/TRoute",
+    "hgrid3": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Hawaii_Data/SCHISM/hgrid.gr3",
+    "elev2d": "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Hawaii/SCHISM/elev2D.th.nc_haw",
+    "global_pli": "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Hawaii/D-Flow/HI_BND.pli",
+    "schism_start_time": "2003-08-28_00:00",
+    "start_time": "2003-08-28_00:00",
+    "stop_time": "2003-09-05_00:00"
+}

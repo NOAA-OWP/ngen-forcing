@@ -1,0 +1,9 @@
+pyYaml
+numpy
+xarray
+pyproj
+geopandas
+matplotlib
+scipy
+netcdf4
+requests

@@ -1,0 +1,109 @@
+#!/bin/sh -l
+#SBATCH -A ohd            # -A, --account=name          charge job to specified account
+##SBATCH -q debug              # coastal group can only submit to this Q
+#SBATCH -e slurm.error        # -e, --error=err             file for batch script's standard error
+#SBATCH --ignore-pbs          # --ignore-pbs            Ignore #PBS options in the batch script
+#SBATCH -J NWM_fort20              # -J, --job-name=jobname      name of job
+                              # (type = block|cyclic|arbitrary)
+#SBATCH --mail-user=Jason.Ducker@noaa.gov   # --mail-user=user        who to send email notification for job state
+                              # changes
+##SBATCH --ntasks-per-node=24   # --ntasks-per-node=n     number of tasks to invoke on each node
+##SBATCH -N 5                # -N, --nodes=N           number of nodes on which to run (N = min[-max])
+#SBATCH -n 1
+#SBATCH --exclusive
+##SBATCH --partition=service
+#SBATCH --partition=bigmem
+##SBATCH --parsable            # --parsable              outputs only the jobid and cluster name (if present),
+##SBATCH --mem-per-cpu=9G
+                              # separated by semicolon, only on successful submission.
+##SBATCH -t 1440               # -t, --time=minutes          time limit
+#SBATCH -t 30
+############################### main - to run: $sbatch nsem.job ##########################
+set -x
+echo $SLURM_SUBMIT_DIR            # (in Slurm, jobs start in "current dir")       
+echo $SLURM_JOBID                                                      
+echo $SLURM_JOB_NAME
+echo $SLURM_NNODES                                                     
+echo $SLURM_TASKS_PER_NODE
+
+# PBS_NODEFILE:  There is not a direct equivalent for this, but 
+echo $SLURM_NODELIST              # give you the list of assigned nodes.
+
+# cd $SLURM_SUBMIT_DIR
+echo "STARTING THE JOB AT"
+date
+
+#module load intel/2022.1.2
+#module load impi/2022.1.2
+#module load netcdf-hdf5parallel/4.7.4
+
+export WGRIB2=/scratch2/NCEPDEV/ohd/Jason.Ducker/grib2/wgrib2/wgrib2
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python makeOcean_CERA.py #merge_source_sink.py
+/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python merge_source_sink.py
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python merge_precip_only.py
+date
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/HRRR_SCHISM/makeAtmoHRRR.py
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/HRRR_SCHISM/merge_source_sink.py
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/HRRR_SCHISM/source_precip_only/test.py
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python driver.py config_Lake_Michigan_Huron_all.json
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python driver.py config_Irma_Reanalysis.json
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python makeOcean_ESTOFS_Reanalysis.py
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python driver.py fort_test.json
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python driver.py xyn_config.json #fort_test.json
+#config_STOFS_waterlevel_Alaska.json
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python makeOcean_ESTOFS_Reanalysis.py
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_NWM_forcings.py --forcing '/scratch2/NCEPDEV/ohd/nwc-common/Idalia_Reanalysis_Data/forcings' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Idalia_Enclosure.pol' --model 'AORC' --output '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/unit_test/output/DFlowFM_Idalia_Reanalysis_Forcings.nc'
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_NWM_forcings.py --forcing '/scratch2/NCEPDEV/ohd/nwc-common/NWM_Idalia_Forecast/NWM_forcings/2023082818' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Idalia_Enclosure.pol' --model 'AORC' --output '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/unit_test/output/DFlowFM_Idalia_Forecast_Forcings.nc'
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_ERA5_forcings.py --forcing '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/unit_test/Lake_Superior_2018/Lake_Superior_ERA5_Interm_2018_Data.nc' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Lake_Superior_Enclosure.pol' --model 'ERA5' --output '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/unit_test/Lake_Superior_2018/DFlowFM_ERA5_Lake_Superior_2018_Forcings.nc'
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_clip_forcings.py --forcing '/scratch2/NCEPDEV/ohd/Jason.Ducker/Alaska_DFLOWFM/AORC/test' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/AK_Enclosure.pol' --model 'AORC' --output './DFlowFM_AK_2002_AORC_Forcings.nc'
+
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_clip_forcings.py --forcing '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/AORC_Idalia' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Idalia_Enclosure.pol' --model 'AORC' --output './DFlowFM_Idalia_AORC_Forcings.nc'
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_clip_forcings.py --forcing '/scratch2/NCEPDEV/ohd/Jason.Ducker/AORC_SCHISM_LAKE_CHAMPLAIN/AORC' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/LC_Enclosure.pol' --model 'AORC' --output './DFlowFM_Irma_Forcings_rainfall_rate.nc'
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_HRRR_forcings.py --start '2022-09-23_00:00:00' --stop '2022-10-01_00:00:00' --forcing '/scratch2/NCEPDEV/ohd/Jason.Ducker/Ian_Data/HRRR' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Floodbase_Enclosure.pol' --output './DFlowFM_HRRR_Ian_Forcings.nc'
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_HRRR_forcings.py --start '2017-09-05_01:00:00' --stop '2017-09-13_01:00:00' --forcing '/scratch2/NCEPDEV/ohd/Jason.Ducker/Irma_simulations/Irma_Data/HRRR' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Floodbase_Enclosure.pol' --output './DFlowFM_HRRR_Irma_Forcings.nc'
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python hgrid_crs_conversion.py 
+
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python /scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/scripts/dflowfm_clip_forcings.py --forcing '/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Superior_2018_Data/AORC' --clip '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Lake_Superior_Enclosure.pol' --model 'AORC' --output '/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/unit_test/Lake_Superior_2018/DFlowFM_Lake_Superior_2018_Forcings.nc'
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python driver.py config_disharge_and_latq_Lake_Erie.json
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python driver.py config_disharge_SCHISM_latq_Lake_Ontario.json
+#/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/dflowfm_driver/bin/python makeOcean_FVCOM_Lake_Ontario.py
+# env. for DFLOW
+# external packages
+#source ../esmf-impi-env.sh
+#source ../nsem-nems-env.sh
+#source ../test.sh
+
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.7 /scratch2/COASTAL/coastal/save/Jason.Ducker/ADCIRC_NWM_fort20.py
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin//python3.7 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_extract_scripts/waterflow.py /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_extract_scripts/config.json
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.7 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts_v2/waterflow.py /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts_v2/config.json
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.7 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_waterlevel_bc_edit.py
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_run_wl_differences.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/waterlevel_extended.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/inital_waterlevels_restart_xyz.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_map_plots.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_mesh_differences2.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_map_animations_multiple_runs.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_mesh_differences_multiple_runs.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_map_Florence.py 
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_mesh_differences_Florence.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_multiple_maps.py
+#MPLBACKEND=agg /scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/Jason.Ducker/DFlow_multiple_mesh_differences.py
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/waterlevel.py /scratch2/COASTAL/coastal/save/NAMED_STORMS/Ike/HWRF_WW3_NWM_ADCIRC/fort.63.nc /scratch2/COASTAL/coastal/save/Jason.Ducker/Ike_ADCIRC_output/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/save/Jason.Ducker/Ike_ADCIRC_output"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/velocity.py /scratch2/COASTAL/coastal/save/NAMED_STORMS/Ike/HWRF_WW3_NWM_ADCIRC/fort.64.nc /scratch2/COASTAL/coastal/save/Jason.Ducker/Ike_ADCIRC_output/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/save/Jason.Ducker/Ike_ADCIRC_output"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/waterlevel.py /scratch2/COASTAL/coastal/save/NAMED_STORMS/SANDY_ADCIRC/04_HWRF_land_mask_update_v02/a70_SAN_ATM_WAV2OCN_v2.1_new_hwrf_land_mask/rt_20190710_h21_m17_s23r169/fort.63.nc /scratch2/COASTAL/coastal/save/Jason.Ducker/Sandy_ADCIRC_output/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/save/Jason.Ducker/Sandy_ADCIRC_output"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/velocity.py /scratch2/COASTAL/coastal/save/NAMED_STORMS/SANDY_ADCIRC/04_HWRF_land_mask_update_v02/a70_SAN_ATM_WAV2OCN_v2.1_new_hwrf_land_mask/rt_20190710_h21_m17_s23r169/fort.64.nc /scratch2/COASTAL/coastal/save/Jason.Ducker/Sandy_ADCIRC_output/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/save/Jason.Ducker/Sandy_ADCIRC_output"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/velocity.py /scratch2/COASTAL/coastal/save/NAMED_STORMS/Florence/ADCIRC/v01/a70_FLO_ATM_WAV2OCN_v2.2_extended/fort.64.nc /scratch2/COASTAL/coastal/save/Jason.Ducker/Flor_ADCIRC_extended_output/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/save/Jason.Ducker/Flor_ADCIRC_extended_output/old"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/waterlevel_NEMS.py /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Irma_COASTAL_ACT_fully_coupled_with_connectors/fort.63.nc /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Irma_ADCIRC_results/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Irma_ADCIRC_results/test"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/velocity_NEMS.py /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Irma_COASTAL_ACT_fully_coupled_with_connectors/fort.64.nc /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Irma_ADCIRC_results/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Irma_ADCIRC_results/test"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/velocity_NEMS.py /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Flor_COASTAL_ACT_fully_coupled_with_connectors/fort.64.nc /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Flor_COASTAL_ACT_fully_coupled_with_connectors/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Flor_COASTAL_ACT_fully_coupled_with_connectors/output"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/velocity_NEMS.py /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Flor_issues/fort_test/fort.64.nc /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Flor_issues/fort_test/CONT_BND_Mod.pli -o "/scratch2/COASTAL/coastal/noscrub/Jason.Ducker/Flor_issues/fort_test"
+#/scratch2/COASTAL/coastal/save/Jason.Ducker/anaconda3/bin/python3.9 /scratch2/COASTAL/coastal/save/COASTAL_ACT_NWC/Apps/extract4dflow/scripts/waterlevel.py /scratch2/COASTAL/coastal/noscrub/Jason.Ducker/iselle.atm2wav2ocn.20211120/run/fort.63.nc /scratch2/COASTAL/coastal/noscrub/Henok.Kefelegn/Pacific/TidalTest/MODEL_BND.pli -o "/scratch2/COASTAL/coastal/noscrub/Jason.Ducker/iselle.atm2wav2ocn.20211120/run/Pacific"
+date

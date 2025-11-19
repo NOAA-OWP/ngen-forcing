@@ -1,0 +1,118 @@
+## TODO: replace with base image created under NGWPC-3223 ##
+## see: https://jira.nextgenwaterprediction.com/browse/NGWPC-3223
+FROM rockylinux:8
+
+# cannot remove LANG even though https://bugs.python.org/issue19846 is fixed
+# last attempted removal of LANG broke many users:
+# https://github.com/docker-library/python/pull/570
+ENV LANG="C.UTF-8"
+
+
+## FIXME: Replace installation and build of FOSS dependencies wiith a base image. ##
+
+# Add conda repo
+RUN <<EOF cat > /etc/yum.repos.d/conda.repo
+[conda]
+name=Conda
+baseurl=https://repo.anaconda.com/pkgs/misc/rpmrepo/conda
+enabled=1
+gpgcheck=1
+gpgkey=https://repo.anaconda.com/pkgs/misc/gpgkeys/anaconda.asc
+EOF
+
+# runtime dependencies
+RUN set -eux; \
+    dnf install -y dnf-plugins-core epel-release; \
+    dnf config-manager --set-enabled powertools; \
+    dnf install -y \
+        autoconf \
+        automake \
+        cmake \
+        conda \
+        curl curl-devel \
+        file \
+        findutils \
+        git \
+## FIXME: replace GNU compilers with Intel compiler ##
+        gcc-toolset-10 \
+        gcc-toolset-10-libasan-devel \
+        gdal gdal-devel \
+        geos geos-devel \
+        libasan6 \
+        m4 \ 
+## FIXME: replace openmpi with Intel MPI libraries ##
+#       openmpi openmpi-devel \
+        openssl openssl-devel \
+        rsync \
+        which \ 
+    ; \
+    dnf clean all
+
+# add conda to the PATH
+ENV PATH=/opt/conda/bin:${PATH}
+
+## FIXME: replace GNU compilers with Intel compiler ##
+SHELL [ "/usr/bin/scl", "enable", "gcc-toolset-10"]
+## FIXME: replace openmpi with Intel MPI libraries ##
+#ENV PATH="${PATH}:/usr/lib64/openmpi/bin/"
+
+# Fix OpenMPI support within container
+#ENV PSM3_HAL=loopback
+#ENV PSM3_DEVICES=self
+
+ENV CONDA_ENVS_PATH=/ngen-app/conda/envs/
+
+ARG CONDA_ENV_NAME=ngen_forcing_extraction
+COPY ./Forcing_Extraction_Scripts/environment.yml environment.yaml
+RUN set -eux; \
+    \
+    conda env create --name ${CONDA_ENV_NAME} --file=environment.yaml ; \
+    conda clean --all ; \
+    rm --force environment.yaml
+
+ARG CONDA_ENV_NAME=ngen_streamflow
+COPY ./Streamflow_Scripts/environment.yml environment.yaml
+RUN set -eux; \
+    \
+    conda env create --name ${CONDA_ENV_NAME} --file=environment.yaml ; \
+    conda clean --all ; \
+    rm --force environment.yaml
+
+ARG CONDA_ENV_NAME=ngen_lumped_forcings_driver
+COPY ./NextGen_Lumped_Forcings_Driver/environment.yml environment.yaml
+RUN set -eux; \
+    \
+    conda env create --name ${CONDA_ENV_NAME} --file=environment.yaml ; \
+    conda clean --all ; \
+    rm --force environment.yaml
+
+RUN set -eux; \
+    \
+    conda init bash
+
+ARG CONDA_ENV_PATH=${CONDA_ENVS_PATH}/${CONDA_ENV_NAME}
+ARG OLD_PATH=${PATH}
+ENV PATH=${CONDA_ENV_PATH}/bin:${PATH}
+
+## TODO: use isciences official release of ExactExtract instead of this older fork
+## this package could then be managed via conda
+RUN set -eux; \
+    \
+    mkdir --parents /usr/src/exactextract ; \
+    git clone --single-branch -b coverage-fraction-pybindings https://github.com/jdalrym2/exactextract.git /usr/src/exactextract ; \
+    cd /usr/src/exactextract/ ; \
+    python3 setup.py install ; \
+    pip3 cache purge ; \
+    conda clean --all ; \
+    rm --force --recursive /usr/src/exactextract
+
+ENV PATH=${OLD_PATH}
+
+COPY . /ngen-app/ngen-forcing/
+WORKDIR /ngen-app/
+
+
+WORKDIR /
+SHELL ["/bin/bash", "-c"]
+
+ENTRYPOINT [ "/bin/bash" ] 

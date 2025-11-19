@@ -6,34 +6,50 @@ import traceback
 import numpy as np
 from mpi4py import MPI
 from scipy import spatial
+from logging import FileHandler
 
 
-def err_out_screen(err_msg):
+def err_out_screen(err_msg: str, exc: BaseException | None = None):
     """
     Generic routine to exit the program gracefully. This specific error function does not log
-    error messages to the log file, but simply prints them out to the screen. This is function
+    error messages to the log file, but simply prints them out to the screen. This function
     is designed specifically for early in the program execution where a log file hasn't been
     established yet.
+
+    If an exception is provided, its text will be appended to the error message.
+
     Logan Karsten - National Center for Atmospheric Research, karsten@ucar.edu
     """
 
+    if exc is not None:
+        err_msg += f" - {exc}"
     err_msg_out = 'ERROR: ' + err_msg
-    print(err_msg_out,flush=True)
+    print(err_msg_out, flush=True)
+    traceback.print_exc()  # Only prints if an exception is currently being handled
     sys.exit(1)
 
-def err_out_screen_para(err_msg,MpiConfig):
+
+def err_out_screen_para(err_msg: str, MpiConfig,  exc: BaseException | None = None):
     """
     Generic function for printing an error message to the screen and aborting MPI.
     This should only be called if logging cannot occur and an abrupt end the program
-    is neded.
-    :param err_msg:
-    :param MpiConfig:
-    :return:
+    is needed.
+
+    If an exception is provided, its text will be appended to the error message.
+
+    :param err_msg: The base error message string.
+    :param MpiConfig: The MPI configuration object (must include 'rank').
+    :param exc: Optional exception object to append to the error message.
+    :return: None
     """
-    err_msg_out = 'ERROR: RANK - ' + str(MpiConfig.rank) + ' : ' + err_msg
-    print(err_msg_out,flush=True)
+    if exc is not None:
+        err_msg += f" - {exc}"
+    err_msg_out = f'ERROR: RANK - {MpiConfig.rank} : {err_msg}'
+    print(err_msg_out, flush=True)
+    traceback.print_exc()  # Only prints if an exception is currently being handled
     # MpiConfig.comm.Abort()
     sys.exit(1)
+
 
 def check_program_status(ConfigOptions, MpiConfig):
     """
@@ -44,7 +60,7 @@ def check_program_status(ConfigOptions, MpiConfig):
     :return:
     """
     # Sync up processors to ensure everyone is on the same page.
-    #MpiConfig.comm.barrier()
+    # MpiConfig.comm.barrier()
 
     # Collect values from each processor.
     # data = MpiConfig.comm.gather(ConfigOptions.errFlag, root=0)
@@ -69,43 +85,42 @@ def check_program_status(ConfigOptions, MpiConfig):
     # Sync up processors.
     # MpiConfig.comm.barrier()
 
-def init_log(ConfigOptions,MpiConfig):
+
+def init_log(ConfigOptions, MpiConfig):
     """
-    Function for initializing log file for individual forecast cycles. Each
-    log file is unique to the instant the program was initialized.
-    :param ConfigOptions:
-    :return:
+    Initialize the per‑cycle log file once on rank 0.
+    We only want a single log file per cycle—not one per catchment—so we check
+    existing FileHandlers to avoid opening multiple handlers for the same file.
     """
+    # Only the master rank sets up logging
+    if MpiConfig.rank != 0:
+        return
+
+    log_name = 'logForcing'
+    filename = ConfigOptions.logFile
+
     try:
-        logObj = logging.getLogger('logForcing')
-    except:
-        ConfigOptions.errMsg = "Unable to create logging object " \
-                               "for: " + ConfigOptions.logFile
-        err_out_screen_para(ConfigOptions.errMsg,MpiConfig)
-    try:
-        formatter = logging.Formatter('[%(asctime)s]: %(levelname)s '
-                                      '- %(message)s', '%m/%d %H:%M:%S')
-    except:
-        ConfigOptions.errMsg = "Unable to establish formatting for logger."
-        err_out_screen_para(ConfigOptions.errMsg,MpiConfig)
-    try:
-        ConfigOptions.logHandle = logging.FileHandler(ConfigOptions.logFile,mode='a')
-    except:
-        ConfigOptions.errMsg = "Unable to create log file handle for: " + \
-            ConfigOptions.logFile
-        err_out_screen_para(ConfigOptions.errMsg,MpiConfig)
-    try:
-        ConfigOptions.logHandle.setFormatter(formatter)
-    except:
-        ConfigOptions.errMsg = "Unable to set formatting for: " + \
-            ConfigOptions.logFile
-        err_out_screen_para(ConfigOptions.errMsg,MpiConfig)
-    try:
-        logObj.addHandler(ConfigOptions.logHandle)
-    except:
-        ConfigOptions.errMsg = "ERROR: Unable to add log handler for: " + \
-            ConfigOptions.logFile
-        err_out_screen_para(ConfigOptions.errMsg,MpiConfig)
+        logger = logging.getLogger(log_name)
+
+        # If a FileHandler for this filename is already attached, skip (prevents one log per catchment)
+        for handler in logger.handlers:
+            if isinstance(handler, FileHandler) and getattr(handler, 'baseFilename', None) == filename:
+                return
+
+        # Otherwise, create and attach a new FileHandler
+        formatter = logging.Formatter(
+            '[%(asctime)s]: %(levelname)s - %(message)s',
+            datefmt='%m/%d %H:%M:%S'
+        )
+        file_handler = FileHandler(filename, mode='a')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        logger.setLevel(logging.INFO)
+
+    except Exception as e:
+        ConfigOptions.errMsg = f"Unable to initialize log file '{filename}': {e}"
+        err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
+
 
 def err_out(ConfigOptions):
     """
@@ -116,26 +131,27 @@ def err_out(ConfigOptions):
     """
     try:
         logObj = logging.getLogger('logForcing')
-    except:
+    except Exception:
         ConfigOptions.errMsg = "Unable to obtain a logger object for: " + \
-            ConfigOptions.logFile
+                               ConfigOptions.logFile
         raise Exception()
     try:
         logObj.setLevel(logging.ERROR)
-    except:
+    except Exception:
         ConfigOptions.errMsg = "Unable to set ERROR logger level for: " + \
-            ConfigOptions.logFile
+                               ConfigOptions.logFile
         raise Exception()
     try:
         logObj.error(ConfigOptions.errMsg)
-    except:
+    except Exception:
         ConfigOptions.errMsg = "Unable to write error message to: " + \
-            ConfigOptions.logFile
+                               ConfigOptions.logFile
         raise Exception()
     MPI.Finalize()
     sys.exit(1)
 
-def log_error(ConfigOptions,MpiConfig):
+
+def log_error(ConfigOptions, MpiConfig):
     """
     Function to log an error message to the log file.
     :param ConfigOptions:
@@ -144,22 +160,23 @@ def log_error(ConfigOptions,MpiConfig):
     """
     try:
         logObj = logging.getLogger('logForcing')
-    except:
+    except Exception:
         err_out_screen_para(('Unable to obtain logger object on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.setLevel(logging.ERROR)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to set ERROR logger level on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.error("RANK: " + str(MpiConfig.rank) + " - " + ConfigOptions.errMsg)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to write ERROR message on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     ConfigOptions.errFlag = 1
 
-def log_critical(ConfigOptions,MpiConfig):
+
+def log_critical(ConfigOptions, MpiConfig):
     """
     Function for logging an error message without exiting without a
     non-zero exit status.
@@ -168,22 +185,27 @@ def log_critical(ConfigOptions,MpiConfig):
     """
     try:
         logObj = logging.getLogger('logForcing')
-    except:
+    except Exception:
         err_out_screen_para(('Unable to obtain logger object on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.setLevel(logging.CRITICAL)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to set CRITICAL logger level on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.critical("RANK: " + str(MpiConfig.rank) + " - " + ConfigOptions.errMsg)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to write CRITICAL message on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
+
+    # Add this for debugging:
+    print(f"[DEBUG] log_critical called on RANK {MpiConfig.rank}: {ConfigOptions.errMsg}", flush=True)
+
     ConfigOptions.errFlag = 1
 
-def log_warning(ConfigOptions,MpiConfig):
+
+def log_warning(ConfigOptions, MpiConfig):
     """
     Function to log warning messages to the log file.
     :param ConfigOptions:
@@ -191,21 +213,22 @@ def log_warning(ConfigOptions,MpiConfig):
     """
     try:
         logObj = logging.getLogger('logForcing')
-    except:
+    except Exception:
         err_out_screen_para(('Unable to obtain logger object on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.setLevel(logging.WARNING)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to set WARNING logger level on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.warning("RANK: " + str(MpiConfig.rank) + " - " + ConfigOptions.statusMsg)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to write WARNING message on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
 
-def log_msg(ConfigOptions,MpiConfig):
+
+def log_msg(ConfigOptions, MpiConfig):
     """
     Function to log INFO messages to a specified log file.
     :param ConfigOptions:
@@ -213,42 +236,51 @@ def log_msg(ConfigOptions,MpiConfig):
     """
     try:
         logObj = logging.getLogger('logForcing')
-    except:
+    except Exception:
         err_out_screen_para(('Unable to obtain logger object on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.setLevel(logging.INFO)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to set INFO logger level on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
     try:
         logObj.info("RANK: " + str(MpiConfig.rank) + " - " + ConfigOptions.statusMsg)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to write INFO message on RANK: ' + str(MpiConfig.rank) +
-                             ' for log file: ' + ConfigOptions.logFile),MpiConfig)
+                             ' for log file: ' + ConfigOptions.logFile), MpiConfig)
 
-def close_log(ConfigOptions,MpiConfig):
+
+def close_log(ConfigOptions, MpiConfig):
     """
     Function for closing a log file.
     :param ConfigOptions:
     :return:
     """
+    # Only close if we have an open handler
+    if getattr(ConfigOptions, "logHandle", None) is None:
+        return
+
     try:
         logObj = logging.getLogger('logForcing')
-    except:
+    except Exception:
         err_out_screen_para(('Unable to obtain logger object on RANK: ' + str(MpiConfig.rank) +
                              ' for log file: ' + ConfigOptions.logFile), MpiConfig)
+
     try:
         logObj.removeHandler(ConfigOptions.logHandle)
-    except:
+    except Exception:
         err_out_screen_para(('Unable to remove logging file handle on RANK: ' + str(MpiConfig.rank) +
                              ' for log file: ' + ConfigOptions.logFile), MpiConfig)
+
     try:
         ConfigOptions.logHandle.close()
-    except:
-        err_out_screen_para(('Unable to close looging file: ' + ConfigOptions.logFile +
-                             ' on RANK: ' + str(MpiConfig.rank)),MpiConfig)
+    except Exception:
+        err_out_screen_para(('Unable to close logging file: ' + ConfigOptions.logFile +
+                             ' on RANK: ' + str(MpiConfig.rank)), MpiConfig)
+
     ConfigOptions.logHandle = None
+
 
 def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
     """
@@ -270,9 +302,9 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         'Q2D': [5, -100.0, 100.0],
         'PSFC': [6, 0.0, 2000000.0],
         'SWDOWN': [7, 0.0, 5000.0],
-        'LQFRAC': [8,0,1]
+        'LQFRAC': [8, 0, 1]
     }
-    fvars = ['U2D', 'V2D', 'LWDOWN', 'RAINRATE', 'T2D', 'Q2D', 'PSFC', 'SWDOWN','LQFRAC']
+    fvars = ['U2D', 'V2D', 'LWDOWN', 'RAINRATE', 'T2D', 'Q2D', 'PSFC', 'SWDOWN', 'LQFRAC']
 
     # If the regridded field is None type, return to the main program as this means no forcings
     # were found for this timestep.
@@ -292,12 +324,12 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         # indCheck = np.where(input_forcings.regridded_forcings2[variable_range[varTmp][0]]
         #                    != ConfigOptions.globalNdv)
 
-        #if len(indCheck[0]) == 0:
+        # if len(indCheck[0]) == 0:
         #    ConfigOptions.errMsg = "No valid data found for " + varTmp + " in " + input_forcings.file_in2
         #    log_critical(ConfigOptions, MpiConfig)
         #    indCheck = None
         #    return
-        if(ConfigOptions.aws == None):
+        if not ConfigOptions.aws:
             src_file = input_forcings.file_in2
             if '%FIELD%' in src_file:
                 src_file = src_file.replace('%FIELD%', {'U2D': "[wdir|wspd]", 'V2D': "[wdir|wspd]", 'RAINRATE': "qpf", 'T2D': "tmp"}[varTmp])
@@ -308,8 +340,12 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         numCells = len(indCheck[0])
         if numCells > 0:
             min = input_forcings.regridded_forcings2[variable_range[varTmp][0]][indCheck].min()
-            ConfigOptions.errMsg = f"Data (min = {min}) below minimum threshold for: {varTmp} in " \
-                                   f"{input_forcings.file_in2} for {numCells} regridded pixel cells."
+            if input_forcings.productName == 'NWM':
+                ConfigOptions.errMsg = f"Data (min = {min}) below minimum threshold for: {varTmp} in " \
+                                       f"NWM data for {numCells} regridded pixel cells."
+            else:    
+                ConfigOptions.errMsg = f"Data (min = {min}) below minimum threshold for: {varTmp} in " \
+                                       f"{input_forcings.file_in2} for {numCells} regridded pixel cells."
             log_critical(ConfigOptions, MpiConfig)
             indCheck = None
             return
@@ -320,14 +356,19 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         numCells = len(indCheck[0])
         if numCells > 0:
             max = input_forcings.regridded_forcings2[variable_range[varTmp][0]][indCheck].max()
-            ConfigOptions.errMsg = f"Data (max = {max}) above maximum threshold for: {varTmp} in " \
-                                   f"{src_file} for {numCells} regridded pixel cells."
+            if input_forcings.productName == 'NWM':
+                ConfigOptions.errMsg = f"Data (max = {max}) above maximum threshold for: {varTmp} in " \
+                                       f"NWM data for {numCells} regridded pixel cells."
+            else:    
+                ConfigOptions.errMsg = f"Data (max = {max}) above maximum threshold for: {varTmp} in " \
+                                       f"{src_file} for {numCells} regridded pixel cells."
             log_critical(ConfigOptions, MpiConfig)
             indCheck = None
             return
 
     indCheck = None
     return
+
 
 def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig, GeoMeta):
     """
@@ -353,18 +394,18 @@ def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig, GeoMeta
         ConfigOptions.errMsg = "Supplemental precip data below minimum threshold for in " + \
                                supplemental_precip.file_in2 + \
                                " for " + str(numCells) + " regridded pixel cells."
-        valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]),2),dtype=float)
-        invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]),2),dtype=float)
-        valid_coords[:,0] = GeoMeta.longitude_grid[indCheck_valid[0]]
-        valid_coords[:,0] = GeoMeta.latitude_grid[indCheck_valid[0]]
-        invalid_coords[:,0] = GeoMeta.longitude_grid[indCheck[0]]
-        invalid_coords[:,0] = GeoMeta.latitude_grid[indCheck[0]]
+        valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]), 2), dtype=float)
+        invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]), 2), dtype=float)
+        valid_coords[:, 0] = GeoMeta.longitude_grid[indCheck_valid[0]]
+        valid_coords[:, 0] = GeoMeta.latitude_grid[indCheck_valid[0]]
+        invalid_coords[:, 0] = GeoMeta.longitude_grid[indCheck[0]]
+        invalid_coords[:, 0] = GeoMeta.latitude_grid[indCheck[0]]
         distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
         supplemental_precip.regridded_precip2[indCheck[0]] = supplemental_precip.regridded_precip2[pet_inds]
-        del(valid_coords)
-        del(invalid_coords)
-        del(distance)
-        del(pet_inds)
+        del valid_coords
+        del invalid_coords
+        del distance
+        del pet_inds
         indCheck = None
         indCheck_valid = None
         return
@@ -378,32 +419,32 @@ def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig, GeoMeta
         ConfigOptions.errMsg = "Supplemental precip data above maximum threshold for in " + \
                                supplemental_precip.file_in2 + \
                                " for " + str(numCells) + " regridded pixel cells."
-        valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]),2),dtype=float)
-        invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]),2),dtype=float)
-        valid_coords[:,0] = GeoMeta.longitude_grid[indCheck_valid[0]]
-        valid_coords[:,0] = GeoMeta.latitude_grid[indCheck_valid[0]]
-        invalid_coords[:,0] = GeoMeta.longitude_grid[indCheck[0]]
-        invalid_coords[:,0] = GeoMeta.latitude_grid[indCheck[0]]
+        valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]), 2), dtype=float)
+        invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]), 2), dtype=float)
+        valid_coords[:, 0] = GeoMeta.longitude_grid[indCheck_valid[0]]
+        valid_coords[:, 0] = GeoMeta.latitude_grid[indCheck_valid[0]]
+        invalid_coords[:, 0] = GeoMeta.longitude_grid[indCheck[0]]
+        invalid_coords[:, 0] = GeoMeta.latitude_grid[indCheck[0]]
         distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
-        #log_critical(ConfigOptions, MpiConfig)
+        # log_critical(ConfigOptions, MpiConfig)
         supplemental_precip.regridded_precip2[indCheck[0]] = supplemental_precip.regridded_precip2[pet_inds]
-      
+
         indCheck = np.where((supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv) &
                             (supplemental_precip.regridded_precip2 > 100.0))
         indCheck_valid = np.where((supplemental_precip.regridded_precip2 > 0.0) & (supplemental_precip.regridded_precip2 < 100.0))
-        if(len(indCheck[0]) > 0):
-            valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]),2),dtype=float)
-            invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]),2),dtype=float)
-            valid_coords[:,0] = GeoMeta.longitude_grid[indCheck_valid[0]]
-            valid_coords[:,0] = GeoMeta.latitude_grid[indCheck_valid[0]]
-            invalid_coords[:,0] = GeoMeta.longitude_grid[indCheck[0]]
-            invalid_coords[:,0] = GeoMeta.latitude_grid[indCheck[0]]
+        if len(indCheck[0]) > 0:
+            valid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck_valid[0]]), 2), dtype=float)
+            invalid_coords = np.empty((len(GeoMeta.latitude_grid[indCheck[0]]), 2), dtype=float)
+            valid_coords[:, 0] = GeoMeta.longitude_grid[indCheck_valid[0]]
+            valid_coords[:, 0] = GeoMeta.latitude_grid[indCheck_valid[0]]
+            invalid_coords[:, 0] = GeoMeta.longitude_grid[indCheck[0]]
+            invalid_coords[:, 0] = GeoMeta.latitude_grid[indCheck[0]]
             distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
             supplemental_precip.regridded_precip2[indCheck[0]] = supplemental_precip.regridded_precip2[pet_inds]
-        del(valid_coords)
-        del(invalid_coords)
-        del(distance)
-        del(pet_inds)
+        del valid_coords
+        del invalid_coords
+        del distance
+        del pet_inds
         indCheck = None
         indCheck_valid = None
         return
@@ -419,6 +460,7 @@ def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig, GeoMeta
         log_critical(ConfigOptions, MpiConfig)
 
     return
+
 
 def check_missing_final(outPath, ConfigOptions, output_grid, var_name, MpiConfig):
     """

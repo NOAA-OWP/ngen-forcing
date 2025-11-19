@@ -1,0 +1,10 @@
+{
+    "region": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Flor_Enclosure.pol",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/DFlowFM",
+    "streamflow_input": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/NWMv3_Florence",
+    "boundary_csv": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Inflow_boundaries_csv_files/UpstreamModelingInflows_USAtl.csv",
+    "NWM_shpfile": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/HUC12_Shapefiles/USAtl/RouteLink_Inflows_AtlGulf_CCBuff.shp",
+    "global_pli": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/COASTAL_ACT_WLs/CONT_BND_Mod.pli",
+    "start_time": "2018-08-31_00:00",
+    "stop_time": "2018-09-24_00:00"
+}

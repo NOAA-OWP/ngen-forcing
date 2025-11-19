@@ -1,39 +1,53 @@
 [project]
 name = "ngen-forcings"
 authors = [
-    { name = "Jason Ducker", email = "jason.ducker@noaa.gov" }
+    { name = "Jason Ducker", email = "jason.ducker@noaa.gov" },
+    { name = "Kyle Larkin", email = "kyle.s.larkin@rtx.com"},
+    { name = "Peter Kronenberg", email = "peter.a.kronenberg@rtx.com"},
+    { name = "Jeff Wade", email = "jeff.s.wade@rtx.com"}
 ]
 description = "NextGen Forcings Engine"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { file = "LICENSE" }
-requires-python = ">= 3.8"
+requires-python = ">=3.11"
 dependencies = [
     "bmipy",
     "bokeh",
-    "pandas>=1.15",
-    "netCDF4",
-    "scipy",  
+    "bs4",
     "dask",
-    "zarr",
+    #"gdal == 3.7.3",
+    "fiona>=1.8.0,<1.10.0",  
+    "geopandas>=0.11.0,<0.14.0",  # Pin to avoid Shapely 2.x issues
+    "mpi4py>3.1.4",
+    "netCDF4",
+    "numpy",
+    "pandas",
+    "pyproj>=3.2.0,<4.0.0",  # Pin compatible version
+    "PyYaml~=6.0.2",
+    "requests",
+    "ruamel.yaml",
     "s3fs",
+    "scipy",
+    "shapely>=1.8.0,<2.0.0",  # Pin to avoid 2.x compatibility issues
     "xarray",
-    "mpi4py>=3.1.4",
-    "esmpy>=8.1.0",
-    "numpy>=1.20.1"
+    "zarr"
 ]
+
 dynamic = ["version"]
 
 [project.urls]
-Repository = "https://github.com/NOAA-OWP/ngen-forcing"
-Issues = "https://github.com/NOAA-OWP/ngen-forcing/issues"
+Repository = "https://github.com/NGWPC/ngen-forcing"
+Issues = "https://github.com/NGWPC/ngen-forcing/issues"
 
 [build-system]
 requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["NextGen_Forcings_Engine_BMI"]
-include = ["NextGen_Forcings_Engine*"]
+where = ["NextGen_Forcings_Engine_BMI", "."]
+include = ["NextGen_Forcings_Engine*", 
+    "Forcing_Extraction_Scripts*", 
+    "ESMF_Mesh_Domain_Configuration_Production*"]
 namespaces = false
 
 [tool.setuptools.dynamic]

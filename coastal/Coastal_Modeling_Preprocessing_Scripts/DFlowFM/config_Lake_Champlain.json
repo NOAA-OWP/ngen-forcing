@@ -1,0 +1,14 @@
+{
+    "region_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/LC_Enclosure.pol",
+    "region_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/LC_Enclosure.pol",
+    "boundary_csv_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Champlain/LC_InflowsOutflows_conus.csv",
+    "boundary_csv_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Champlain/LC_InflowsOutflows_Canada.csv",
+    "NWM_shpfile_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Champlain/Lake_Champlain_US_Semi_Circle/LC_InflowsOutflows_CCBuff_conus.shp",
+    "NWM_shpfile_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Champlain/Lake_Champlain_Canada_Semi_Circle/LC_InflowsOutflows_CCBuff_gl.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Champlain/DFlowFM",
+    "TRoute_US": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Champlain/TRoute_Lake_Champlain_US",
+    "TRoute_Can": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Lake_Champlain/TRoute_Lake_Champlain_Canada",
+    "global_pli":  "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Lake_Champlain/D-Flow/Boundary01.pli",
+    "start_time": "2011-03-01_00:00",
+    "stop_time": "2011-08-15_00:00"
+}

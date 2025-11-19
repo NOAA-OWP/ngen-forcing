@@ -1,0 +1,444 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [master, nwm-master, development, release-candidate]
+  pull_request:
+    branches: [main, nwm-master, development, release-candidate]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      image_base: ${{ steps.vars.outputs.image_base }}
+      image_bmi: ${{ steps.vars.outputs.image_bmi }}
+      image_lumped: ${{ steps.vars.outputs.image_lumped }}
+      image_coastal: ${{ steps.vars.outputs.image_coastal }}
+      image_sfincs: ${{ steps.vars.outputs.image_sfincs }}
+      pr_tag: ${{ steps.vars.outputs.pr_tag }}
+      commit_sha: ${{ steps.vars.outputs.commit_sha }}
+      commit_sha_short: ${{ steps.vars.outputs.commit_sha_short }}
+      test_image_tag: ${{ steps.vars.outputs.test_image_tag }}
+    steps:
+      - name: Compute image vars
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORG="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          REPO="$(basename "${GITHUB_REPOSITORY}")"
+          IMAGE_BASE="${REGISTRY}/${ORG}"
+          echo "image_base=${IMAGE_BASE}" >> "$GITHUB_OUTPUT"
+          echo "image_bmi=${IMAGE_BASE}/ngen-bmi-forcing" >> "$GITHUB_OUTPUT"
+          echo "image_lumped=${IMAGE_BASE}/ngen-lumped-forcing" >> "$GITHUB_OUTPUT"
+          echo "image_coastal=${IMAGE_BASE}/ngen-coastal" >> "$GITHUB_OUTPUT"
+          echo "image_sfincs=${IMAGE_BASE}/ngen-sfincs-forcing" >> "$GITHUB_OUTPUT"
+
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            PR_NUM="${{ github.event.pull_request.number }}"
+            PR_TAG="pr-${PR_NUM}-build"
+            echo "pr_tag=${PR_TAG}" >> "$GITHUB_OUTPUT"
+            echo "test_image_tag=${PR_TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            COMMIT_SHA="${GITHUB_SHA}"
+            SHORT_SHA="${COMMIT_SHA:0:12}"
+            echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+            echo "commit_sha_short=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+            echo "test_image_tag=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-bmi:
+    name: build-bmi
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push BMI Forcing
+        uses: docker/build-push-action@v6
+        with:
+          load: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: .
+          file: Dockerfile.bmi-forcings
+          push: true
+          tags: ${{ needs.setup.outputs.image_bmi }}:${{ needs.setup.outputs.test_image_tag }}
+          build-args: |
+            CI_COMMIT_REF_NAME=${{ github.ref_name }}
+
+  build-lumped:
+    name: build-lumped
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Lumped Forcing
+        uses: docker/build-push-action@v6
+        with:
+          load: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: .
+          file: Dockerfile.lumped-forcings
+          push: true
+          tags: ${{ needs.setup.outputs.image_lumped }}:${{ needs.setup.outputs.test_image_tag }}
+          build-args: |
+            CI_COMMIT_REF_NAME=${{ github.ref_name }}
+
+  build-coastal:
+    name: build-coastal
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Coastal
+        uses: docker/build-push-action@v6
+        with:
+          load: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: .
+          file: Dockerfile.ngencoastal
+          push: true
+          tags: ${{ needs.setup.outputs.image_coastal }}:${{ needs.setup.outputs.test_image_tag }}
+          build-args: |
+            CI_COMMIT_REF_NAME=${{ github.ref_name }}
+
+  build-sfincs:
+    name: build-sfincs
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push SFINCS
+        uses: docker/build-push-action@v6
+        with:
+          load: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: .
+          file: Dockerfile.sfincs
+          push: true
+          tags: ${{ needs.setup.outputs.image_sfincs }}:${{ needs.setup.outputs.test_image_tag }}
+          build-args: |
+            SFINCS_CPU_IMAGE_TAG=${{ env.SFINCS_CPU_IMAGE_TAG  || 'latest' }}
+
+  unit-test-bmi:
+    name: unit-test-bmi
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [setup, build-bmi]
+    container:
+      image: ${{ needs.setup.outputs.image_bmi }}:${{ needs.setup.outputs.test_image_tag }}
+    steps:
+      - run: echo "Running BMI Forcing Unit Tests..."
+
+  unit-test-lumped:
+    name: unit-test-lumped
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [setup, build-lumped]
+    container:
+      image: ${{ needs.setup.outputs.image_lumped }}:${{ needs.setup.outputs.test_image_tag }}
+    steps:
+      - run: echo "Running Lumped Forcing Unit Tests..."
+
+  unit-test-coastal:
+    name: unit-test-coastal
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [setup, build-coastal]
+    container:
+      image: ${{ needs.setup.outputs.image_coastal }}:${{ needs.setup.outputs.test_image_tag }}
+    steps:
+      - run: echo "Running Coastal Unit Tests..."
+
+  unit-test-sfincs:
+    name: unit-test-sfincs
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [setup, build-sfincs]
+    container:
+      image: ${{ needs.setup.outputs.image_sfincs }}:${{ needs.setup.outputs.test_image_tag }}
+    steps:
+      - run: echo "Running SFINCS Unit Tests..."
+
+  codeql-scan:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [setup, build-bmi, build-lumped, build-coastal, build-sfincs]
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  container-scanning:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [setup, build-bmi, build-lumped, build-coastal, build-sfincs]
+    strategy:
+      matrix:
+        target:
+          - { name: bmi,     ref: '${{ needs.setup.outputs.image_bmi }}' }
+          - { name: lumped,  ref: '${{ needs.setup.outputs.image_lumped }}' }
+          - { name: coastal, ref: '${{ needs.setup.outputs.image_coastal }}' }
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # cache Trivy DB between runs to avoid re-downloading
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ hashFiles('**/lockfiles-or-just-use-workflow-yaml') }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      - name: Trivy scan (${{ matrix.target.name }})
+        uses: aquasecurity/trivy-action@0.24.0
+        timeout-minutes: 45 # step timeout (increase for coastal)
+        with:
+          image-ref: ${{ matrix.target.ref }}:${{ needs.setup.outputs.test_image_tag }}
+          format: sarif
+          output: trivy-results-${{ matrix.target.name }}.sarif
+          severity: CRITICAL,HIGH
+          scanners: vuln # only vulnerability scanning
+          ignore-unfixed: true # smaller SARIF, faster result handling
+          args: --timeout 30m # Trivy internal timeout
+
+      - name: Upload SARIF (${{ matrix.target.name }})
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results-${{ matrix.target.name }}.sarif
+
+  deploy-latest-on-development:
+    name: deploy-latest-on-development
+    if: github.event_name == 'push' && github.ref_name == 'development'
+    runs-on: ubuntu-latest
+    needs: [setup, build-bmi, build-lumped, build-coastal, build-sfincs, unit-test-bmi, unit-test-lumped, unit-test-coastal, unit-test-sfincs, codeql-scan, container-scanning]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: BMI Forcing
+            IMAGE_BASE: ${{ needs.setup.outputs.image_bmi }}
+          - label: Lumped Forcing
+            IMAGE_BASE: ${{ needs.setup.outputs.image_lumped }}
+          - label: Coastal
+            IMAGE_BASE: ${{ needs.setup.outputs.image_coastal }}
+          - label: SFINCS Forcing
+            IMAGE_BASE: ${{ needs.setup.outputs.image_sfincs }}
+
+    steps:
+      - name: install skopeo
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+
+      - name: tag image with 'latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_BASE="${{ matrix.IMAGE_BASE }}"
+          SHORT_SHA="${{ needs.setup.outputs.commit_sha_short }}"
+
+          skopeo copy \
+            --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --all \
+            "docker://${IMAGE_BASE}:${SHORT_SHA}" "docker://${IMAGE_BASE}:latest"
+
+  release:
+    name: release
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    needs: setup
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: BMI Forcing
+            IMAGE_BASE: ${{ needs.setup.outputs.image_bmi }}
+          - label: Lumped Forcing
+            IMAGE_BASE: ${{ needs.setup.outputs.image_lumped }}
+          - label: Coastal
+            IMAGE_BASE: ${{ needs.setup.outputs.image_coastal }}
+          - label: SFINCS Forcing
+            IMAGE_BASE: ${{ needs.setup.outputs.image_sfincs }}
+
+    steps:
+      - name: Get commit sha for the tag
+        id: rev
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          REPO="${{ github.repository }}"
+
+          # ensure jq is available
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends jq
+          fi
+
+          # ensure gh cli is available
+          if ! command -v gh >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends gh
+          fi
+
+          REF_JSON="$(gh api "repos/${REPO}/git/refs/tags/${TAG}")"
+          OBJ_SHA="$(jq -r '.object.sha' <<<"$REF_JSON")"
+          OBJ_TYPE="$(jq -r '.object.type' <<<"$REF_JSON")"
+
+          if [ "$OBJ_TYPE" = "tag" ]; then
+            TAG_OBJ="$(gh api "repos/${REPO}/git/tags/${OBJ_SHA}")"
+            COMMIT_SHA="$(jq -r '.object.sha' <<<"$TAG_OBJ")"
+          else
+            COMMIT_SHA="$OBJ_SHA"
+          fi
+
+          SHORT_SHA="${COMMIT_SHA:0:12}"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Tag image with release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_BASE="${{ matrix.IMAGE_BASE }}"
+          SHORT_SHA="${{ steps.rev.outputs.short_sha }}"
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+
+          # ensure skopeo is available
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+
+          skopeo copy \
+            --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --all \
+            "docker://${IMAGE_BASE}:${SHORT_SHA}" "docker://${IMAGE_BASE}:${RELEASE_TAG}"

@@ -1,0 +1,16 @@
+name: snodas_preprocessing
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - xarray
+  - netcdf4
+  - matplotlib
+  - cartopy
+  - numpy
+  - geopandas
+  - pandas
+  - fsspec
+  - s3fs
+

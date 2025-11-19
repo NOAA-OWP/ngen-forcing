@@ -1,0 +1,36 @@
+Description of how the Data Assimilation scripting works.
+
+James McCreight of NCAR supplied me with scripts developed by Zhengtao Cui (at NCAR?) for automated retrieval of streamflow gauge data from USGS and format conversion into a standard netCDF format used by the National Water Model. These source code files are also available on github.com under the NCAR domain, project name wrf_hydro_nwm_NWIS and I think they are a match to what I received, although I did not verify that.  I used the scripts from James as a template for doing the same thing with Canadian streamflow data.  All scripts are written in Python 2.7 and are intended for use in a linux environment. 
+
+Basic download workflow is to start up a master process that runs in an infinite loop.  It appears to me that there may be some limitations on process length in the environment for which this was developed, so the master process seems to be set up to die and restart on a schedule.  Regardless of that mechanism, the underlying process is based on this infinite never-ending loop that checks the server at a prescribed interval. It compares timestamps of the streamflow gauge data files with the timestamps of the corresponding file on the local file system.  When the remote file is newer than the local file, that means it has been updated and needs to be downloaded. That is done, and the downloaded data is then translated into an appropriate netCDF file.  After all files have been checked, the process sleeps until the next prescribed update check.
+
+Conversion to NetCDF format is done as a separate process, and the code for that process is also supplied.
+
+
+USGS scripts received from James McCreight:
+name                                  purpose
+---------------------                 ----------------------------------------------------------------
+run_usgs.sh                           bash script used to start the main infinite loop process
+parallel_download_master.py           infinite loop process to run routine for check/download
+usgs_iv_retrieval.py                  control script to get all stations updated in the last N minutes
+find_changed_site_for_huc.py          determine which stations are updated, and make list
+fetch_sites.py                        download the stations identified in a list
+
+make_time_slice_from_usgs_waterml.py  convert downloaded station data from USGS format to NWM netCDF
+TimeSlice.py                          build the netCDF timeslice files
+USGS_Observation.py                   read USGS format
+
+
+Scripts developed by Tim Hunter for Canadian flow data:
+name                                  purpose
+---------------------                 ----------------------------------------------------------------
+run_canflow.sh                        bash script used to start the main infinite loop process
+parallel_dm_can.py                    infinite loop process to run routine for check/download
+canadian_flow_retrieval.py            control script to identify and download all stations updated in the last N minutes
+
+make_time_slice_from_canada.py        convert downloaded station data from WSC format to NWM netCDF
+TimeSliceC.py                         build the netCDF timeslice files
+WSC_Observation.py                    read WSC (Water Survey of Canada) format
+
+
+Note that I kept the script organization and naming relatively consistent with the stuff developed by Zhengtao, but I did simplify/combine the Canadian stuff a little bit.  It should be relatively easy and straightforward for whoever implements this on WCOSS or elsewhere to adapt the code and use the new Canadian scripts as a separate standalone process.  If the goal is to build a combined process script for doing both the US and Canadian files together, then that will likely be a bit more complicated, obviously. But my hope is that keeping things relatively parallel in structure and naming will facilitate that work (if needed).

@@ -1,0 +1,13 @@
+numpy
+geopandas
+pandas
+netCDF4
+scikit-learn
+scipy
+shapely
+xarray
+argparse
+pathlib
+dask
+toolz
+rioxarray

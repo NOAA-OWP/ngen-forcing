@@ -1,0 +1,13 @@
+{
+    "region": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Pacific.pol",
+    "boundary_csv": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Pacific_Data/Pac/Pac_dflow_InflowsOutflows.csv",
+    "NWM_shpfile": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Pacific_Data/Pac/Pac_dflow_InflowsOutflows_CCBuff.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Pacific_Data/DFlowFM",
+    "TRoute": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Pacific_Data/TRoute",
+    "hgrid3": "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Pacific/SCHISM/hgrid.gr3",
+    "elev2d": "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Pacific/SCHISM/elev2D.th.nc_pac",
+    "global_pli":  "/scratch2/NCEPDEV/ohd/NG_Coastal_Model_Setups/Pacific/D-Flow/CONT_BND.pli",
+    "schism_start_time": "2014-07-31_00:00",
+    "start_time": "2014-07-31_00:00",
+    "stop_time": "2014-08-09_00:00"
+}

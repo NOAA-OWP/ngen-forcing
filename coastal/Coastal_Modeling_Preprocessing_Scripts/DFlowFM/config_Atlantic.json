@@ -1,0 +1,11 @@
+{
+    "region": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/Flor_Enclosure.pol",
+    "boundary_csv": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/AtlGulf/AtlGulf_InflowsOutflows.csv",
+    "NWM_shpfile": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/AtlGulf/AtlGulf_InflowsOutflows_CCBuff.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/DFlowFM",
+    "TRoute": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/TRoute",
+    "CERA": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/Florence_fort.63.nc",
+    "global_pli": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Atlantic_Data/COASTAL_ACT_WLs/CONT_BND_Mod.pli",
+    "start_time": "2018-08-31_00:00",
+    "stop_time": "2018-09-24_00:00"
+}

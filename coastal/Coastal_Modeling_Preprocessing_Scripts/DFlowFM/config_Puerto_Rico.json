@@ -1,0 +1,12 @@
+{
+    "region": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/PR_USVI_Revised.pol",
+    "boundary_csv": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Puerto_Rico_Data/PRVI_InflowsOutflows_rev1.csv",
+    "NWM_shpfile": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Puerto_Rico_Data/PRVI_inflows/PRVI_InflowsOutflows_CCbuff.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Puerto_Rico_Data/DFlowFM",
+    "TRoute": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Puerto_Rico_Data/TRoute",
+    "CERA1": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Puerto_Rico_Data/Irma_fort.63.nc",
+    "CERA2": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Puerto_Rico_Data/Maria_fort.63.nc",
+    "global_pli": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Puerto_Rico_Data/PR_USVI_BND_OLD.pli",
+    "start_time": "2017-09-01_00:00",
+    "stop_time": "2017-10-14_23:00"
+}

@@ -1,0 +1,9 @@
+name: NextGen_Streamflow_Scripts
+channels:
+  - defaults
+  - anaconda
+dependencies:
+  - python~=3.10.0
+  - netCDF4
+  - python-dateutil
+  - pytz
