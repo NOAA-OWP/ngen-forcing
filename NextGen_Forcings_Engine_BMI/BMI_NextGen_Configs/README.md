@@ -281,6 +281,7 @@ Choose a set of supplemental precipitation file(s) to layer into the final LDASI
 12. CONUS Stage IV NWS Precip
 13. MRMS PrecipFlag precipitation classification file
 14. Custom Frequency Supplementary Precipitation product (sub-hourly precip)
+15. NBM Puerto Rico
 - Example- SuppPcp: [1, 5, 13]
 
 ### SuppPcpForcingTypes

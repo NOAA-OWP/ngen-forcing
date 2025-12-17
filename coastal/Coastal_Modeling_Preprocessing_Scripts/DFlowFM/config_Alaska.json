@@ -1,0 +1,13 @@
+{
+    "region": "/scratch2/NCEPDEV/ohd/Jason.Ducker/extract4dflow-master/Extract_DFlowFM_Input_Files/Polygon_enclosure_files/AK_Enclosure.pol",
+    "boundary_csv": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Alaska_DFLOWFM/AK_InflowsOutflows_hfv2.csv",
+    "NWM_shpfile": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Alaska_DFLOWFM/AK_Inflows_NextGen/AK_InflowsOutflows_hfv2_CCBuff.shp",
+    "output_directory": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Alaska_DFLOWFM/DFlowFM",
+    "TRoute": "/scratch2/NCEPDEV/ohd/Jason.Ducker/Alaska_DFLOWFM/TRoute",
+    "hgrid3": "/scratch2/NCEPDEV/ohd/Hassan.Mashriqui/schism/Alaska_tide_30days_base/hgrid.gr3",
+    "elev2d": "/scratch2/NCEPDEV/ohd/Hassan.Mashriqui/schism/mk_ocean_boundary/elev2D.th.nc_2002_11_1",
+    "global_pli": "/scratch2/NCEPDEV/ohd/Hassan.Mashriqui/alaska_dflow_30days_tide_schism_wl/AL_MOD.pli",
+    "schism_start_time": "2002-11-01_00:00",
+    "start_time": "2002-11-01_00:00",
+    "stop_time": "2002-11-14_23:00"
+}

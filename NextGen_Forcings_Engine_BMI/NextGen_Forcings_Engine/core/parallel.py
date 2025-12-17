@@ -1,5 +1,6 @@
-import numpy as np
 import mpi4py
+import numpy as np
+
 mpi4py.rc.threads = False
 
 from mpi4py import MPI
@@ -11,12 +12,14 @@ if MPI.Is_initialized():
     mpi4py.rc.initialize = False
     mpi4py.rc.finalize = False
 
+
 class MpiConfig:
     """
     Abstract class for defining the MPI parameters,
     along with initialization of the MPI communication
     handle from mpi4py.
     """
+
     def __init__(self):
         """
         Initialize the MPI abstract class that will contain basic
@@ -24,8 +27,8 @@ class MpiConfig:
         """
         self.comm = None
         self.rank = None
-        self.size = None 
-     
+        self.size = None
+
     def initialize_comm(self, config_options, comm=None):
         """
         Initial function to initialize MPI.
@@ -98,7 +101,7 @@ class MpiConfig:
             tmpDict = None
         try:
             tmpDict = self.comm.bcast(tmpDict, root=0)
-        except:
+        except Exception:
             ConfigOptions.errMsg = "Unable to broadcast numpy datatype value from rank 0"
             err_handler.log_critical(ConfigOptions, self)
             return None
@@ -112,13 +115,13 @@ class MpiConfig:
                 arrayGlobalTmp = np.empty([geoMeta.ny_global,
                                            geoMeta.nx_global],
                                           np.float32)
-            else:                                            #data_type_flag == 2:
+            else:  # data_type_flag == 2:
                 arrayGlobalTmp = np.empty([geoMeta.ny_global,
                                            geoMeta.nx_global],
                                           np.float64)
         try:
             self.comm.Bcast(arrayGlobalTmp, root=0)
-        except:
+        except Exception:
             ConfigOptions.errMsg = "Unable to broadcast a global numpy array from rank 0"
             err_handler.log_critical(ConfigOptions, self)
             return None
@@ -126,7 +129,7 @@ class MpiConfig:
                    geoMeta.x_lower_bound:geoMeta.x_upper_bound]
         return arraySub
 
-    def scatter_array_scatterv_no_cache(self,geoMeta,src_array,ConfigOptions):
+    def scatter_array_scatterv_no_cache(self, geoMeta, src_array, ConfigOptions):
         """
             Generic function for calling scatter functons based on
             the input dataset type.
@@ -149,9 +152,9 @@ class MpiConfig:
 
         # Broadcast the data_type_flag to other processors
         if self.rank == 0:
-            data_type_buffer = np.array([data_type_flag],np.int32)
+            data_type_buffer = np.array([data_type_flag], np.int32)
         else:
-            data_type_buffer = np.empty(1,np.int32)
+            data_type_buffer = np.empty(1, np.int32)
 
         try:
             self.comm.Bcast(data_type_buffer, root=0)
@@ -167,7 +170,7 @@ class MpiConfig:
         bounds = np.array(
             [np.int32(geoMeta.x_lower_bound), np.int32(geoMeta.y_lower_bound),
              np.int32(geoMeta.x_upper_bound), np.int32(geoMeta.y_upper_bound)])
-        global_bounds = np.zeros((self.size*4),np.int32)
+        global_bounds = np.zeros((self.size * 4), np.int32)
 
         try:
             self.comm.Allgather([bounds, MPI.INTEGER], [global_bounds, MPI.INTEGER])
@@ -183,47 +186,47 @@ class MpiConfig:
         y_upper = global_bounds[3:(self.size * 4) + 3:4]
 
         # generate counts
-        counts = [ (y_upper[i] - y_lower[i]) * (x_upper[i] - x_lower[i])
-                   for i in range(0,self.size)]
+        counts = [(y_upper[i] - y_lower[i]) * (x_upper[i] - x_lower[i])
+                  for i in range(0, self.size)]
 
-        #generate offsets:
+        # generate offsets:
         offsets = [0]
         for i in range(0, self.size - 1):
             offsets.append(offsets[i] + counts[i])
 
         # create the send buffer
         if self.rank == 0:
-            sendbuf = np.empty([src_array.size],src_array.dtype)
+            sendbuf = np.empty([src_array.size], src_array.dtype)
 
             # fill the send buffer
-            for i in range(0,self.size):
+            for i in range(0, self.size):
                 start = offsets[i]
-                stop  = offsets[i]+counts[i]
+                stop = offsets[i] + counts[i]
                 sendbuf[start:stop] = src_array[y_lower[i]:y_upper[i],
-                                                x_lower[i]:x_upper[i]].flatten()
+                                      x_lower[i]:x_upper[i]].flatten()
         else:
             sendbuf = None
 
-        #create the recvbuffer
+        # create the recvbuffer
         if data_type_flag == 1:
             data_type = MPI.FLOAT
-            recvbuf=np.empty([counts[self.rank]],np.float32)
-        elif data_type_flag == 3: 
+            recvbuf = np.empty([counts[self.rank]], np.float32)
+        elif data_type_flag == 3:
             data_type = MPI.BOOL
             recvbuf = np.empty([counts[self.rank]], bool)
         else:
             data_type = MPI.DOUBLE
             recvbuf = np.empty([counts[self.rank]], np.float64)
 
-        #scatter the data
+        # scatter the data
         try:
-            self.comm.Scatterv( [sendbuf, counts, offsets, data_type], recvbuf, root=0)
+            self.comm.Scatterv([sendbuf, counts, offsets, data_type], recvbuf, root=0)
         except:
             ConfigOptions.errMsg = "Failed Scatterv from rank 0"
             err_handler.error_out(ConfigOptions)
             return None
 
-        subarray = np.reshape(recvbuf,[y_upper[self.rank] -y_lower[self.rank],x_upper[self.rank]- x_lower[self.rank]]).copy()
+        subarray = np.reshape(recvbuf, [y_upper[self.rank] - y_lower[self.rank], x_upper[self.rank] - x_lower[self.rank]]).copy()
         return subarray
 
     # use scatterv based scatter_array
@@ -232,7 +235,7 @@ class MpiConfig:
     def merge_slabs_gatherv(self, local_slab, options):
 
         # Filter based on dimensionality of array
-        if(len(local_slab.shape) == 2):
+        if (len(local_slab.shape) == 2):
             # gather buffer offsets and bounds to rank 0 for 2d array
             shapes = np.array([np.int32(local_slab.shape[0]), np.int32(local_slab.shape[1])])
             global_shapes = np.zeros((self.size * 2), np.int32)
@@ -244,38 +247,38 @@ class MpiConfig:
         try:
             self.comm.Allgather([shapes, MPI.INTEGER], [global_shapes, MPI.INTEGER])
         except:
-            options.errMsg ="Failed all gathering slab shapes at rank" + str(self.rank)
-            err_handler.log_critical(options,self)
+            options.errMsg = "Failed all gathering slab shapes at rank" + str(self.rank)
+            err_handler.log_critical(options, self)
             global_bounds = None
-        
-        #options.errMsg = "All gather for global shapes complete"
-        #err_handler.log_msg(options,self)
 
-        if(len(local_slab.shape) == 2):
+        # options.errMsg = "All gather for global shapes complete"
+        # err_handler.log_msg(options,self)
+
+        if (len(local_slab.shape) == 2):
             # check that all slabes are the same width and sum the number of rows
             width = global_shapes[1]
             total_rows = 0
-            for i in range(0,self.size):
-                total_rows += global_shapes[2*i]
-                if global_shapes[(2*i)+1] != width:
+            for i in range(0, self.size):
+                total_rows += global_shapes[2 * i]
+                if global_shapes[(2 * i) + 1] != width:
                     options.errMsg = "Error: slabs with differing widths detected on slab for rank" + str(i)
-                    err_handler.log_critical(options,self)
+                    err_handler.log_critical(options, self)
                     self.comm.abort()
 
-            #options.errMsg = "Checking of Rows and Columns complete"
-            #err_handler.log_msg(options,self)
+            # options.errMsg = "Checking of Rows and Columns complete"
+            # err_handler.log_msg(options,self)
 
             # generate counts
-            counts = [ global_shapes[i*2] * global_shapes[(i*2)+1]
-                       for i in range(0,self.size)]
+            counts = [global_shapes[i * 2] * global_shapes[(i * 2) + 1]
+                      for i in range(0, self.size)]
 
-            #generate offsets:
+            # generate offsets:
             offsets = [0]
-            for i in range(0, len(counts) -1 ):
+            for i in range(0, len(counts) - 1):
                 offsets.append(offsets[i] + counts[i])
 
-            #options.errMsg = "Counts and Offsets generated"
-            #err_handler.log_msg(options,self)
+            # options.errMsg = "Counts and Offsets generated"
+            # err_handler.log_msg(options,self)
 
             # create the receive buffer
             if self.rank == 0:
@@ -284,15 +287,15 @@ class MpiConfig:
                 recvbuf = None
         else:
             # generate counts
-            counts = [ global_shapes[i] for i in range(0,self.size)]
+            counts = [global_shapes[i] for i in range(0, self.size)]
 
-            #generate offsets:
+            # generate offsets:
             offsets = [0]
-            for i in range(0, len(counts) -1 ):
+            for i in range(0, len(counts) - 1):
                 offsets.append(offsets[i] + counts[i])
 
-            #options.errMsg = "Counts and Offsets generated"
-            #err_handler.log_msg(options,self)
+            # options.errMsg = "Counts and Offsets generated"
+            # err_handler.log_msg(options,self)
 
             # create the receive buffer
             if self.rank == 0:
@@ -314,10 +317,10 @@ class MpiConfig:
             self.comm.Gatherv(sendbuf=local_slab, recvbuf=[recvbuf, counts, offsets, data_type], root=0)
         except:
             options.errMsg = "Failed to Gatherv to rank 0 from rank " + str(self.rank)
-            err_handler.log_critical(options,self)
+            err_handler.log_critical(options, self)
             return None
 
-        #options.errMsg = "Gatherv complete"
-        #err_handler.log_msg(options,self)
+        # options.errMsg = "Gatherv complete"
+        # err_handler.log_msg(options,self)
 
         return recvbuf

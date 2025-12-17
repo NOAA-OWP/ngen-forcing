@@ -1,0 +1,8 @@
+# This file is intended to be an example of how one could list domains available to run
+domain:
+  - name: pacific
+    path: ..\..\..\coastalmodels\schism\pacific\ # path to base model files
+    region: pacific   # General region or basin group
+    epsg: 32615
+    notes: >
+      Example SCHISM domain 

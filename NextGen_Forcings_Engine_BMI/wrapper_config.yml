@@ -1,0 +1,48 @@
+global:
+  mesh_script_path: "/ngen-app/ngen-forcing/ESMF_Mesh_Domain_Configuration_Production/NextGen_hyfab_to_ESMF_Mesh.py"
+  #mesh_in_base_path: "/srv/data/hydrofab_gpkg/"
+  mesh_out_base_path: "/ngen-app/data/esmf_mesh/"
+  extraction_script_path: "/ngen-app/ngen-forcing/Forcing_Extraction_Scripts"
+  extraction_out_path: "/ngen-app/data/raw_input"
+  bmi_script_path: "/ngen-app/ngen-forcing/NextGen_Forcings_Engine_BMI/run_bmi_model.py"
+  mesh_env: "ngen_esmf_mesh_domain"
+  extract_env: "ngen_forcing_extraction"
+  engine_env: "ngen_forcings_engine_bmi"
+short_range:
+  sr_config_path: "/ngen-app/data/configs/CONUS/sr_config.yml"
+  hrrr_out_path: "/HRRR"
+  rap_out_path: "/RAP"
+#medium_range:
+  #mr_config_path: "/srv/data/configs/CONUS/mr_config.yml"
+  #gfs_out_path: "/GFS"
+medium_range_blend:
+  mrb_config_path: "/ngen-app/data/configs/CONUS/mrb_config.yml"
+  gfs_out_path: "/GFS"
+  nbm_out_path: "/NBM"
+standard_ana:
+  ana_config_path: "/ngen-app/data/configs/CONUS/ana_config.yml"
+  mrms_ms_out_path: "/MRMS_MS"
+  mrms_ro_out_path: "/MRMS_RO"
+  hrrr_out_path: "/HRRR_ANA"
+  rap_out_path: "/RAP_ANA"
+long_range:
+  lr_config_path: "/ngen-app/data/configs/CONUS/lr_config.yml"
+  cfs_out_path: "/CFS"
+extended_ana:
+  ana_config_path: "/ngen-app/data/configs/CONUS/ext_ana_config.yml"
+  stage_iv_out_path: "/STAGE_IV"
+  hrrr_out_path: "/HRRR_ANA"
+  rap_out_path: "/RAP_ANA"
+pr_short_range:
+  pr_sr_config_path: "/ngen-app/data/configs/PR/pr_sr_config.yml"
+  nbm_out_path: "/NBM"
+  nam_out_path: "/PR_NAM"
+  arw_out_path: "/PR_ARW"
+hi_short_range:
+  hi_sr_config_path: "/ngen-app/data/configs/HI/hi_sr_config.yml"
+  nam_out_path: "/HI_NAM"
+  arw_out_path: "/HI_ARW"
+ak_short_range:
+  ak_sr_config_path: "/ngen-app/data/configs/AK/ak_sr_config.yml"
+  hrrr_out_path: "/AK_HRRR"
+  nbm_out_path: "/AK_NBM"

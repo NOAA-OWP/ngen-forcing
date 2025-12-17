@@ -1,0 +1,27 @@
+#!/bin/sh -l
+#SBATCH -A ohd            # -A, --account=name          charge job to specified account
+#SBATCH -e SCHISM.error        # -e, --error=err             file for batch script's standard error
+#SBATCH --ignore-pbs          # --ignore-pbs            Ignore #PBS options in the batch script
+#SBATCH -J SCHISM_model_setup
+#SBATCH -n 1
+#SBATCH --partition=bigmem
+#SBATCH -t 480
+############################### main - to run: $sbatch nsem.job ##########################
+set -x
+echo $SLURM_SUBMIT_DIR            # (in Slurm, jobs start in "current dir")
+echo $SLURM_JOBID
+echo $SLURM_JOB_NAME
+echo $SLURM_NNODES
+echo $SLURM_TASKS_PER_NODE
+
+# PBS_NODEFILE:  There is not a direct equivalent for this, but
+echo $SLURM_NODELIST              # give you the list of assigned nodes.
+
+# cd $SLURM_SUBMIT_DIR
+echo "STARTING THE JOB AT"
+date
+/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python boundary_elements_NWMv3.py ./hgrid.gr3 ./atl.csv --output-prefix ./NWMv3_Atlantic/
+/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python NWMv3_source_sink_only.py
+/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python merge_source_sink.py
+/scratch2/NCEPDEV/ohd/Jason.Ducker/anaconda3/envs/pyschism/bin/python merge_precip_only.py
+

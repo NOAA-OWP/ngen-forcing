@@ -1,0 +1,8 @@
+# This file is intended to be an example of how one could list domains available to run
+domain:
+  - name: atlgulf
+    path: ..\..\..\coastalmodels\schism\atlgulf\ # path to base model files
+    region: atlgulf   # General region or basin group
+    epsg: 32615
+    notes: >
+      Example SCHISM domain 

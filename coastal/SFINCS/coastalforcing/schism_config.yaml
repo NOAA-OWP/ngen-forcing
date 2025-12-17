@@ -1,0 +1,23 @@
+# -----------------------------------------------------------------------------
+# User Configuration File for Coastal Forcing
+#
+# This file controls model type, hydrology source, meteo source, 
+# coastal water level source, domain selection, and output paths.
+# -----------------------------------------------------------------------------
+coastal_model: schism                   # Options: schism, sfincs
+meteo_source: nwm_retro                  # Options: nwm_retro, nwm_ana
+hydrology_source: nwm                   # Options: nwm, ngen
+coastal_water_level_source: stofs      # Options: stofs, tpxo, glofs (great lakes only)
+# domain_file: /contrib/MohammedKarim/ngwpc/FORCING/Testing/coastalforcing/domain_lists/sfincs/texas_example              # Options: see domain_lists/{coastal_model}/
+domain_file: pacific
+start_time: 2022-06-11T00-00-00Z        # Simulation start time in format YYYY-MM-DDTHH-MM-SSZ
+end_time: 2022-06-11T03-00-00Z          # Simulation end time in format YYYY-MM-DDTHH-MM-SSZ
+
+# These should be externally mounted
+raw_download_dir: /efs/schism_use_case/sfincs_config_test/data/raw          # Directory for storing raw downloaded data
+sim_dir: /efs/schism_use_case/sfincs_config_test  # Directory for storing all processed model files ready to run
+
+# TPXO Info 
+tpxo_relative_path: process_data/TPXO
+tpxo_model_control: Model_tpxo10_atlas  # inside relative path w.r.t tpxo_relative_path
+ld_library_path: /contrib/software/gcc/8.5.0/lib64:/contrib/software/netcdf/4.7.4/lib

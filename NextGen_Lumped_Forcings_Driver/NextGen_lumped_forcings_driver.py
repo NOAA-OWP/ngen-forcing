@@ -15,6 +15,13 @@ from NextGen_CFS_forcings_module import NextGen_Forcings_CFS #NextGen_CFS_forcin
 ###### NextGen lumped forcings driver #######
 def NextGen_lumped_forcings_driver(output_root, start_time, end_time, met_dataset, hyfabfile, hyfabfile_parquet=None, met_dataset_pathway=None, weights_file=None, netcdf=True, csv=False, bias_calibration = False, downscaling = False, CONUS=False, AnA=False, num_processes=1):
 
+    #Checking which data source type we're dealing with - KSL
+    print(f"met_dataset_pathway: {met_dataset_pathway}")
+    is_zarr = met_dataset_pathway is not None and met_dataset_pathway.startswith('s3://')
+    is_local = met_dataset_pathway is not None and not is_zarr
+    is_erddap = met_dataset_pathway is None
+    print(f"is_zarr: {is_zarr}")
+
     # provide checks on user input arguements to ensure they will work with script
     if(os.path.isdir(output_root) == False):
         raise TypeError("Output root pathway is not a directory. Module is exiting.")
@@ -41,7 +48,7 @@ def NextGen_lumped_forcings_driver(output_root, start_time, end_time, met_datase
     if(met_dataset.lower() != "aorc" and met_dataset.lower() != "gfs" and met_dataset.lower() != "hrrr" and met_dataset.lower() != "cfs"):
         raise TypeError("User must specify a valid meteorological dataset that can be currently used to calculate lumped forcings (AORC, GFS, CFS, or HRRR). Module is exiting")
         
-    if(met_dataset_pathway == None or os.path.isdir(met_dataset_pathway) == False):
+    if(met_dataset_pathway == None or os.path.isdir(met_dataset_pathway) == False and not is_zarr):
         ### Since AORC dataset doesn't have a pathway, we are checking to see if user specified AORC
         if(met_dataset.lower() != "aorc"):
             raise TypeError("Since user specified a forecast dataset(GFS/CFS/HRRR), they must specify a valid pathway to a forecast cycle. Module is exiting")

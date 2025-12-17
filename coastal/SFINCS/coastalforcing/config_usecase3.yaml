@@ -1,0 +1,20 @@
+# -----------------------------------------------------------------------------
+# User Configuration File for Coastal Forcing
+#
+# This file controls model type, hydrology source, meteo source, 
+# coastal water level source, domain selection, and output paths.
+# -----------------------------------------------------------------------------
+
+coastal_model: sfincs                   # Options: sfincs (schism not implemented)
+meteo_source: nwm_ana                   # Options: nwm_retro, nwm_ana
+hydrology_source: nwm                   # Options: nwm, ngen
+coastal_water_level_source: glofs       # Options: stofs, tpxo, glofs (great lakes only)
+domain_file: great_lakes_example_bndonly   # Options: see domain_lists/{coastal_model}/
+
+start_time: 2025-05-11T00-00-00Z        # Simulation start time in format YYYY-MM-DDTHH-MM-SSZ
+end_time: 2025-05-11T12-00-00Z          # Simulation end time in format YYYY-MM-DDTHH-MM-SSZ
+output_timestep: 3600.0                 # Output time step
+
+# These should be externally mounted
+raw_download_dir: ../data/raw/          # Directory for storing raw downloaded data
+sim_dir: ../run/                        # Directory for storing all processed model files ready to run

@@ -1,0 +1,163 @@
+{
+  "name": "ns1:timeSeriesResponseType",
+  "declaredType": "org.cuahsi.waterml.TimeSeriesResponseType",
+  "scope": "javax.xml.bind.JAXBElement$GlobalScope",
+  "value": {
+    "queryInfo": {
+      "queryURL": "http://waterservices.usgs.gov/nwis/iv/sites=07027005&format=json&parameterCd=00060&period=PT6H",
+      "criteria": {
+        "locationParam": "[ALL:07027005]",
+        "variableParam": "[00060]",
+        "parameter": []
+      },
+      "note": [
+        {
+          "value": "[ALL:07027005]",
+          "title": "filter:sites"
+        },
+        {
+          "value": "[mode=PERIOD, period=PT6H, modifiedSince=null]",
+          "title": "filter:timeRange"
+        },
+        {
+          "value": "methodIds=[ALL]",
+          "title": "filter:methodId"
+        },
+        {
+          "value": "2024-06-13T20:18:28.070Z",
+          "title": "requestDT"
+        },
+        {
+          "value": "18596240-29c2-11ef-b8c9-005056beda50",
+          "title": "requestId"
+        },
+        {
+          "value": "Provisional data are subject to revision. Go to http://waterdata.usgs.gov/nwis/help/?provisional for more information.",
+          "title": "disclaimer"
+        },
+        {
+          "value": "caas01",
+          "title": "server"
+        }
+      ]
+    },
+    "timeSeries": [
+      {
+        "sourceInfo": {
+          "siteName": "RUNNING REELFOOT BAYOU BELOW REELFOOT SPILLWAY",
+          "siteCode": [
+            {
+              "value": "07027005",
+              "network": "NWIS",
+              "agencyCode": "USGS"
+            }
+          ],
+          "timeZoneInfo": {
+            "defaultTimeZone": {
+              "zoneOffset": "-06:00",
+              "zoneAbbreviation": "CST"
+            },
+            "daylightSavingsTimeZone": {
+              "zoneOffset": "-05:00",
+              "zoneAbbreviation": "CDT"
+            },
+            "siteUsesDaylightSavingsTime": true
+          },
+          "geoLocation": {
+            "geogLocation": {
+              "srs": "EPSG:4326",
+              "latitude": 36.3483333,
+              "longitude": -89.4080556
+            },
+            "localSiteXY": []
+          },
+          "note": [],
+          "siteType": [],
+          "siteProperty": [
+            {
+              "value": "LK",
+              "name": "siteTypeCd"
+            },
+            {
+              "value": "08010202",
+              "name": "hucCd"
+            },
+            {
+              "value": "47",
+              "name": "stateCd"
+            },
+            {
+              "value": "47095",
+              "name": "countyCd"
+            }
+          ]
+        },
+        "variable": {
+          "variableCode": [
+            {
+              "value": "00060",
+              "network": "NWIS",
+              "vocabulary": "NWIS:UnitValues",
+              "variableID": 45807197,
+              "default": true
+            }
+          ],
+          "variableName": "Streamflow, ft&#179;/s",
+          "variableDescription": "Discharge, cubic feet per second",
+          "valueType": "Derived Value",
+          "unit": {
+            "unitCode": "ft3/s"
+          },
+          "options": {
+            "option": [
+              {
+                "name": "Statistic",
+                "optionCode": "00000"
+              }
+            ]
+          },
+          "note": [],
+          "noDataValue": -999999.0,
+          "variableProperty": [],
+          "oid": "45807197"
+        },
+        "values": [
+          {
+            "value": [],
+            "qualifier": [],
+            "qualityControlLevel": [],
+            "method": [
+              {
+                "methodDescription": "",
+                "methodID": 170149
+              }
+            ],
+            "source": [],
+            "offset": [],
+            "sample": [],
+            "censorCode": []
+          },
+          {
+            "value": [],
+            "qualifier": [],
+            "qualityControlLevel": [],
+            "method": [
+              {
+                "methodDescription": "Discharge from Sidelooker",
+                "methodID": 241470
+              }
+            ],
+            "source": [],
+            "offset": [],
+            "sample": [],
+            "censorCode": []
+          }
+        ],
+        "name": "USGS:07027005:00060:00000"
+      }
+    ]
+  },
+  "nil": false,
+  "globalScope": true,
+  "typeSubstituted": false
+}
