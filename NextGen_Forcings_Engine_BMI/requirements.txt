@@ -10,3 +10,9 @@ dask
 zarr
 s3fs
 xarray
+matplotlib
+python-dotenv
+beautifulsoup4
+shapely
+pyproj
+geopandas

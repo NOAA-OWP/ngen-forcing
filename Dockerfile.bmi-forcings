@@ -1,0 +1,203 @@
+## TODO: replace with base image created under NGWPC-3223 ##
+## see: https://jira.nextgenwaterprediction.com/browse/NGWPC-3223
+ARG BASE_IMAGE_NAME="rockylinux:8"
+
+FROM ${BASE_IMAGE_NAME}
+
+# OCI Metadata Arguments
+ARG BASE_IMAGE_NAME
+ARG IMAGE_SOURCE="unknown"
+ARG IMAGE_VENDOR="unknown"
+ARG IMAGE_VERSION="unknown"
+ARG IMAGE_REVISION="unknown"
+ARG IMAGE_CREATED="unknown"
+
+# OCI Standard Labels
+LABEL org.opencontainers.image.base.name="${BASE_IMAGE_NAME}" \
+    org.opencontainers.image.source="${IMAGE_SOURCE}" \
+    org.opencontainers.image.vendor="${IMAGE_VENDOR}" \
+    org.opencontainers.image.version="${IMAGE_VERSION}" \
+    org.opencontainers.image.revision="${IMAGE_REVISION}" \
+    org.opencontainers.image.created="${IMAGE_CREATED}"
+
+# ensure local python is preferred over distribution python
+ENV PATH="/usr/local/bin:$PATH"
+
+# cannot remove LANG even though https://bugs.python.org/issue19846 is fixed
+# last attempted removal of LANG broke many users:
+# https://github.com/docker-library/python/pull/570
+ENV LANG="C.UTF-8"
+
+## FIXME: Replace installation and build of FOSS dependencies wiith a base image. ##
+
+# runtime dependencies
+RUN set -eux; \
+    dnf install -y dnf-plugins-core; \
+    dnf install -y epel-release; \
+    dnf config-manager --set-enabled powertools; \
+    dnf install -y \
+        proj proj-devel \
+        sqlite sqlite-devel \
+        autoconf \
+        automake \
+        bzip2 bzip2-devel \
+        cmake \
+        curl curl-devel \
+        file \
+        findutils \
+        git \
+        jq \
+## FIXME: replace GNU compilers with Intel compiler ##
+        gcc-toolset-10 \
+        gcc-toolset-10-libasan-devel \
+        gcc-toolset-10-gcc-gfortran \
+        jasper-libs jasper-devel \
+        libaec libaec-devel \
+        libasan6 \
+        libffi libffi-devel \
+        libpng libpng-devel \
+        m4 \
+## FIXME: replace openmpi with Intel MPI libraries ##
+        openmpi openmpi-devel \
+        openssl openssl-devel \
+        python3.11 \
+        python3.11-devel \
+        python3.11-pip \
+        python3.11-pyyaml \
+        rsync \
+        uuid uuid-devel \
+        which \
+        zlib zlib-devel \
+        hdf5-devel \
+        netcdf-devel \
+        netcdf-fortran-devel \
+    ; \
+    dnf clean all
+
+## FIXME: replace GNU compilers with Intel compiler ##
+SHELL [ "/usr/bin/scl", "enable", "gcc-toolset-10"]
+## FIXME: replace openmpi with Intel MPI libraries ##
+ENV PATH="${PATH}:/usr/lib64/openmpi/bin/"
+
+RUN set -eux; \
+    curl --location --output wgrib2.tgz "https://ftp.cpc.ncep.noaa.gov/wd51we/wgrib2/wgrib2.tgz" ; \
+    mkdir --parents /usr/src/wgrib2 ; \
+    tar --extract --directory /usr/src/wgrib2 --strip-components=1 --file wgrib2.tgz ; \
+    rm wgrib2.tgz ; \
+    cd /usr/src/wgrib2 ; \
+    export CC=gcc ; \
+    export FC=gfortran ; \
+    make \
+        USE_IPOLATES=3 \
+        USE_PNG=1 \
+        USE_AEC=0 \
+        USE_JASPER=1 \
+        USE_OPENJPEG=0 \
+        USE_G2CLIB=0 \
+        PREFIX=/usr/local ; \
+    make lib ; \
+    cp /usr/src/wgrib2/wgrib2/wgrib2 /usr/local/bin/ ; \
+    chmod +x /usr/local/bin/wgrib2 ; \
+    rm --recursive --force /usr/src/wgrib2
+
+# Build and install ESMF 8.8.0
+RUN set -eux; \
+    curl --location --output esmf-8.8.0.tar.gz "https://github.com/esmf-org/esmf/archive/refs/tags/v8.8.0.tar.gz"; \
+    tar --extract --gzip --file esmf-8.8.0.tar.gz; \
+    rm esmf-8.8.0.tar.gz; \
+    cd esmf-8.8.0; \
+    export ESMF_DIR=/esmf-8.8.0; \
+    export ESMF_INSTALL_PREFIX=/usr/local/esmf; \
+    export ESMF_COMPILER=gfortran; \
+    export ESMF_COMM=openmpi; \
+    export ESMF_NETCDF="nc-config"; \
+    export ESMF_F90COMPILEPATHS="-I/usr/lib64/gfortran/modules"; \
+    export ESMF_BOPT=O; \
+    make all; \
+    make install; \
+    cd ..; \
+    rm -rf esmf-8.8.0
+
+# Build GDAL from source
+RUN --mount=type=cache,target=/root/.cache/gdal,id=gdal-build \
+    set -eux && \
+    curl --location --output gdal.tar.gz https://github.com/OSGeo/gdal/releases/download/v3.7.3/gdal-3.7.3.tar.gz && \
+    mkdir --parents /usr/src/gdal && \
+    tar --extract --directory /usr/src/gdal --strip-components=1 --file gdal.tar.gz && \
+    cd /usr/src/gdal && \
+    cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake --build build --parallel "$(nproc)" && \
+    cmake --build build --target install && \
+    ldconfig && \
+    rm --recursive --force /usr/src/gdal gdal.tar.gz
+
+# -------------------------------
+# Create a self-contained venv for ngen-forcing
+# -------------------------------
+ENV VIRTUAL_ENV="/ngen-app/ngen-python"
+RUN python3.11 -m venv ${VIRTUAL_ENV}
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}" \
+    PYTHONPATH="${VIRTUAL_ENV}/lib/python3.11/site-packages"
+
+# Install ESMPy
+ENV ESMFMKFILE=/usr/local/esmf/lib/libO/Linux.gfortran.64.openmpi.default/esmf.mk
+RUN set -eux; \
+    pip3.11 install setuptools-git-versioning; \
+    git clone --depth 1 --branch v8.8.0 https://github.com/esmf-org/esmf.git; \
+    cd esmf/src/addon/esmpy; \
+    python3.11 -m pip install .; \
+    cd /; \
+    rm -rf esmf
+
+
+ENV PATH="/usr/local/bin:${PATH}"
+
+ENV WGRIB2=/usr/local/bin/wgrib2
+
+# Fix OpenMPI transport for containers
+ENV OMPI_MCA_btl_vader_single_copy_mechanism=none
+ENV OMPI_MCA_btl=^openib,ofi
+ENV OMPI_MCA_pml=ob1
+ENV OMPI_MCA_btl_base_warn_component_unused=0
+
+################################################
+
+# Reset SHELL so we're not locked into the gcc-10 build environment
+SHELL ["/bin/bash", "-c"]
+
+COPY . /ngen-app/ngen-forcing/
+
+# Install ngen-forcing as a Python package
+WORKDIR /ngen-app/ngen-forcing
+RUN set -eux; \
+    pip install --upgrade pip setuptools wheel; \
+    pip install --no-cache-dir mpi4py .
+
+ARG CI_COMMIT_REF_NAME
+
+RUN set -eux; \
+    # Get the remote URL from Git configuration
+    repo_url=$(git config --get remote.origin.url); \
+    # Extract the repo name (everything after the last slash) and remove any trailing .git
+    key=${repo_url##*/}; \
+    key=${key%.git}; \
+    # ngen-forcing is different from the other repos.  We don't use the repo name directly
+    GIT_INFO_PATH="/ngen-app/ngen-bmi-forcing_git_info.json"; \
+    # Determine branch name: use CI_COMMIT_REF_NAME if set; otherwise, use git's current branch
+    branch=$( [ -n "${CI_COMMIT_REF_NAME:-}" ] && echo "${CI_COMMIT_REF_NAME}" || git rev-parse --abbrev-ref HEAD ); \
+    jq -n \
+      --arg commit_hash "$(git rev-parse HEAD)" \
+      --arg branch "$branch" \
+      --arg tags "$(git tag --points-at HEAD | tr '\n' ' ')" \
+      --arg author "$(git log -1 --pretty=format:'%an')" \
+      --arg commit_date "$(date -u -d @$(git log -1 --pretty=format:'%ct') +'%Y-%m-%d %H:%M:%S UTC')" \
+      --arg message "$(git log -1 --pretty=format:'%s' | tr '\n' ';')" \
+      --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+      "{\"ngen-bmi-forcing\": {commit_hash: \$commit_hash, branch: \$branch, tags: \$tags, author: \$author, commit_date: \$commit_date, message: \$message, build_date: \$build_date}}" \
+      > $GIT_INFO_PATH
+
+WORKDIR /
+
+ENV LD_LIBRARY_PATH="/usr/lib64/openmpi/lib/"
+
+ENTRYPOINT [ "/bin/bash" ]

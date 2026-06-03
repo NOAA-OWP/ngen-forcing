@@ -1,21 +1,27 @@
 # This is a datetime module for handling datetime
 # calculations in the forcing engine.
 import datetime
-import math
-from operator import truediv
-import os
-import pandas as pd
-import numpy as np
 import glob
+import logging
+import math
+import os
+
+import numpy as np
+import pandas as pd
+
+from nextgen_forcings_ewts import MODULE_NAME
+
 from . import err_handler
-from .forcingInputMod import input_forcings
-NETCDF = input_forcings.NETCDF
+
+LOG = logging.getLogger(MODULE_NAME)
+
+NETCDF = "NETCDF"
 
 
 def calculate_lookback_window(config_options):
-    """
-    Calculate the beginning, ending datetime variables
-    for a look-back period. Also calculate the processing
+    """Calculate the beginning, ending datetime variables for a look-back period.
+
+    Also calculate the processing
     time window delta value.
     :param config_options: Abstract class holding job information.
     :return: Updated abstract class with updated datetime variables.
@@ -29,32 +35,47 @@ def calculate_lookback_window(config_options):
     # Next, subtract the lookup window (specified in minutes) to get a crude window
     # of processing.
     d_lookback = d_current_utc - datetime.timedelta(
-        seconds=60 * (config_options.look_back - config_options.output_freq))
+        seconds=60 * (config_options.look_back - config_options.output_freq)
+    )
 
     # Determine the first forecast iteration that will be processed on this day
     # based on the forecast frequency and where in the day we are at.
-    fcst_step_tmp = math.ceil((d_lookback.hour * 60 + d_lookback.minute) / config_options.fcst_freq)
+    fcst_step_tmp = math.ceil(
+        (d_lookback.hour * 60 + d_lookback.minute) / config_options.fcst_freq
+    )
     d_look_tmp1 = datetime.datetime(d_lookback.year, d_lookback.month, d_lookback.day)
-    d_look_tmp1 = d_look_tmp1 + datetime.timedelta(seconds=(60 * config_options.fcst_freq * fcst_step_tmp))
+    d_look_tmp1 = d_look_tmp1 + datetime.timedelta(
+        seconds=(60 * config_options.fcst_freq * fcst_step_tmp)
+    )
 
     # If we are offsetting the forecasts, apply here.
     if config_options.fcst_shift > 0:
-        d_look_tmp1 = d_look_tmp1 + datetime.timedelta(seconds=60 * config_options.fcst_shift)
+        d_look_tmp1 = d_look_tmp1 + datetime.timedelta(
+            seconds=60 * config_options.fcst_shift
+        )
 
     config_options.b_date_proc = d_look_tmp1
 
     # Now calculate the end of the processing window based on the time from the
     # beginning of the processing window.
     dt_tmp = d_current_utc - config_options.b_date_proc
-    n_fcst_steps = math.floor((dt_tmp.days*1440+dt_tmp.seconds/60.0) / config_options.fcst_freq)
+    n_fcst_steps = math.floor(
+        (dt_tmp.days * 1440 + dt_tmp.seconds / 60.0) / config_options.fcst_freq
+    )
 
     config_options.nFcsts = int(n_fcst_steps) + 1
-    if(config_options.input_forcings[0] != 20 and config_options.input_forcings[0] != 22):
+    if (
+        config_options.input_forcings[0] != 20
+        and config_options.input_forcings[0] != 22
+    ):
         config_options.e_date_proc = config_options.b_date_proc + datetime.timedelta(
-            seconds=n_fcst_steps * config_options.fcst_freq * 60)
+            seconds=n_fcst_steps * config_options.fcst_freq * 60
+        )
+
 
 def find_nldas_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find NLDAS neighbor files.
+
     Function to calculate the previous and after hourly NLDAS files for use in processing.
     :param input_forcings:
     :param config_options:
@@ -65,13 +86,14 @@ def find_nldas_neighbors(input_forcings, config_options, d_current, mpi_config):
     # Normally, we do a check to make sure the input horizons chosen by the user are not
     # greater than an expected value. However, since these are custom input NetCDF files,
     # we are foregoing that check.
-    current_nldas_cycle = config_options.current_fcst_cycle - \
-        datetime.timedelta(seconds=input_forcings.userCycleOffset * 60.0)
+    current_nldas_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+        seconds=input_forcings.userCycleOffset * 60.0
+    )
 
     # Calculate the current forecast hour within this cycle.
     dt_tmp = d_current - current_nldas_cycle
 
-    current_nldas_hour = int(dt_tmp.days*24) + math.floor(dt_tmp.seconds/3600.0)
+    current_nldas_hour = int(dt_tmp.days * 24) + math.floor(dt_tmp.seconds / 3600.0)
 
     # Calculate the previous file to process.
     min_since_last_output = (current_nldas_hour * 60) % 60
@@ -100,12 +122,20 @@ def find_nldas_neighbors(input_forcings, config_options, d_current, mpi_config):
         prev_nldas_forecast_hour = 1
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + "/NLDAS_FORA0125_H.A" + \
-                input_forcings.fcst_date1.strftime('%Y%m%d.%H%M') + \
-                ".002" + input_forcings.file_ext
-    tmp_file2 = input_forcings.inDir + '/NLDAS_FORA0125_H.A' + \
-                input_forcings.fcst_date1.strftime('%Y%m%d.%H%M') + \
-                ".002" + input_forcings.file_ext
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/NLDAS_FORA0125_H.A"
+        + input_forcings.fcst_date1.strftime("%Y%m%d.%H%M")
+        + ".002"
+        + input_forcings.file_ext
+    )
+    tmp_file2 = (
+        input_forcings.inDir
+        + "/NLDAS_FORA0125_H.A"
+        + input_forcings.fcst_date1.strftime("%Y%m%d.%H%M")
+        + ".002"
+        + input_forcings.file_ext
+    )
 
     if mpi_config.rank == 0:
         # Check to see if files are already set. If not, then reset, grids and
@@ -114,9 +144,13 @@ def find_nldas_neighbors(input_forcings, config_options, d_current, mpi_config):
             if config_options.current_output_step == 1:
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
             else:
@@ -126,15 +160,25 @@ def find_nldas_neighbors(input_forcings, config_options, d_current, mpi_config):
                 # if not np.any(input_forcings.regridded_forcings1):
                 if input_forcings.regridded_forcings1 is None:
                     if mpi_config.rank == 0:
-                        config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                                   input_forcings.productName
+                        config_options.statusMsg = (
+                            "Restarting forecast cycle. Will regrid previous: "
+                            + input_forcings.product_name
+                        )
                         err_handler.log_msg(config_options, mpi_config)
                     input_forcings.rstFlag = 1
-                    input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-                    input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                        input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                    input_forcings.regridded_forcings1 = (
+                        input_forcings.regridded_forcings1
+                    )
+                    input_forcings.regridded_forcings2 = (
+                        input_forcings.regridded_forcings2
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem = (
+                            input_forcings.regridded_forcings1_elem
+                        )
+                        input_forcings.regridded_forcings2_elem = (
+                            input_forcings.regridded_forcings2_elem
+                        )
                     input_forcings.file_in2 = tmp_file1
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.fcst_date2 = input_forcings.fcst_date1
@@ -142,123 +186,21 @@ def find_nldas_neighbors(input_forcings, config_options, d_current, mpi_config):
                 else:
                     # The custom window has shifted. Reset fields 2 to
                     # be fields 1.
-                    if(config_options.grid_type == "gridded"):
-                        input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                    elif(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                        input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                    elif(config_options.grid_type == "hydrofabric"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-
-                    input_forcings.file_in1 = tmp_file1
-                    input_forcings.file_in2 = tmp_file2
-            input_forcings.regridComplete = False
-    else:
-            input_forcings.file_in2 = tmp_file1
-            input_forcings.file_in1 = tmp_file1
-    err_handler.check_program_status(config_options, mpi_config)
-
-    # Ensure we have the necessary new file
-    if mpi_config.rank == 0:
-        if not os.path.isfile(input_forcings.file_in2):
-            if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input Custom file: " + input_forcings.file_in2 + " not found."
-                err_handler.log_critical(config_options, mpi_config)
-            else:
-                config_options.statusMsg = "Expected input Custom file: " + \
-                                           input_forcings.file_in2 + " not found. Will not use in final layering."
-                err_handler.log_warning(config_options, mpi_config)
-    err_handler.check_program_status(config_options, mpi_config)
-
-    # If the file is missing, set the local slab of arrays to missing.
-    if not os.path.isfile(input_forcings.file_in2):
-        if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
-                input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
-                input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
-                input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
-
-def find_aorc_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
-    Function to calculate the previous and after hourly AORC files for use in processing.
-    :param input_forcings:
-    :param config_options:
-    :param d_current:
-    :param mpi_config:
-    :return:
-    """
-
-    if(input_forcings.productName =='AORC'):
-        # Calculate expected file paths.
-        if(d_current.year > 2019):
-            tmp_file1 = input_forcings.inDir + "/AORC-OWP_" + \
-                        d_current.strftime('%Y%m%d%H') + \
-                        input_forcings.file_ext
-            tmp_file2 = input_forcings.inDir + '/AORC-OWP_' + \
-                        d_current.strftime('%Y%m%d%H') + \
-                        input_forcings.file_ext
-        else:
-            tmp_file1 = input_forcings.inDir + "/AORC-OWP_" + \
-                        d_current.strftime('%Y%m%d%H') + \
-                        "z" + input_forcings.file_ext
-            tmp_file2 = input_forcings.inDir + '/AORC-OWP_' + \
-                        d_current.strftime('%Y%m%d%H') + \
-                        "z" + input_forcings.file_ext
-    if(input_forcings.productName =='AORC_Alaska'):
-        # Calculate expected file paths.
-        tmp_file1 = input_forcings.inDir + "/AK_AORC-OWP_" + \
-                    d_current.strftime('%Y%m%d%H') + \
-                    input_forcings.file_ext
-        tmp_file2 = input_forcings.inDir + '/AK_AORC-OWP_' + \
-                    d_current.strftime('%Y%m%d%H') + \
-                    input_forcings.file_ext
-
-
-    if mpi_config.rank == 0:
-        # Check to see if files are already set. If not, then reset, grids and
-        # regridding objects to communicate things need to be re-established.
-        if input_forcings.file_in1 != tmp_file1 or input_forcings.file_in2 != tmp_file2:
-            if config_options.current_output_step == 1:
-                input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-                input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
-                input_forcings.file_in1 = tmp_file1
-                input_forcings.file_in2 = tmp_file2
-            else:
-                # Check to see if we are restarting from a previously failed instance. In this case,
-                # We are not on the first timestep, but no previous forcings have been processed.
-                # We need to process the previous input timestep for temporal interpolation purposes.
-                # if not np.any(input_forcings.regridded_forcings1):
-                if input_forcings.regridded_forcings1 is None:
-                    if mpi_config.rank == 0:
-                        config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                                   input_forcings.productName
-                        err_handler.log_msg(config_options, mpi_config)
-                    input_forcings.rstFlag = 1
-                    input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-                    input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                        input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
-                    input_forcings.file_in2 = tmp_file1
-                    input_forcings.file_in1 = tmp_file1
-                    input_forcings.fcst_date2 = input_forcings.fcst_date1
-                    input_forcings.fcst_hour2 = input_forcings.fcst_hour1
-                else:
-                    # The custom window has shifted. Reset fields 2 to
-                    # be fields 1.
-                    if(config_options.grid_type == "gridded"):
-                        input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                    elif(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                        input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                    elif(config_options.grid_type == "hydrofabric"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                    if config_options.grid_type == "gridded":
+                        input_forcings.regridded_forcings1[:, :, :] = (
+                            input_forcings.regridded_forcings2[:, :, :]
+                        )
+                    elif config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
+                    elif config_options.grid_type == "hydrofabric":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
 
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.file_in2 = tmp_file2
@@ -272,27 +214,196 @@ def find_aorc_neighbors(input_forcings, config_options, d_current, mpi_config):
     if mpi_config.rank == 0:
         if not os.path.isfile(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input AORC file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input Custom file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input AORC file: " + \
-                                           input_forcings.file_in2 + " not found. Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input Custom file: "
+                    + input_forcings.file_in2
+                    + " not found. Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
+    err_handler.check_program_status(config_options, mpi_config)
+
+    # If the file is missing, set the local slab of arrays to missing.
+    if not os.path.isfile(input_forcings.file_in2):
+        if input_forcings.regridded_forcings2 is not None:
+            if config_options.grid_type == "gridded":
+                input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
+            elif config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
+                input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
+            elif config_options.grid_type == "hydrofabric":
+                input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
+
+
+def find_aorc_neighbors(input_forcings, config_options, d_current, mpi_config):
+    """Find AORC neighbor files.
+
+    Function to calculate the previous and after hourly AORC files for use in processing.
+    :param input_forcings:
+    :param config_options:
+    :param d_current:
+    :param mpi_config:
+    :return:
+    """
+    if input_forcings.product_name == "AORC":
+        # Calculate expected file paths.
+        if d_current.year > 2019:
+            tmp_file1 = (
+                input_forcings.inDir
+                + "/AORC-OWP_"
+                + d_current.strftime("%Y%m%d%H")
+                + input_forcings.file_ext
+            )
+            tmp_file2 = (
+                input_forcings.inDir
+                + "/AORC-OWP_"
+                + d_current.strftime("%Y%m%d%H")
+                + input_forcings.file_ext
+            )
+        else:
+            tmp_file1 = (
+                input_forcings.inDir
+                + "/AORC-OWP_"
+                + d_current.strftime("%Y%m%d%H")
+                + "z"
+                + input_forcings.file_ext
+            )
+            tmp_file2 = (
+                input_forcings.inDir
+                + "/AORC-OWP_"
+                + d_current.strftime("%Y%m%d%H")
+                + "z"
+                + input_forcings.file_ext
+            )
+    if input_forcings.product_name == "AORC_Alaska":
+        # Calculate expected file paths.
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/AK_AORC-OWP_"
+            + d_current.strftime("%Y%m%d%H")
+            + input_forcings.file_ext
+        )
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/AK_AORC-OWP_"
+            + d_current.strftime("%Y%m%d%H")
+            + input_forcings.file_ext
+        )
+
+    if mpi_config.rank == 0:
+        # Check to see if files are already set. If not, then reset, grids and
+        # regridding objects to communicate things need to be re-established.
+        if input_forcings.file_in1 != tmp_file1 or input_forcings.file_in2 != tmp_file2:
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
+                input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
+                input_forcings.file_in1 = tmp_file1
+                input_forcings.file_in2 = tmp_file2
+            else:
+                # Check to see if we are restarting from a previously failed instance. In this case,
+                # We are not on the first timestep, but no previous forcings have been processed.
+                # We need to process the previous input timestep for temporal interpolation purposes.
+                # if not np.any(input_forcings.regridded_forcings1):
+                if input_forcings.regridded_forcings1 is None:
+                    if mpi_config.rank == 0:
+                        config_options.statusMsg = (
+                            "Restarting forecast cycle. Will regrid previous: "
+                            + input_forcings.product_name
+                        )
+                        err_handler.log_msg(config_options, mpi_config)
+                    input_forcings.rstFlag = 1
+                    input_forcings.regridded_forcings1 = (
+                        input_forcings.regridded_forcings1
+                    )
+                    input_forcings.regridded_forcings2 = (
+                        input_forcings.regridded_forcings2
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem = (
+                            input_forcings.regridded_forcings1_elem
+                        )
+                        input_forcings.regridded_forcings2_elem = (
+                            input_forcings.regridded_forcings2_elem
+                        )
+                    input_forcings.file_in2 = tmp_file1
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.fcst_date2 = input_forcings.fcst_date1
+                    input_forcings.fcst_hour2 = input_forcings.fcst_hour1
+                else:
+                    # The custom window has shifted. Reset fields 2 to
+                    # be fields 1.
+                    if config_options.grid_type == "gridded":
+                        input_forcings.regridded_forcings1[:, :, :] = (
+                            input_forcings.regridded_forcings2[:, :, :]
+                        )
+                    elif config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
+                    elif config_options.grid_type == "hydrofabric":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.file_in2 = tmp_file2
+            input_forcings.regridComplete = False
+    else:
+        input_forcings.file_in2 = tmp_file1
+        input_forcings.file_in1 = tmp_file1
+    err_handler.check_program_status(config_options, mpi_config)
+
+    # Ensure we have the necessary new file
+    if config_options.input_forcings[0] not in [12, 21]:
+        if mpi_config.rank == 0:
+            if not os.path.isfile(input_forcings.file_in2):
+                if input_forcings.enforce == 1:
+                    config_options.errMsg = (
+                        "Expected input AORC file: "
+                        + input_forcings.file_in2
+                        + " not found."
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+                else:
+                    config_options.statusMsg = (
+                        "Expected input AORC file: "
+                        + input_forcings.file_in2
+                        + " not found. Will not use in final layering."
+                    )
+                    err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.exists(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
+
 def find_era5_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find ERA5 neighbor files.
+
     Function to calculate the previous and after hourly ERA5 timestamp for use in processing.
     :param input_forcings:
     :param config_options:
@@ -301,8 +412,8 @@ def find_era5_neighbors(input_forcings, config_options, d_current, mpi_config):
     :return:
     """
     # Point to ERA5 netcdf input file
-    tmp_file1 = os.path.join(input_forcings.inDir,os.listdir(input_forcings.inDir)[0])
-    tmp_file2 = os.path.join(input_forcings.inDir,os.listdir(input_forcings.inDir)[0])
+    tmp_file1 = os.path.join(input_forcings.inDir, os.listdir(input_forcings.inDir)[0])
+    tmp_file2 = os.path.join(input_forcings.inDir, os.listdir(input_forcings.inDir)[0])
 
     if mpi_config.rank == 0:
         # Check to see if files are already set. If not, then reset, grids and
@@ -311,9 +422,13 @@ def find_era5_neighbors(input_forcings, config_options, d_current, mpi_config):
             if config_options.current_output_step == 1:
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
             else:
@@ -323,15 +438,25 @@ def find_era5_neighbors(input_forcings, config_options, d_current, mpi_config):
                 # if not np.any(input_forcings.regridded_forcings1):
                 if input_forcings.regridded_forcings1 is None:
                     if mpi_config.rank == 0:
-                        config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                                   input_forcings.productName
+                        config_options.statusMsg = (
+                            "Restarting forecast cycle. Will regrid previous: "
+                            + input_forcings.product_name
+                        )
                         err_handler.log_msg(config_options, mpi_config)
                     input_forcings.rstFlag = 1
-                    input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-                    input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                        input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                    input_forcings.regridded_forcings1 = (
+                        input_forcings.regridded_forcings1
+                    )
+                    input_forcings.regridded_forcings2 = (
+                        input_forcings.regridded_forcings2
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem = (
+                            input_forcings.regridded_forcings1_elem
+                        )
+                        input_forcings.regridded_forcings2_elem = (
+                            input_forcings.regridded_forcings2_elem
+                        )
                     input_forcings.file_in2 = tmp_file1
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.fcst_date2 = input_forcings.fcst_date1
@@ -339,13 +464,21 @@ def find_era5_neighbors(input_forcings, config_options, d_current, mpi_config):
                 else:
                     # The custom window has shifted. Reset fields 2 to
                     # be fields 1.
-                    if(config_options.grid_type == "gridded"):
-                        input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                    elif(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                        input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                    elif(config_options.grid_type == "hydrofabric"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                    if config_options.grid_type == "gridded":
+                        input_forcings.regridded_forcings1[:, :, :] = (
+                            input_forcings.regridded_forcings2[:, :, :]
+                        )
+                    elif config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
+                    elif config_options.grid_type == "hydrofabric":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
 
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.file_in2 = tmp_file2
@@ -359,27 +492,36 @@ def find_era5_neighbors(input_forcings, config_options, d_current, mpi_config):
     if mpi_config.rank == 0:
         if not os.path.isfile(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input ERA5 Interim file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input ERA5 Interim file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input ERA5 Interim file: " + \
-                                           input_forcings.file_in2 + " not found. Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input ERA5 Interim file: "
+                    + input_forcings.file_in2
+                    + " not found. Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.exists(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
+
 def find_nwm_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find NWM neighbor files.
+
     Function to calculate the previous and after hourly AORC files for use in processing.
     :param input_forcings:
     :param config_options:
@@ -387,26 +529,42 @@ def find_nwm_neighbors(input_forcings, config_options, d_current, mpi_config):
     :param mpi_config:
     :return:
     """
-
     # Flag to indicate whether or not the time stamp naming convention of
     # the NWM v3 files have changed between CONUS and oCONUS domains
-    if(config_options.nwm_geogrid.split('/')[-1].split('_')[-1].split('.')[0] != 'CONUS'):
-        # Calculate expected file paths.
-        tmp_file1 = input_forcings.inDir + '/' + \
-                    d_current.strftime('%Y%m%d%H') + \
-                    input_forcings.file_ext
-        tmp_file2 = input_forcings.inDir + '/' + \
-                    d_current.strftime('%Y%m%d%H') + \
-                    input_forcings.file_ext
 
+    if (
+        config_options.nwm_geogrid.split("/")[-1].split("_")[-1].split(".")[0]
+        != "CONUS"
+    ):
+        # Calculate expected file paths.
+
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/"
+            + d_current.strftime("%Y%m%d%H")
+            + input_forcings.file_ext
+        )
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/"
+            + d_current.strftime("%Y%m%d%H")
+            + input_forcings.file_ext
+        )
     else:
         # Calculate expected file paths.
-        tmp_file1 = input_forcings.inDir + '/' + \
-                    d_current.strftime('%Y%m%d%H%M') + \
-                    input_forcings.file_ext
-        tmp_file2 = input_forcings.inDir + '/' + \
-                    d_current.strftime('%Y%m%d%H%M') + \
-                    input_forcings.file_ext
+
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/"
+            + d_current.strftime("%Y%m%d%H%M")
+            + input_forcings.file_ext
+        )
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/"
+            + d_current.strftime("%Y%m%d%H%M")
+            + input_forcings.file_ext
+        )
 
     if mpi_config.rank == 0:
         # Check to see if files are already set. If not, then reset, grids and
@@ -415,9 +573,13 @@ def find_nwm_neighbors(input_forcings, config_options, d_current, mpi_config):
             if config_options.current_output_step == 1:
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
             else:
@@ -427,15 +589,25 @@ def find_nwm_neighbors(input_forcings, config_options, d_current, mpi_config):
                 # if not np.any(input_forcings.regridded_forcings1):
                 if input_forcings.regridded_forcings1 is None:
                     if mpi_config.rank == 0:
-                        config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                                   input_forcings.productName
+                        config_options.statusMsg = (
+                            "Restarting forecast cycle. Will regrid previous: "
+                            + input_forcings.product_name
+                        )
                         err_handler.log_msg(config_options, mpi_config)
                     input_forcings.rstFlag = 1
-                    input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-                    input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                        input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                    input_forcings.regridded_forcings1 = (
+                        input_forcings.regridded_forcings1
+                    )
+                    input_forcings.regridded_forcings2 = (
+                        input_forcings.regridded_forcings2
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem = (
+                            input_forcings.regridded_forcings1_elem
+                        )
+                        input_forcings.regridded_forcings2_elem = (
+                            input_forcings.regridded_forcings2_elem
+                        )
                     input_forcings.file_in2 = tmp_file1
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.fcst_date2 = input_forcings.fcst_date1
@@ -443,13 +615,21 @@ def find_nwm_neighbors(input_forcings, config_options, d_current, mpi_config):
                 else:
                     # The custom window has shifted. Reset fields 2 to
                     # be fields 1.
-                    if(config_options.grid_type == "gridded"):
-                        input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                    elif(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                        input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                    elif(config_options.grid_type == "hydrofabric"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                    if config_options.grid_type == "gridded":
+                        input_forcings.regridded_forcings1[:, :, :] = (
+                            input_forcings.regridded_forcings2[:, :, :]
+                        )
+                    elif config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
+                    elif config_options.grid_type == "hydrofabric":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
 
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.file_in2 = tmp_file2
@@ -463,28 +643,36 @@ def find_nwm_neighbors(input_forcings, config_options, d_current, mpi_config):
     if mpi_config.rank == 0:
         if not os.path.isfile(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input NWM file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input NWM file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input NWM file: " + \
-                                           input_forcings.file_in2 + " not found. Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input NWM file: "
+                    + input_forcings.file_in2
+                    + " not found. Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.exists(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
 
 def find_ak_ext_ana_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find Alaska Extended Ana neighbor files.
+
     Function to calculate the previous and after Alaska Extended Ana cycles based on the current timestep.
     ExtAna inputs are outputs from a prior FE run.
     :param input_forcings:
@@ -494,40 +682,52 @@ def find_ak_ext_ana_neighbors(input_forcings, config_options, d_current, mpi_con
     :return:
     """
     if mpi_config.rank == 0:
-        config_options.statusMsg = "Processing Alaska ExtAnA Data. Calculating neighboring " \
-                                   "files for this output timestep"
-        err_handler.log_msg(config_options, mpi_config)
+        config_options.statusMsg = (
+            "Processing Alaska ExtAnA Data. Calculating neighboring "
+            "files for this output timestep"
+        )
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
 
     # First find the current ExtAnA forecast cycle that we are using.
     ana_offset = 1 if config_options.ana_flag else 0
     current_ext_ana_cycle = config_options.current_fcst_cycle - datetime.timedelta(
-        seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0)
-    
+        seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0
+    )
+
     ext_ana_horizon = 32
 
     # If the user has specified a forcing horizon that is greater than what is available
     # for this time period, throw an error.
-    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > ext_ana_horizon:
-        config_options.errMsg = "User has specified a ExtAnA conus forecast horizon " + \
-                                "that is greater than the maximum allowed hours of: " + str(ext_ana_horizon)
+    if (
+        input_forcings.userFcstHorizon + input_forcings.userCycleOffset
+    ) / 60.0 > ext_ana_horizon:
+        config_options.errMsg = (
+            "User has specified a ExtAnA conus forecast horizon "
+            + "that is greater than the maximum allowed hours of: "
+            + str(ext_ana_horizon)
+        )
         err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # Calculate the current forecast hour within this ExtAnA cycle.
     dt_tmp = d_current - current_ext_ana_cycle
-    current_ext_ana_hour = int(dt_tmp.days*24) + int(dt_tmp.seconds/3600.0)
+    current_ext_ana_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
     # Calculate the previous file to process.
     min_since_last_output = (current_ext_ana_hour * 60) % 60
     if min_since_last_output == 0:
         min_since_last_output = 60
-    prev_ext_ana_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
+    prev_ext_ana_date = d_current - datetime.timedelta(
+        seconds=min_since_last_output * 60
+    )
     input_forcings.fcst_date1 = prev_ext_ana_date
     if min_since_last_output == 60:
         min_until_next_output = 0
     else:
         min_until_next_output = 60 - min_since_last_output
-    next_ext_ana_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
+    next_ext_ana_date = d_current + datetime.timedelta(
+        seconds=min_until_next_output * 60
+    )
     input_forcings.fcst_date2 = next_ext_ana_date
 
     # Calculate the output forecast hours needed based on the prev/next dates.
@@ -546,9 +746,15 @@ def find_ak_ext_ana_neighbors(input_forcings, config_options, d_current, mpi_con
         prev_ext_ana_forecast_hour = 1
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + '/' + prev_ext_ana_date.strftime('%Y%m%d%H') + \
-                "/" + prev_ext_ana_date.strftime('%Y%m%d%H') +  "00" + \
-                ".LDASIN_DOMAIN1"
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/"
+        + prev_ext_ana_date.strftime("%Y%m%d%H")
+        + "/"
+        + prev_ext_ana_date.strftime("%Y%m%d%H")
+        + "00"
+        + ".LDASIN_DOMAIN1"
+    )
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous ExtAnA file being used: " + tmp_file1
         err_handler.log_msg(config_options, mpi_config)
@@ -566,9 +772,13 @@ def find_ak_ext_ana_neighbors(input_forcings, config_options, d_current, mpi_con
         if config_options.current_output_step == 1:
             input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
             input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings1_elem = (
+                    input_forcings.regridded_forcings1_elem
+                )
+                input_forcings.regridded_forcings2_elem = (
+                    input_forcings.regridded_forcings2_elem
+                )
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
         else:
@@ -578,15 +788,21 @@ def find_ak_ext_ana_neighbors(input_forcings, config_options, d_current, mpi_con
             if input_forcings.regridded_forcings1 is None:
                 # if not np.any(input_forcings.regridded_forcings1):
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
@@ -595,13 +811,21 @@ def find_ak_ext_ana_neighbors(input_forcings, config_options, d_current, mpi_con
             else:
                 # The ExtAnA window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                elif(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                elif(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:,:] = input_forcings.regridded_forcings2[:, :]
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                elif config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    input_forcings.regridded_forcings1_elem[:, :] = (
+                        input_forcings.regridded_forcings2_elem[:, :]
+                    )
+                elif config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
         input_forcings.regridComplete = False
@@ -611,28 +835,38 @@ def find_ak_ext_ana_neighbors(input_forcings, config_options, d_current, mpi_con
     if mpi_config.rank == 0:
         if not os.path.exists(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input ExtAnA file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input ExtAnA file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input ExtAnA file: " + input_forcings.file_in2 + " not found. " \
-                                                                                                   "Will not use in " \
-                                                                                                   "final layering."
+                config_options.statusMsg = (
+                    "Expected input ExtAnA file: "
+                    + input_forcings.file_in2
+                    + " not found. "
+                    "Will not use in "
+                    "final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.exists(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
+
 def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find CONUS HRRR neighbor files.
+
     Function to calculate the previous and after HRRR conus cycles based on the current timestep.
     :param input_forcings:
     :param config_options:
@@ -641,14 +875,16 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
     :return:
     """
     if mpi_config.rank == 0:
-        config_options.statusMsg = "Processing Conus HRRR Data. Calculating neighboring " \
-                                   "files for this output timestep"
-        err_handler.log_msg(config_options, mpi_config)
+        config_options.statusMsg = (
+            "Processing Conus HRRR Data. Calculating neighboring "
+            "files for this output timestep"
+        )
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
 
     # Fortunately, HRRR data is straightforward compared to GFS in terms of precip values, etc.
     if d_current >= datetime.datetime(2018, 10, 1):
         default_horizon = 18  # 18-hour forecasts.
-        six_hr_horizon = 36  # 36-hour forecasts every six hours.
+        six_hr_horizon = 48  # 48-hour forecasts every six hours.
     else:
         default_horizon = 18  # 18-hour forecasts.
         six_hr_horizon = 18  # 18-hour forecasts every six hours.
@@ -656,7 +892,8 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
     # First find the current HRRR forecast cycle that we are using.
     ana_offset = 1 if config_options.ana_flag else 0
     current_hrrr_cycle = config_options.current_fcst_cycle - datetime.timedelta(
-        seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0)
+        seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0
+    )
     if current_hrrr_cycle.hour % 6 != 0:
         hrrr_horizon = default_horizon
     else:
@@ -664,15 +901,20 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
 
     # If the user has specified a forcing horizon that is greater than what is available
     # for this time period, throw an error.
-    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > hrrr_horizon:
-        config_options.errMsg = "User has specified a HRRR conus forecast horizon " + \
-                                "that is greater than the maximum allowed hours of: " + str(hrrr_horizon)
+    if (
+        input_forcings.userFcstHorizon + input_forcings.userCycleOffset
+    ) / 60.0 > hrrr_horizon:
+        config_options.errMsg = (
+            "User has specified a HRRR conus forecast horizon "
+            + "that is greater than the maximum allowed hours of: "
+            + str(hrrr_horizon)
+        )
         err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # Calculate the current forecast hour within this HRRR cycle.
     dt_tmp = d_current - current_hrrr_cycle
-    current_hrrr_hour = int(dt_tmp.days*24) + int(dt_tmp.seconds/3600.0)
+    current_hrrr_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
     # Calculate the previous file to process.
     min_since_last_output = (current_hrrr_hour * 60) % 60
@@ -703,27 +945,63 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
         prev_hrrr_forecast_hour = 1
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + '/hrrr.' + current_hrrr_cycle.strftime(
-        '%Y%m%d') + "/hrrr.t" + current_hrrr_cycle.strftime('%H') + 'z.wrfsfcf' + \
-        str(prev_hrrr_forecast_hour).zfill(2) + input_forcings.file_ext
-    if (mpi_config.rank == 0 and os.path.isfile(tmp_file1)):
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/hrrr."
+        + current_hrrr_cycle.strftime("%Y%m%d")
+        + "/conus"
+        + "/hrrr.t"
+        + current_hrrr_cycle.strftime("%H")
+        + "z.wrfsfcf"
+        + str(prev_hrrr_forecast_hour).zfill(2)
+        + input_forcings.file_ext
+    )
+    if mpi_config.rank == 0 and os.path.isfile(tmp_file1):
         config_options.statusMsg = "Previous HRRR file being used: " + tmp_file1
         err_handler.log_msg(config_options, mpi_config)
 
-    tmp_file2 = input_forcings.inDir + '/hrrr.' + current_hrrr_cycle.strftime(
-        '%Y%m%d') + "/hrrr.t" + current_hrrr_cycle.strftime('%H') + 'z.wrfsfcf' \
-        + str(next_hrrr_forecast_hour).zfill(2) + input_forcings.file_ext
-
+    tmp_file2 = (
+        input_forcings.inDir
+        + "/hrrr."
+        + current_hrrr_cycle.strftime("%Y%m%d")
+        + "/conus"
+        + "/hrrr.t"
+        + current_hrrr_cycle.strftime("%H")
+        + "z.wrfsfcf"
+        + str(next_hrrr_forecast_hour).zfill(2)
+        + input_forcings.file_ext
+    )
+    LOG.debug(f"temp_file_names {tmp_file1}, {tmp_file2}")
     # Check to see if we need to change pathway extension for HRRR data
     # to HPSS tape storage naming conventions
-    if (os.path.isfile(tmp_file1) == False and os.path.isfile(tmp_file2) == False):
+    if os.path.isfile(tmp_file1) == False and os.path.isfile(tmp_file2) == False:
         # Calculate expected file paths.
-        tmp_file1 = input_forcings.inDir + '/hrrr.' + current_hrrr_cycle.strftime('%Y%m%d') + "/hrrr.t" + current_hrrr_cycle.strftime('%H') + 'z.wrfprsf' + str(prev_hrrr_forecast_hour).zfill(2) + input_forcings.file_ext
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/hrrr."
+            + current_hrrr_cycle.strftime("%Y%m%d")
+            + "/conus"
+            + "/hrrr.t"
+            + current_hrrr_cycle.strftime("%H")
+            + "z.wrfprsf"
+            + str(prev_hrrr_forecast_hour).zfill(2)
+            + input_forcings.file_ext
+        )
         if mpi_config.rank == 0:
             config_options.statusMsg = "Previous HRRR file being used: " + tmp_file1
             err_handler.log_msg(config_options, mpi_config)
 
-        tmp_file2 = input_forcings.inDir + '/hrrr.' + current_hrrr_cycle.strftime('%Y%m%d') + "/hrrr.t" + current_hrrr_cycle.strftime('%H') + 'z.wrfprsf' + str(next_hrrr_forecast_hour).zfill(2) + input_forcings.file_ext
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/hrrr."
+            + current_hrrr_cycle.strftime("%Y%m%d")
+            + "/conus"
+            + "/hrrr.t"
+            + current_hrrr_cycle.strftime("%H")
+            + "z.wrfprsf"
+            + str(next_hrrr_forecast_hour).zfill(2)
+            + input_forcings.file_ext
+        )
 
     if mpi_config.rank == 0:
         if mpi_config.rank == 0:
@@ -737,9 +1015,13 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
         if config_options.current_output_step == 1:
             input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
             input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings1_elem = (
+                    input_forcings.regridded_forcings1_elem
+                )
+                input_forcings.regridded_forcings2_elem = (
+                    input_forcings.regridded_forcings2_elem
+                )
 
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
@@ -750,15 +1032,21 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
             if input_forcings.regridded_forcings1 is None:
                 # if not np.any(input_forcings.regridded_forcings1):
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
@@ -767,13 +1055,21 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
             else:
                 # The HRRR window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                if(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    input_forcings.regridded_forcings1_elem[:, :] = (
+                        input_forcings.regridded_forcings2_elem[:, :]
+                    )
+                if config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
@@ -784,28 +1080,38 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
     if mpi_config.rank == 0:
         if not os.path.exists(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input HRRR file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input HRRR file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input HRRR file: " + input_forcings.file_in2 + " not found. " \
-                                                                                                   "Will not use in " \
-                                                                                                   "final layering."
+                config_options.statusMsg = (
+                    "Expected input HRRR file: "
+                    + input_forcings.file_in2
+                    + " not found. "
+                    "Will not use in "
+                    "final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.exists(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
+
 def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find AK HRRR neighbor files.
+
     Function to calculate the previous and after HRRR Alaska cycles based on the current timestep.
     This data differs from the HRRR conus because there is a forecast cycle every 3 hrs instead of
     every hour.
@@ -815,15 +1121,16 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
     :param mpi_config:
     :return:
     """
-
     # skip processing if flag set
     if input_forcings.skip is True:
         return
 
     if mpi_config.rank == 0:
-        config_options.statusMsg = "Processing Conus HRRR AK Data. Calculating neighboring " \
-                                   "files for this output timestep"
-        err_handler.log_msg(config_options, mpi_config)
+        config_options.statusMsg = (
+            "Processing Conus HRRR AK Data. Calculating neighboring "
+            "files for this output timestep"
+        )
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
 
     default_horizon = 18  # 18-hour forecasts.
     six_hr_horizon = 48  # 48-hour forecasts every six hours.
@@ -831,87 +1138,162 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
     # First find the current HRRR AK forecast cycle that we are using.
 
     if config_options.ana_flag:
-    # Alaska normal AnA lookback BMI setup
-        if(config_options.input_forcings[0] ==20):
+        # Alaska normal AnA lookback BMI setup
+        if config_options.input_forcings[0] == 20:
             current_hrrr_cycle = config_options.b_date_proc
-            if(current_hrrr_cycle.hour in [0,1,2]):
+            if current_hrrr_cycle.hour in [0, 1, 2]:
                 prev_day = current_hrrr_cycle - datetime.timedelta(days=1)
-                current_hrrr_cycle = datetime.datetime(prev_day.year,prev_day.month,prev_day.day,18)
-            elif(current_hrrr_cycle.hour in [3,4,5]):
+                current_hrrr_cycle = datetime.datetime(
+                    prev_day.year, prev_day.month, prev_day.day, 18
+                )
+            elif current_hrrr_cycle.hour in [3, 4, 5]:
                 prev_day = current_hrrr_cycle - datetime.timedelta(days=1)
-                current_hrrr_cycle = datetime.datetime(prev_day.year,prev_day.month,prev_day.day,21)
-            elif(current_hrrr_cycle.hour in [6,7,8]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,0)
-            elif(current_hrrr_cycle.hour in [9,10,11]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,3)
-            elif(current_hrrr_cycle.hour in [12,13,14]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,6)
-            elif(current_hrrr_cycle.hour in [15,16,17]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,9)
-            elif(current_hrrr_cycle.hour in [18,19,20]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,12)
-            elif(current_hrrr_cycle.hour in [21,22,23]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,15)
+                current_hrrr_cycle = datetime.datetime(
+                    prev_day.year, prev_day.month, prev_day.day, 21
+                )
+            elif current_hrrr_cycle.hour in [6, 7, 8]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    0,
+                )
+            elif current_hrrr_cycle.hour in [9, 10, 11]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    3,
+                )
+            elif current_hrrr_cycle.hour in [12, 13, 14]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    6,
+                )
+            elif current_hrrr_cycle.hour in [15, 16, 17]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    9,
+                )
+            elif current_hrrr_cycle.hour in [18, 19, 20]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    12,
+                )
+            elif current_hrrr_cycle.hour in [21, 22, 23]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    15,
+                )
 
             shift = current_hrrr_cycle.hour % 3
             if shift == 0:
-                current_hrrr_hour = int(4 + (config_options.future_time/3600)-1)
+                current_hrrr_hour = int(4 + (config_options.future_time / 3600) - 1)
             elif shift == 1:
-                current_hrrr_hour = int(5 + (config_options.future_time/3600)-1)
+                current_hrrr_hour = int(5 + (config_options.future_time / 3600) - 1)
             else:
-                current_hrrr_hour = int(6 + (config_options.future_time/3600)-1)
+                current_hrrr_hour = int(6 + (config_options.future_time / 3600) - 1)
 
         # Alaska extended AnA lookback BMI setup
-        elif(config_options.input_forcings[0] ==22):
-            current_hrrr_cycle = config_options.b_date_proc + pd.TimedeltaIndex(np.array([config_options.future_time-7200],dtype=float),'s')[0]
-            if(current_hrrr_cycle.hour in [0,1,2]):
+        elif config_options.input_forcings[0] == 22:
+            current_hrrr_cycle = (
+                config_options.b_date_proc
+                + pd.TimedeltaIndex(
+                    np.array([config_options.future_time - 7200], dtype=float), "s"
+                )[0]
+            )
+            if current_hrrr_cycle.hour in [0, 1, 2]:
                 prev_day = current_hrrr_cycle - datetime.timedelta(days=1)
-                current_hrrr_cycle = datetime.datetime(prev_day.year,prev_day.month,prev_day.day,18)
-            elif(current_hrrr_cycle.hour in [3,4,5]):
+                current_hrrr_cycle = datetime.datetime(
+                    prev_day.year, prev_day.month, prev_day.day, 18
+                )
+            elif current_hrrr_cycle.hour in [3, 4, 5]:
                 prev_day = current_hrrr_cycle - datetime.timedelta(days=1)
-                current_hrrr_cycle = datetime.datetime(prev_day.year,prev_day.month,prev_day.day,21)
-            elif(current_hrrr_cycle.hour in [6,7,8]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,0)
-            elif(current_hrrr_cycle.hour in [9,10,11]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,3)
-            elif(current_hrrr_cycle.hour in [12,13,14]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,6)
-            elif(current_hrrr_cycle.hour in [15,16,17]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,9)
-            elif(current_hrrr_cycle.hour in [18,19,20]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,12)
-            elif(current_hrrr_cycle.hour in [21,22,23]):
-                current_hrrr_cycle = datetime.datetime(current_hrrr_cycle.year,current_hrrr_cycle.month,current_hrrr_cycle.day,15)
+                current_hrrr_cycle = datetime.datetime(
+                    prev_day.year, prev_day.month, prev_day.day, 21
+                )
+            elif current_hrrr_cycle.hour in [6, 7, 8]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    0,
+                )
+            elif current_hrrr_cycle.hour in [9, 10, 11]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    3,
+                )
+            elif current_hrrr_cycle.hour in [12, 13, 14]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    6,
+                )
+            elif current_hrrr_cycle.hour in [15, 16, 17]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    9,
+                )
+            elif current_hrrr_cycle.hour in [18, 19, 20]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    12,
+                )
+            elif current_hrrr_cycle.hour in [21, 22, 23]:
+                current_hrrr_cycle = datetime.datetime(
+                    current_hrrr_cycle.year,
+                    current_hrrr_cycle.month,
+                    current_hrrr_cycle.day,
+                    15,
+                )
 
-            if(current_hrrr_cycle.hour in [0,3,6,9,12,15,18,21]):
+            if current_hrrr_cycle.hour in [0, 3, 6, 9, 12, 15, 18, 21]:
                 current_hrrr_hour = int(6)
-            elif(current_hrrr_cycle.hour in [1,4,7,10,13,16,19,22]):
+            elif current_hrrr_cycle.hour in [1, 4, 7, 10, 13, 16, 19, 22]:
                 current_hrrr_hour = int(7)
-            elif(current_hrrr_cycle.hour in [2,5,8,11,14,17,20,23]):
+            elif current_hrrr_cycle.hour in [2, 5, 8, 11, 14, 17, 20, 23]:
                 current_hrrr_hour = int(8)
 
-        #if shift == 0:
+        # if shift == 0:
         #    current_hrrr_cycle -= datetime.timedelta(hours=6)
-        #else:
+        # else:
         #    current_hrrr_cycle -= datetime.timedelta(hours=3)
 
         # Calculate the current forecast hour within this HRRR cycle.
-        #dt_tmp = d_current - current_hrrr_cycle
-        #current_hrrr_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600
+        # dt_tmp = d_current - current_hrrr_cycle
+        # current_hrrr_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600
 
         # Calculate the previous file to process
         input_forcings.fcst_date1 = current_hrrr_cycle
         input_forcings.fcst_date2 = current_hrrr_cycle
 
         # Calculate the output forecast hours needed based on the prev/next dates
-        next_hrrr_forecast_hour = current_hrrr_hour    # for analysis vs forecast
+        next_hrrr_forecast_hour = current_hrrr_hour  # for analysis vs forecast
         input_forcings.fcst_hour2 = next_hrrr_forecast_hour
-        prev_hrrr_forecast_hour = current_hrrr_hour -1    # for analysis vs forecast
+        prev_hrrr_forecast_hour = current_hrrr_hour - 1  # for analysis vs forecast
         input_forcings.fcst_hour1 = prev_hrrr_forecast_hour
         err_handler.check_program_status(config_options, mpi_config)
 
     else:
-        current_hrrr_cycle = config_options.current_fcst_cycle #- datetime.timedelta(seconds=input_forcings.userCycleOffset * 60.0)
+        current_hrrr_cycle = (
+            config_options.current_fcst_cycle
+        )  # - datetime.timedelta(seconds=input_forcings.userCycleOffset * 60.0)
 
         # Map the native forecast hour to the shifted HRRR cycles
         hrrr_cycle = (current_hrrr_cycle.hour // 3 * 3) - 3
@@ -921,8 +1303,7 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
         # throw out the first 3 hours of the cycle
         current_hrrr_hour = (current_hrrr_cycle.hour % 3) + 3
 
-        #current_hrrr_cycle -= datetime.timedelta(hours=current_hrrr_hour)
-
+        # current_hrrr_cycle -= datetime.timedelta(hours=current_hrrr_hour)
 
         if current_hrrr_cycle.hour % 6 == 0:
             hrrr_horizon = 48
@@ -937,25 +1318,29 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
         min_since_last_output = (current_hrrr_hour * 60) % 60
         if min_since_last_output == 0:
             min_since_last_output = 60
-        prev_hrrr_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
+        prev_hrrr_date = d_current - datetime.timedelta(
+            seconds=min_since_last_output * 60
+        )
         input_forcings.fcst_date1 = prev_hrrr_date
         if min_since_last_output == 60:
             min_until_next_output = 0
         else:
             min_until_next_output = 60 - min_since_last_output
-        next_hrrr_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
+        next_hrrr_date = d_current + datetime.timedelta(
+            seconds=min_until_next_output * 60
+        )
         input_forcings.fcst_date2 = next_hrrr_date
 
         # Calculate the output forecast hours needed based on the prev/next dates.
         dt_tmp = next_hrrr_date - current_hrrr_cycle
         next_hrrr_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
         if config_options.ana_flag:
-            next_hrrr_forecast_hour -= 1    # for analysis vs forecast
+            next_hrrr_forecast_hour -= 1  # for analysis vs forecast
         input_forcings.fcst_hour2 = next_hrrr_forecast_hour
         dt_tmp = prev_hrrr_date - current_hrrr_cycle
         prev_hrrr_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
         if config_options.ana_flag:
-            prev_hrrr_forecast_hour -= 1    # for analysis vs forecast
+            prev_hrrr_forecast_hour -= 1  # for analysis vs forecast
         input_forcings.fcst_hour1 = prev_hrrr_forecast_hour
         err_handler.check_program_status(config_options, mpi_config)
 
@@ -971,16 +1356,32 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
             return
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + '/hrrr.' + current_hrrr_cycle.strftime(
-        '%Y%m%d') + "/alaska/hrrr.t" + current_hrrr_cycle.strftime('%H') + 'z.wrfsfcf' + \
-        str(prev_hrrr_forecast_hour).zfill(2) + ".ak" + input_forcings.file_ext
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/hrrr."
+        + current_hrrr_cycle.strftime("%Y%m%d")
+        + "/alaska/hrrr.t"
+        + current_hrrr_cycle.strftime("%H")
+        + "z.wrfsfcf"
+        + str(prev_hrrr_forecast_hour).zfill(2)
+        + ".ak"
+        + input_forcings.file_ext
+    )
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous HRRR file being used: " + tmp_file1
         err_handler.log_msg(config_options, mpi_config)
 
-    tmp_file2 = input_forcings.inDir + '/hrrr.' + current_hrrr_cycle.strftime(
-        '%Y%m%d') + "/alaska/hrrr.t" + current_hrrr_cycle.strftime('%H') + 'z.wrfsfcf' \
-        + str(next_hrrr_forecast_hour).zfill(2) + ".ak" + input_forcings.file_ext
+    tmp_file2 = (
+        input_forcings.inDir
+        + "/hrrr."
+        + current_hrrr_cycle.strftime("%Y%m%d")
+        + "/alaska/hrrr.t"
+        + current_hrrr_cycle.strftime("%H")
+        + "z.wrfsfcf"
+        + str(next_hrrr_forecast_hour).zfill(2)
+        + ".ak"
+        + input_forcings.file_ext
+    )
     if mpi_config.rank == 0:
         config_options.statusMsg = "Next HRRR file being used: " + tmp_file2
         err_handler.log_msg(config_options, mpi_config)
@@ -992,9 +1393,13 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
         if config_options.current_output_step == 1:
             input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
             input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings1_elem = (
+                    input_forcings.regridded_forcings1_elem
+                )
+                input_forcings.regridded_forcings2_elem = (
+                    input_forcings.regridded_forcings2_elem
+                )
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
         else:
@@ -1004,15 +1409,21 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
             if input_forcings.regridded_forcings1 is None:
                 # if not np.any(input_forcings.regridded_forcings1):
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
@@ -1021,13 +1432,21 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
             else:
                 # The HRRR window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                if(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    input_forcings.regridded_forcings1_elem[:, :] = (
+                        input_forcings.regridded_forcings2_elem[:, :]
+                    )
+                if config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
@@ -1038,29 +1457,38 @@ def find_ak_hrrr_neighbors(input_forcings, config_options, d_current, mpi_config
     if mpi_config.rank == 0:
         if not os.path.exists(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input HRRR file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input HRRR file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input HRRR file: " + input_forcings.file_in2 + " not found. " \
-                                                                                                   "Will not use in " \
-                                                                                                   "final layering."
+                config_options.statusMsg = (
+                    "Expected input HRRR file: "
+                    + input_forcings.file_in2
+                    + " not found. "
+                    "Will not use in "
+                    "final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.exists(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
 
 def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find CONUS RAP neighbor files.
+
     Function to calculate the previous and after RAP conus 13km cycles based on the current timestep.
     :param input_forcings:
     :param config_options:
@@ -1069,32 +1497,51 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
     :return:
     """
     if d_current >= datetime.datetime(2018, 10, 1):
-        default_horizon = 21   # 21-hour forecasts.
-        extra_hr_horizon = 39  # 39-hour forecasts at 3,9,15,21 UTC.
+        default_horizon = 21  # 21-hour forecasts.
+        extra_hr_horizon = 51  # 51-hour forecasts at 3,9,15,21 UTC.
     else:
-        default_horizon = 18   # 18-hour forecasts.
+        default_horizon = 18  # 18-hour forecasts.
         extra_hr_horizon = 18  # 18-hour forecasts every six hours.
 
-    # First find the current RAP forecast cycle that we are using.
-    ana_offset = 1 if config_options.ana_flag else 0
-    current_rap_cycle = config_options.current_fcst_cycle - datetime.timedelta(
-            seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0)
-    if current_rap_cycle.hour == 3 or current_rap_cycle.hour == 9 or \
-            current_rap_cycle.hour == 15 or current_rap_cycle.hour == 21:
-        rap_horizon = default_horizon
+    # First find the current RAP forecast cycle that we are using, and shift it if we're AnA or
+    # need an extended cycle
+
+    if config_options.ana_flag:
+        cycle_offset = 1
+    #elif config_options.current_fcst_cycle.hour % 6 == 0:
+    #    cycle_offset = 3
     else:
+        cycle_offset = 0
+
+    # First find the current RAP forecast cycle that we are using.
+    current_rap_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+        seconds=(cycle_offset + input_forcings.userCycleOffset) * 3600.0)
+
+    if (
+        current_rap_cycle.hour == 3
+        or current_rap_cycle.hour == 9
+        or current_rap_cycle.hour == 15
+        or current_rap_cycle.hour == 21
+    ):
         rap_horizon = extra_hr_horizon
+    else:
+        rap_horizon = default_horizon
 
     # If the user has specified a forcing horizon that is greater than what is available
     # for this time period, throw an error.
-    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > rap_horizon:
-        config_options.errMsg = "User has specified a RAP CONUS 13km forecast horizon " + \
-                                "that is greater than the maximum allowed hours of: " + str(rap_horizon)
+    if (
+        input_forcings.userFcstHorizon + input_forcings.userCycleOffset
+    ) / 60.0 > rap_horizon:
+        config_options.errMsg = (
+            "User has specified a RAP CONUS 13km forecast horizon "
+            + "that is greater than the maximum allowed hours of: "
+            + str(rap_horizon)
+        )
         return
 
-    # Calculate the current forecast hour within this HRRR cycle.
+    # Calculate the current forecast hour within this RAP cycle.
     dt_tmp = d_current - current_rap_cycle
-    current_rap_hour = int(dt_tmp.days*24) + int(dt_tmp.seconds/3600.0)
+    current_rap_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
     # Calculate the previous file to process.
     min_since_last_output = (current_rap_hour * 60) % 60
@@ -1112,9 +1559,13 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
     # Calculate the output forecast hours needed based on the prev/next dates.
     dt_tmp = next_rap_date - current_rap_cycle
     next_rap_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
+    if config_options.ana_flag:
+        next_rap_forecast_hour -= 1    # for analysis vs forecast
     input_forcings.fcst_hour2 = next_rap_forecast_hour
     dt_tmp = prev_rap_date - current_rap_cycle
     prev_rap_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
+    if config_options.ana_flag:
+        prev_rap_forecast_hour -= 1    # for analysis vs forecast
     input_forcings.fcst_hour1 = prev_rap_forecast_hour
     # If we are on the first GFS forecast hour (1), and we have calculated the previous forecast
     # hour to be 0, simply set both hours to be 1. Hour 0 will not produce the fields we need, and
@@ -1123,42 +1574,76 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
         prev_rap_forecast_hour = 1
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + '/rap.' + \
-        current_rap_cycle.strftime('%Y%m%d') + "/rap.t" + \
-        current_rap_cycle.strftime('%H') + 'z.awp130bgrbf' + \
-        str(prev_rap_forecast_hour).zfill(2) + input_forcings.file_ext
-    tmp_file2 = input_forcings.inDir + '/rap.' + \
-        current_rap_cycle.strftime('%Y%m%d') + "/rap.t" + \
-        current_rap_cycle.strftime('%H') + 'z.awp130bgrbf' + \
-        str(next_rap_forecast_hour).zfill(2) + input_forcings.file_ext
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/rap."
+        + current_rap_cycle.strftime("%Y%m%d")
+        + "/rap.t"
+        + current_rap_cycle.strftime("%H")
+        + "z.awp130bgrbf"
+        + str(prev_rap_forecast_hour).zfill(2)
+        + input_forcings.file_ext
+    )
+    tmp_file2 = (
+        input_forcings.inDir
+        + "/rap."
+        + current_rap_cycle.strftime("%Y%m%d")
+        + "/rap.t"
+        + current_rap_cycle.strftime("%H")
+        + "z.awp130bgrbf"
+        + str(next_rap_forecast_hour).zfill(2)
+        + input_forcings.file_ext
+    )
 
     # Check to see if we need to change pathway extension for RAP data
     # to HPSS tape storage naming convention
-    if (os.path.isfile(tmp_file1) == False and os.path.isfile(tmp_file2) == False):
+    if os.path.isfile(tmp_file1) == False and os.path.isfile(tmp_file2) == False:
         # Calculate expected file paths.
-        tmp_file1 = input_forcings.inDir + '/rap.' + \
-            current_rap_cycle.strftime('%Y%m%d') + "/rap.t" + \
-            current_rap_cycle.strftime('%H') + 'z.awp130pgrbf' + \
-            str(prev_rap_forecast_hour).zfill(2) + input_forcings.file_ext
-        tmp_file2 = input_forcings.inDir + '/rap.' + \
-            current_rap_cycle.strftime('%Y%m%d') + "/rap.t" + \
-            current_rap_cycle.strftime('%H') + 'z.awp130pgrbf' + \
-            str(next_rap_forecast_hour).zfill(2) + input_forcings.file_ext
-
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/rap."
+            + current_rap_cycle.strftime("%Y%m%d")
+            + "/rap.t"
+            + current_rap_cycle.strftime("%H")
+            + "z.awp130pgrbf"
+            + str(prev_rap_forecast_hour).zfill(2)
+            + input_forcings.file_ext
+        )
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/rap."
+            + current_rap_cycle.strftime("%Y%m%d")
+            + "/rap.t"
+            + current_rap_cycle.strftime("%H")
+            + "z.awp130pgrbf"
+            + str(next_rap_forecast_hour).zfill(2)
+            + input_forcings.file_ext
+        )
 
     # Check to see if we need to change pathway extension for RAP data
     # to HPSS tape storage naming convention
-    if (os.path.isfile(tmp_file1) == False and os.path.isfile(tmp_file2) == False):
+    if os.path.isfile(tmp_file1) == False and os.path.isfile(tmp_file2) == False:
         # Calculate expected file paths.
-        tmp_file1 = input_forcings.inDir + '/rap.' + \
-            current_rap_cycle.strftime('%Y%m%d') + "/rap.t" + \
-            current_rap_cycle.strftime('%H') + 'z.awip32f' + \
-            str(prev_rap_forecast_hour).zfill(2) + input_forcings.file_ext
-        tmp_file2 = input_forcings.inDir + '/rap.' + \
-            current_rap_cycle.strftime('%Y%m%d') + "/rap.t" + \
-            current_rap_cycle.strftime('%H') + 'z.awip32f' + \
-            str(next_rap_forecast_hour).zfill(2) + input_forcings.file_ext
-
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/rap."
+            + current_rap_cycle.strftime("%Y%m%d")
+            + "/rap.t"
+            + current_rap_cycle.strftime("%H")
+            + "z.awip32f"
+            + str(prev_rap_forecast_hour).zfill(2)
+            + input_forcings.file_ext
+        )
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/rap."
+            + current_rap_cycle.strftime("%Y%m%d")
+            + "/rap.t"
+            + current_rap_cycle.strftime("%H")
+            + "z.awip32f"
+            + str(next_rap_forecast_hour).zfill(2)
+            + input_forcings.file_ext
+        )
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
@@ -1166,9 +1651,13 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
         if config_options.current_output_step == 1:
             input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
             input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings1_elem = (
+                    input_forcings.regridded_forcings1_elem
+                )
+                input_forcings.regridded_forcings2_elem = (
+                    input_forcings.regridded_forcings2_elem
+                )
 
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
@@ -1179,15 +1668,21 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
             if input_forcings.regridded_forcings1 is None:
                 # if not np.any(input_forcings.regridded_forcings1):
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
@@ -1196,20 +1691,28 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
             else:
                 # The Rapid Refresh window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                if(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    input_forcings.regridded_forcings1_elem[:, :] = (
+                        input_forcings.regridded_forcings2_elem[:, :]
+                    )
+                if config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
         input_forcings.regridComplete = False
     err_handler.check_program_status(config_options, mpi_config)
 
-    # Ensure we have the necessary new file
+    # Ensure we have the necessary new files
     if not os.path.isfile(input_forcings.file_in2):
         # look for the `pgrb` equivalent:
         input_forcings.file_in2 = input_forcings.file_in2.replace("bgrb", "pgrb")
@@ -1217,34 +1720,41 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
             if not os.path.isfile(input_forcings.file_in2):
                 missing = input_forcings.file_in2.replace("pgrb", "[bgrb|pgrb]")
                 if input_forcings.enforce == 1:
-                    config_options.errMsg = "Expected input RAP file: " + missing + " not found."
+                    config_options.errMsg = (
+                        "Expected input RAP file: " + missing + " not found."
+                    )
                     err_handler.log_critical(config_options, mpi_config)
                 else:
-                    config_options.statusMsg = "Expected input RAP file: " + missing + \
-                                               " not found, and will not be used in final layering."
+                    config_options.statusMsg = (
+                        "Expected input RAP file: "
+                        + missing
+                        + " not found, and will not be used in final layering."
+                    )
                     err_handler.log_warning(config_options, mpi_config)
             else:
                 missing = input_forcings.file_in2.replace("pgrb", "bgrb")
                 config_options.statusMsg = "Expected input RAP file: {} was not found; {} will be used instead".format(
-                    missing, input_forcings.file_in2)
+                    missing, input_forcings.file_in2
+                )
                 err_handler.log_warning(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
     err_handler.check_program_status(config_options, mpi_config)
 
 
 def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find GFS neighbor files.
+
     Function to calculate the previous and after GFS cycles based on the current timestep.
     :param mpi_config:
     :param d_current:
@@ -1255,22 +1765,18 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
     # First calculate how the GFS files are structured based on our current processing date.
     # This will change in the future, and should be modified as the GFS system evolves.
     gfs_out_horizons = [120, 240, 384]
-    gfs_out_freq = {
-        120: 60,
-        240: 180,
-        384: 180
-    }
-    gfs_precip_delineators = {
-        120: [360, 60],
-        240: [360, 180],
-        384: [360,180]
-    }
+    gfs_out_freq = {120: 60, 240: 180, 384: 180}
+    gfs_precip_delineators = {120: [360, 60], 240: [360, 180], 384: [360, 180]}
     # If the user has specified a forcing horizon that is greater than what
     # is available here, return an error.
-    if (input_forcings.userFcstHorizon+input_forcings.userCycleOffset)/60.0 > max(gfs_out_horizons):
-        config_options.errMsg = "User has specified a GFS forecast horizon " \
-                                "that is greater than maximum allowed hours of: " \
-                                + str(max(gfs_out_horizons))
+    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > max(
+        gfs_out_horizons
+    ):
+        config_options.errMsg = (
+            "User has specified a GFS forecast horizon "
+            "that is greater than maximum allowed hours of: "
+            + str(max(gfs_out_horizons))
+        )
         return
 
     # First determine if we need a previous file or not. For hourly files,
@@ -1283,12 +1789,13 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
     # move to 12 hours.
 
     # First find the current GFS forecast cycle that we are using.
-    current_gfs_cycle = config_options.current_fcst_cycle - \
-        datetime.timedelta(seconds=input_forcings.userCycleOffset * 60.0)
+    current_gfs_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+        seconds=input_forcings.userCycleOffset * 60.0
+    )
 
     # Calculate the current forecast hour within this GFS cycle.
     dt_tmp = d_current - current_gfs_cycle
-    current_gfs_hour = int(dt_tmp.days*24) + int(dt_tmp.seconds/3600.0)
+    current_gfs_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
     # Calculate the GFS output frequency based on our current GFS forecast hour.
     current_gfs_freq = None
@@ -1299,12 +1806,12 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
             break
 
     # Calculate the previous file to process.
-    min_since_last_output = (current_gfs_hour*60) % current_gfs_freq
+    min_since_last_output = (current_gfs_hour * 60) % current_gfs_freq
     if min_since_last_output == 0:
         min_since_last_output = current_gfs_freq
         # current_gfs_hour = current_gfs_hour
         # previousGfsHour = current_gfs_hour - int(current_gfs_freq/60.0)
-    prev_gfs_date = d_current - datetime.timedelta(seconds=min_since_last_output*60)
+    prev_gfs_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
     input_forcings.fcst_date1 = prev_gfs_date
     if min_since_last_output == current_gfs_freq:
         min_until_next_output = 0
@@ -1315,10 +1822,10 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
 
     # Calculate the output forecast hours needed based on the prev/next dates.
     dt_tmp = next_gfs_date - current_gfs_cycle
-    next_gfs_forecast_hour = int(dt_tmp.days*24.0) + int(dt_tmp.seconds/3600.0)
+    next_gfs_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     input_forcings.fcst_hour2 = next_gfs_forecast_hour
     dt_tmp = prev_gfs_date - current_gfs_cycle
-    prev_gfs_forecast_hour = int(dt_tmp.days*24.0) + int(dt_tmp.seconds/3600.0)
+    prev_gfs_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     input_forcings.fcst_hour1 = prev_gfs_forecast_hour
     # If we are on the first GFS forecast hour (1), and we have calculated the previous forecast
     # hour to be 0, simply set both hours to be 1. Hour 0 will not produce the fields we need, and
@@ -1328,51 +1835,104 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
 
     # Calculate expected file paths.
     if current_gfs_cycle < datetime.datetime(2019, 6, 12, 12):
-        tmp_file1 = input_forcings.inDir + '/gfs.' + \
-            current_gfs_cycle.strftime('%Y%m%d%H') + "/gfs.t" + \
-            current_gfs_cycle.strftime('%H') + 'z.sfluxgrbf' + \
-            str(prev_gfs_forecast_hour).zfill(3) + input_forcings.file_ext
-        tmp_file2 = input_forcings.inDir + '/gfs.' + \
-            current_gfs_cycle.strftime('%Y%m%d%H') + "/gfs.t" + \
-            current_gfs_cycle.strftime('%H') + 'z.sfluxgrbf' + \
-            str(next_gfs_forecast_hour).zfill(3) + input_forcings.file_ext
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/gfs."
+            + current_gfs_cycle.strftime("%Y%m%d%H")
+            + "/gfs.t"
+            + current_gfs_cycle.strftime("%H")
+            + "z.sfluxgrbf"
+            + str(prev_gfs_forecast_hour).zfill(3)
+            + input_forcings.file_ext
+        )
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/gfs."
+            + current_gfs_cycle.strftime("%Y%m%d%H")
+            + "/gfs.t"
+            + current_gfs_cycle.strftime("%H")
+            + "z.sfluxgrbf"
+            + str(next_gfs_forecast_hour).zfill(3)
+            + input_forcings.file_ext
+        )
     else:
         # FV3 change on June 12th, 2019
-        tmp_file1 = input_forcings.inDir + '/gfs.' + \
-            current_gfs_cycle.strftime('%Y%m%d') + "/" + \
-            current_gfs_cycle.strftime('%H') + \
-            '/atmos/gfs.t' + \
-            current_gfs_cycle.strftime('%H') + 'z.sfluxgrbf' + \
-            str(prev_gfs_forecast_hour).zfill(3) + input_forcings.file_ext
-        tmp_file2 = input_forcings.inDir + '/gfs.' + \
-            current_gfs_cycle.strftime('%Y%m%d') + "/" + \
-            current_gfs_cycle.strftime('%H') + \
-            '/atmos/gfs.t' + \
-            current_gfs_cycle.strftime('%H') + 'z.sfluxgrbf' + \
-            str(next_gfs_forecast_hour).zfill(3) + input_forcings.file_ext
+        tmp_file1 = (
+            input_forcings.inDir
+            + "/gfs."
+            + current_gfs_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_gfs_cycle.strftime("%H")
+            + "/atmos/gfs.t"
+            + current_gfs_cycle.strftime("%H")
+            + "z.sfluxgrbf"
+            + str(prev_gfs_forecast_hour).zfill(3)
+            + input_forcings.file_ext
+        )
+        tmp_file2 = (
+            input_forcings.inDir
+            + "/gfs."
+            + current_gfs_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_gfs_cycle.strftime("%H")
+            + "/atmos/gfs.t"
+            + current_gfs_cycle.strftime("%H")
+            + "z.sfluxgrbf"
+            + str(next_gfs_forecast_hour).zfill(3)
+            + input_forcings.file_ext
+        )
 
     # If needed, initialize the globalPcpRate1 array (this is for when we have the initial grid, or we need to change
     # grids.
     # if np.any(input_forcings.globalPcpRate2) and not np.any(input_forcings.globalPcpRate1):
-    if input_forcings.globalPcpRate2 is not None and input_forcings.globalPcpRate1 is None:
-        input_forcings.globalPcpRate1 = np.empty([input_forcings.globalPcpRate2.shape[0],
-                                                  input_forcings.globalPcpRate2.shape[1]], np.float32)
-        if(config_options.grid_type == "unstructured"):
-            input_forcings.globalPcpRate1_elem = np.empty([input_forcings.globalPcpRate2_elem.shape[0],
-                                                      input_forcings.globalPcpRate2_elem.shape[1]], np.float32)
+    if (
+        input_forcings.globalPcpRate2 is not None
+        and input_forcings.globalPcpRate1 is None
+    ):
+        input_forcings.globalPcpRate1 = np.empty(
+            [
+                input_forcings.globalPcpRate2.shape[0],
+                input_forcings.globalPcpRate2.shape[1],
+            ],
+            np.float32,
+        )
+        if config_options.grid_type == "unstructured":
+            input_forcings.globalPcpRate1_elem = np.empty(
+                [
+                    input_forcings.globalPcpRate2_elem.shape[0],
+                    input_forcings.globalPcpRate2_elem.shape[1],
+                ],
+                np.float32,
+            )
 
     # if np.any(input_forcings.globalPcpRate2) and np.any(input_forcings.globalPcpRate1):
-    if input_forcings.globalPcpRate2 is not None and input_forcings.globalPcpRate1 is not None:
-        if input_forcings.globalPcpRate2.shape[0] != input_forcings.globalPcpRate1.shape[0]:
+    if (
+        input_forcings.globalPcpRate2 is not None
+        and input_forcings.globalPcpRate1 is not None
+    ):
+        if (
+            input_forcings.globalPcpRate2.shape[0]
+            != input_forcings.globalPcpRate1.shape[0]
+        ):
             # The grid has changed, we need to re-initialize the globalPcpRate1 array.
             input_forcings.globalPcpRate1 = None
-            input_forcings.globalPcpRate1 = np.empty([input_forcings.globalPcpRate2.shape[0],
-                                                      input_forcings.globalPcpRate2.shape[1]], np.float32)
+            input_forcings.globalPcpRate1 = np.empty(
+                [
+                    input_forcings.globalPcpRate2.shape[0],
+                    input_forcings.globalPcpRate2.shape[1],
+                ],
+                np.float32,
+            )
 
-            if(config_options.grid_type == "unstructured"):
+            if config_options.grid_type == "unstructured":
                 input_forcings.globalPcpRate1_elem = None
-                input_forcings.globalPcpRate1_elem = np.empty([input_forcings.globalPcpRate2_elem.shape[0],
-                                                          input_forcings.globalPcpRate2_elem.shape[1]], np.float32)
+                input_forcings.globalPcpRate1_elem = np.empty(
+                    [
+                        input_forcings.globalPcpRate2_elem.shape[0],
+                        input_forcings.globalPcpRate2_elem.shape[1],
+                    ],
+                    np.float32,
+                )
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
@@ -1380,9 +1940,13 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
         if config_options.current_output_step == 1:
             input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
             input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings1_elem = (
+                    input_forcings.regridded_forcings1_elem
+                )
+                input_forcings.regridded_forcings2_elem = (
+                    input_forcings.regridded_forcings2_elem
+                )
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
         else:
@@ -1392,22 +1956,32 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
             # if not np.any(input_forcings.regridded_forcings1):
             if input_forcings.regridded_forcings1 is None:
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
-                if input_forcings.productName == "GFS_Production_GRIB2":
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
+                if input_forcings.product_name == "GFS_Production_GRIB2":
                     if mpi_config.rank == 0:
                         input_forcings.globalPcpRate1 = input_forcings.globalPcpRate1
                         input_forcings.globalPcpRate2 = input_forcings.globalPcpRate2
-                        if(config_options.grid_type == "unstructured"):
-                            input_forcings.globalPcpRate1_elem = input_forcings.globalPcpRate1_elem
-                            input_forcings.globalPcpRate2_elem = input_forcings.globalPcpRate2_elem
+                        if config_options.grid_type == "unstructured":
+                            input_forcings.globalPcpRate1_elem = (
+                                input_forcings.globalPcpRate1_elem
+                            )
+                            input_forcings.globalPcpRate2_elem = (
+                                input_forcings.globalPcpRate2_elem
+                            )
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.fcst_date2 = input_forcings.fcst_date1
@@ -1415,21 +1989,36 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
             else:
                 # The forcing window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                    if input_forcings.productName == "GFS_Production_GRIB2":
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                    if input_forcings.product_name == "GFS_Production_GRIB2":
                         if mpi_config.rank == 0:
-                            input_forcings.globalPcpRate1[:, :] = input_forcings.globalPcpRate2[:, :]
-                elif(config_options.grid_type == "unstructured" or config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    if input_forcings.productName == "GFS_Production_GRIB2":
+                            input_forcings.globalPcpRate1[:, :] = (
+                                input_forcings.globalPcpRate2[:, :]
+                            )
+                elif (
+                    config_options.grid_type == "unstructured"
+                    or config_options.grid_type == "hydrofabric"
+                ):
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    if input_forcings.product_name == "GFS_Production_GRIB2":
                         if mpi_config.rank == 0:
-                            input_forcings.globalPcpRate1[:,:] = input_forcings.globalPcpRate2[:,:]
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                        if input_forcings.productName == "GFS_Production_GRIB2":
+                            input_forcings.globalPcpRate1[:, :] = (
+                                input_forcings.globalPcpRate2[:, :]
+                            )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
+                        if input_forcings.product_name == "GFS_Production_GRIB2":
                             if mpi_config.rank == 0:
-                                input_forcings.globalPcpRate1_elem[:,:] = input_forcings.globalPcpRate2_elem[:,:]
+                                input_forcings.globalPcpRate1_elem[:, :] = (
+                                    input_forcings.globalPcpRate2_elem[:, :]
+                                )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
@@ -1437,33 +2026,46 @@ def find_gfs_neighbors(input_forcings, config_options, d_current, mpi_config):
         input_forcings.regridComplete = False
     err_handler.check_program_status(config_options, mpi_config)
 
+    # debug - ksl
+    LOG.debug(f"file_in1: {input_forcings.file_in1}")
+    LOG.debug(f"file_in2: {input_forcings.file_in2}")
+
     # Ensure we have the necessary new file
     if mpi_config.rank == 0:
         if not os.path.isfile(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input GFS file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input GFS file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input GFS file: " + input_forcings.file_in2 + " not found. " \
-                                                                                                   "Will not use in " \
-                                                                                                   "final layering."
+                config_options.statusMsg = (
+                    "Expected input GFS file: "
+                    + input_forcings.file_in2
+                    + " not found. "
+                    "Will not use in "
+                    "final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
 
 def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find NAM Nest neighbor files.
+
     Function to calculate the previous and after NAM Nest cycles based on the current timestep.
     This function was written to be generic enough to accommodate any of the NAM nest flavors.
     :param mpi_config:
@@ -1477,44 +2079,48 @@ def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_confi
     nam_nest_out_freq = {}
     if d_current >= datetime.datetime(2012, 10, 1):
         nam_nest_out_horizons = [60]
-        nam_nest_out_freq = {
-            60: 60
-        }
+        nam_nest_out_freq = {60: 60}
 
     # If the user has specified a forcing horizon that is greater than what
     # is available here, return an error.
-    if (input_forcings.userFcstHorizon+input_forcings.userCycleOffset)/60.0 > max(nam_nest_out_horizons):
-        config_options.errMsg = "User has specified a NAM nest forecast horizon " \
-                                "that is greater than maximum allowed hours of: " \
-                                + str(max(nam_nest_out_horizons))
+    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > max(
+        nam_nest_out_horizons
+    ):
+        config_options.errMsg = (
+            "User has specified a NAM nest forecast horizon "
+            "that is greater than maximum allowed hours of: "
+            + str(max(nam_nest_out_horizons))
+        )
         err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # First find the current NAM nest forecast cycle that we are using.
     if config_options.ana_flag:
-        # find nearest previous cycle, and always use the first cycle for consistency
-        shift = config_options.first_fcst_cycle.hour % 6
-        current_nam_nest_cycle = config_options.first_fcst_cycle - datetime.timedelta(seconds=3600*shift)
+        # find nearest previous cycle
+        shift = config_options.current_fcst_cycle.hour % 6
+        current_nam_nest_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+            seconds=3600 * shift
+        )
 
-        # avoid forecast hours 0-3, shift back if necessary
-        if config_options.first_fcst_cycle.hour % 6 < 4:
-            current_nam_nest_cycle -= datetime.timedelta(seconds=21600)     # shift back 6 hours
     else:
-        current_nam_nest_cycle = config_options.current_fcst_cycle - \
-            datetime.timedelta(seconds=input_forcings.userCycleOffset * 60.0)
+        current_nam_nest_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+            seconds=input_forcings.userCycleOffset * 60.0
+        )
 
     if mpi_config.rank == 0:
-        config_options.statusMsg = "Current NAM nest cycle being used: " + \
-                                   current_nam_nest_cycle.strftime('%Y-%m-%d %H')
+        config_options.statusMsg = (
+            "Current NAM nest cycle being used: "
+            + current_nam_nest_cycle.strftime("%Y-%m-%d %H")
+        )
         err_handler.log_msg(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # Calculate the current forecast hour within this NAM nest cycle.
     dt_tmp = d_current - current_nam_nest_cycle
-    current_nam_nest_hour = int(dt_tmp.days*24) + int(dt_tmp.seconds/3600.0)
+    current_nam_nest_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
     # Calculate the NAM Nest output frequency based on our current NAM Nest forecast hour.
-    current_nam_nest_freq = float('nan')
+    current_nam_nest_freq = float("nan")
     for horizonTmp in nam_nest_out_horizons:
         if current_nam_nest_hour <= horizonTmp:
             current_nam_nest_freq = nam_nest_out_freq[horizonTmp]
@@ -1522,28 +2128,32 @@ def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_confi
             break
 
     # Calculate the previous file to process.
-    min_since_last_output = (current_nam_nest_hour*60) % current_nam_nest_freq
+    min_since_last_output = (current_nam_nest_hour * 60) % current_nam_nest_freq
     if min_since_last_output == 0:
         min_since_last_output = current_nam_nest_freq
-    prev_nam_nest_date = d_current - datetime.timedelta(seconds=min_since_last_output*60)
+    prev_nam_nest_date = d_current - datetime.timedelta(
+        seconds=min_since_last_output * 60
+    )
     input_forcings.fcst_date1 = prev_nam_nest_date
     if min_since_last_output == current_nam_nest_freq:
         min_until_next_output = 0
     else:
         min_until_next_output = current_nam_nest_freq - min_since_last_output
-    next_nam_nest_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
+    next_nam_nest_date = d_current + datetime.timedelta(
+        seconds=min_until_next_output * 60
+    )
     input_forcings.fcst_date2 = next_nam_nest_date
     err_handler.check_program_status(config_options, mpi_config)
 
     # Calculate the output forecast hours needed based on the prev/next dates.
     dt_tmp = next_nam_nest_date - current_nam_nest_cycle
-    next_nam_nest_forecast_hour = int(dt_tmp.days*24.0) + int(dt_tmp.seconds/3600.0)
-    #if config_options.ana_flag:
+    next_nam_nest_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
+    # if config_options.ana_flag:
     #    next_nam_nest_forecast_hour -= 1    # for analysis vs forecast
 
     input_forcings.fcst_hour2 = next_nam_nest_forecast_hour
     dt_tmp = prev_nam_nest_date - current_nam_nest_cycle
-    prev_nam_nest_forecast_hour = int(dt_tmp.days*24.0) + int(dt_tmp.seconds/3600.0)
+    prev_nam_nest_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
 
     input_forcings.fcst_hour1 = prev_nam_nest_forecast_hour
     # If we are on the first NAM nest forecast hour (1), and we have calculated the previous forecast
@@ -1559,17 +2169,35 @@ def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_confi
     elif input_forcings.keyValue == 15:
         domain_string = "alaskanest"
     else:
-        domain_string = ''
+        domain_string = ""
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + '/nam.' + \
-        current_nam_nest_cycle.strftime('%Y%m%d') + "/nam.t" + \
-        current_nam_nest_cycle.strftime('%H') + 'z.' + domain_string + '.hiresf' + \
-        str(prev_nam_nest_forecast_hour).zfill(2) + '.tm00' + input_forcings.file_ext
-    tmp_file2 = input_forcings.inDir + '/nam.' + \
-        current_nam_nest_cycle.strftime('%Y%m%d') + "/nam.t" + \
-        current_nam_nest_cycle.strftime('%H') + 'z.' + domain_string + '.hiresf' + \
-        str(next_nam_nest_forecast_hour).zfill(2) + '.tm00' + input_forcings.file_ext
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/nam."
+        + current_nam_nest_cycle.strftime("%Y%m%d")
+        + "/nam.t"
+        + current_nam_nest_cycle.strftime("%H")
+        + "z."
+        + domain_string
+        + ".hiresf"
+        + str(prev_nam_nest_forecast_hour).zfill(2)
+        + ".tm00"
+        + input_forcings.file_ext
+    )
+    tmp_file2 = (
+        input_forcings.inDir
+        + "/nam."
+        + current_nam_nest_cycle.strftime("%Y%m%d")
+        + "/nam.t"
+        + current_nam_nest_cycle.strftime("%H")
+        + "z."
+        + domain_string
+        + ".hiresf"
+        + str(next_nam_nest_forecast_hour).zfill(2)
+        + ".tm00"
+        + input_forcings.file_ext
+    )
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous NAM nest file being used: " + tmp_file1
         err_handler.log_msg(config_options, mpi_config)
@@ -1583,9 +2211,13 @@ def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_confi
         if config_options.current_output_step == 1:
             input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
             input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings1_elem = (
+                    input_forcings.regridded_forcings1_elem
+                )
+                input_forcings.regridded_forcings2_elem = (
+                    input_forcings.regridded_forcings2_elem
+                )
 
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
@@ -1596,15 +2228,21 @@ def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_confi
             # if not np.any(input_forcings.regridded_forcings1):
             if input_forcings.regridded_forcings1 is None:
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
@@ -1613,13 +2251,21 @@ def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_confi
             else:
                 # The NAM nest window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                elif(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                elif(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                elif config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    input_forcings.regridded_forcings1_elem[:, :] = (
+                        input_forcings.regridded_forcings2_elem[:, :]
+                    )
+                elif config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
@@ -1630,28 +2276,38 @@ def find_nam_nest_neighbors(input_forcings, config_options, d_current, mpi_confi
     if mpi_config.rank == 0:
         if not os.path.isfile(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input NAM Nest file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input NAM Nest file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input NAM Nest file: " + input_forcings.file_in2 + " not found. " \
-                                                                                                   "Will not use in " \
-                                                                                                   "final layering."
+                config_options.statusMsg = (
+                    "Expected input NAM Nest file: "
+                    + input_forcings.file_in2
+                    + " not found. "
+                    "Will not use in "
+                    "final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
+
 def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find CFSv2 neighbor files.
+
     Function that will calculate the neighboring CFSv2 global GRIB2 files for a given
     forcing output timestep.
     :param input_forcings:
@@ -1663,28 +2319,31 @@ def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
     ens_str = str(config_options.cfsv2EnsMember)
     ens_str = ens_str.zfill(2)
     cfs_out_horizons = [6480]  # Forecast cycles go out 9 months.
-    cfs_out_freq = {
-        6480: 360
-    }
+    cfs_out_freq = {6480: 360}
 
     # If the user has specified a forcing horizon that is greater than what
     # is available here, return an error.
-    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > max(cfs_out_horizons):
-        config_options.errMsg = "User has specified a CFSv2 forecast horizon " \
-                                "that is greater than maximum allowed hours of: " \
-                                + str(max(cfs_out_horizons))
+    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > max(
+        cfs_out_horizons
+    ):
+        config_options.errMsg = (
+            "User has specified a CFSv2 forecast horizon "
+            "that is greater than maximum allowed hours of: "
+            + str(max(cfs_out_horizons))
+        )
         return
 
     # First find the current CFS forecast cycle that we are using.
-    current_cfs_cycle = config_options.current_fcst_cycle - \
-        datetime.timedelta(seconds=input_forcings.userCycleOffset * 60.0)
+    current_cfs_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+        seconds=input_forcings.userCycleOffset * 60.0
+    )
 
     # Calculate the current forecast hour within this CFSv2 cycle.
     dt_tmp = d_current - current_cfs_cycle
     current_cfs_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
     # Calculate the CFS output frequency based on our current CFS forecast hour.
-    current_cfs_freq = float('nan')
+    current_cfs_freq = float("nan")
     for horizonTmp in cfs_out_horizons:
         if current_cfs_hour <= horizonTmp:
             current_cfs_freq = cfs_out_freq[horizonTmp]
@@ -1697,8 +2356,7 @@ def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
         min_since_last_output = current_cfs_freq
         # current_cfs_hour = current_cfs_hour
         # previousCfsHour = current_cfs_hour - int(current_cfs_freq/60.0)
-    prev_cfs_date = d_current - \
-        datetime.timedelta(seconds=min_since_last_output * 60)
+    prev_cfs_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
     input_forcings.fcst_date1 = prev_cfs_date
     if min_since_last_output == current_cfs_freq:
         min_until_next_output = 0
@@ -1721,23 +2379,43 @@ def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
         prev_cfs_date = next_cfs_date
 
     # Calculate expected file paths.
-    if input_forcings.fileType == 'GRIB2':
-        input_forcings.file_ext = '.grb2'
+    if input_forcings.file_type == "GRIB2":
+        input_forcings.file_ext = ".grb2"
 
-    tmp_file1 = input_forcings.inDir + "/cfs." + \
-        current_cfs_cycle.strftime('%Y%m%d') + "/" + \
-        current_cfs_cycle.strftime('%H') + "/" + \
-        "6hrly_grib_" + ens_str + "/flxf" + \
-        prev_cfs_date.strftime('%Y%m%d%H') + "." + \
-        ens_str + "." + current_cfs_cycle.strftime('%Y%m%d%H') + \
-        input_forcings.file_ext
-    tmp_file2 = input_forcings.inDir + "/cfs." + \
-        current_cfs_cycle.strftime('%Y%m%d') + "/" + \
-        current_cfs_cycle.strftime('%H') + "/" + \
-        "6hrly_grib_" + ens_str + "/flxf" + \
-        next_cfs_date.strftime('%Y%m%d%H') + "." + \
-        ens_str + "." + current_cfs_cycle.strftime('%Y%m%d%H') + \
-        input_forcings.file_ext
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/cfs."
+        + current_cfs_cycle.strftime("%Y%m%d")
+        + "/"
+        + current_cfs_cycle.strftime("%H")
+        + "/"
+        + "6hrly_grib_"
+        + ens_str
+        + "/flxf"
+        + prev_cfs_date.strftime("%Y%m%d%H")
+        + "."
+        + ens_str
+        + "."
+        + current_cfs_cycle.strftime("%Y%m%d%H")
+        + input_forcings.file_ext
+    )
+    tmp_file2 = (
+        input_forcings.inDir
+        + "/cfs."
+        + current_cfs_cycle.strftime("%Y%m%d")
+        + "/"
+        + current_cfs_cycle.strftime("%H")
+        + "/"
+        + "6hrly_grib_"
+        + ens_str
+        + "/flxf"
+        + next_cfs_date.strftime("%Y%m%d%H")
+        + "."
+        + ens_str
+        + "."
+        + current_cfs_cycle.strftime("%Y%m%d%H")
+        + input_forcings.file_ext
+    )
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
@@ -1745,9 +2423,13 @@ def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
         if config_options.current_output_step == 1:
             input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
             input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings1_elem = (
+                    input_forcings.regridded_forcings1_elem
+                )
+                input_forcings.regridded_forcings2_elem = (
+                    input_forcings.regridded_forcings2_elem
+                )
 
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
@@ -1758,15 +2440,21 @@ def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
             # if not np.any(input_forcings.regridded_forcings1):
             if input_forcings.regridded_forcings1 is None:
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
@@ -1775,21 +2463,33 @@ def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
             else:
                 # The CFS window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                elif(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                elif(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                elif config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                elif config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
                 if config_options.runCfsNldasBiasCorrect:
                     # Reset our global CFSv2 grids.
-                    input_forcings.coarse_input_forcings1[:, :, :] = input_forcings.coarse_input_forcings2[:, :, :]
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.coarse_input_forcings1_elem[:, :, :] = input_forcings.coarse_input_forcings2_elem[:, :, :]
+                    input_forcings.coarse_input_forcings1[:, :, :] = (
+                        input_forcings.coarse_input_forcings2[:, :, :]
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.coarse_input_forcings1_elem[:, :, :] = (
+                            input_forcings.coarse_input_forcings2_elem[:, :, :]
+                        )
 
         input_forcings.regridComplete = False
     err_handler.check_program_status(config_options, mpi_config)
@@ -1798,28 +2498,36 @@ def find_cfsv2_neighbors(input_forcings, config_options, d_current, mpi_config):
     if mpi_config.rank == 0:
         if not os.path.isfile(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input CFSv2 file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input CFSv2 file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input CFSv2 file: " + \
-                                           input_forcings.file_in2 + " not found. Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input CFSv2 file: "
+                    + input_forcings.file_in2
+                    + " not found. Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
 
 def find_custom_hourly_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find hourly custom neighbor files.
+
     Function to calculate the previous and after hourly custom NetCDF files for use in processing.
     :param input_forcings:
     :param config_options:
@@ -1830,26 +2538,31 @@ def find_custom_hourly_neighbors(input_forcings, config_options, d_current, mpi_
     # Normally, we do a check to make sure the input horizons chosen by the user are not
     # greater than an expected value. However, since these are custom input NetCDF files,
     # we are foregoing that check.
-    current_custom_cycle = config_options.current_fcst_cycle - \
-        datetime.timedelta(seconds=input_forcings.userCycleOffset * 60.0)
+    current_custom_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+        seconds=input_forcings.userCycleOffset * 60.0
+    )
 
     # Calculate the current forecast hour within this cycle.
     dt_tmp = d_current - current_custom_cycle
 
-    current_custom_hour = int(dt_tmp.days*24) + math.floor(dt_tmp.seconds/3600.0)
-    current_custom_min = math.floor((dt_tmp.seconds % 3600.0)/60.0)
+    current_custom_hour = int(dt_tmp.days * 24) + math.floor(dt_tmp.seconds / 3600.0)
+    current_custom_min = math.floor((dt_tmp.seconds % 3600.0) / 60.0)
 
     # Calculate the previous file to process.
     min_since_last_output = (current_custom_hour * 60) % 60
     if min_since_last_output == 0:
         min_since_last_output = 60
-    prev_custom_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
+    prev_custom_date = d_current - datetime.timedelta(
+        seconds=min_since_last_output * 60
+    )
     input_forcings.fcst_date1 = prev_custom_date
     if min_since_last_output == 60:
         min_until_next_output = 0
     else:
         min_until_next_output = 60 - min_since_last_output
-    next_custom_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
+    next_custom_date = d_current + datetime.timedelta(
+        seconds=min_until_next_output * 60
+    )
     input_forcings.fcst_date2 = next_custom_date
 
     # Calculate the output forecast hours needed based on the prev/next dates.
@@ -1866,12 +2579,22 @@ def find_custom_hourly_neighbors(input_forcings, config_options, d_current, mpi_
         prev_custom_forecast_hour = 1
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + "/custom_hourly." + \
-        current_custom_cycle.strftime('%Y%m%d%H') + '.f' + \
-        str(prev_custom_forecast_hour).zfill(2) + '.nc'
-    tmp_file2 = input_forcings.inDir + '/custom_hourly.' + \
-        current_custom_cycle.strftime('%Y%m%d%H') + '.f' + \
-        str(next_custom_forecast_hour).zfill(2) + '.nc'
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/custom_hourly."
+        + current_custom_cycle.strftime("%Y%m%d%H")
+        + ".f"
+        + str(prev_custom_forecast_hour).zfill(2)
+        + ".nc"
+    )
+    tmp_file2 = (
+        input_forcings.inDir
+        + "/custom_hourly."
+        + current_custom_cycle.strftime("%Y%m%d%H")
+        + ".f"
+        + str(next_custom_forecast_hour).zfill(2)
+        + ".nc"
+    )
     if mpi_config.rank == 0:
         # Check to see if files are already set. If not, then reset, grids and
         # regridding objects to communicate things need to be re-established.
@@ -1879,9 +2602,13 @@ def find_custom_hourly_neighbors(input_forcings, config_options, d_current, mpi_
             if config_options.current_output_step == 1:
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
@@ -1892,15 +2619,25 @@ def find_custom_hourly_neighbors(input_forcings, config_options, d_current, mpi_
                 # if not np.any(input_forcings.regridded_forcings1):
                 if input_forcings.regridded_forcings1 is None:
                     if mpi_config.rank == 0:
-                        config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                                   input_forcings.productName
+                        config_options.statusMsg = (
+                            "Restarting forecast cycle. Will regrid previous: "
+                            + input_forcings.product_name
+                        )
                         err_handler.log_msg(config_options, mpi_config)
                     input_forcings.rstFlag = 1
-                    input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-                    input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                        input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                    input_forcings.regridded_forcings1 = (
+                        input_forcings.regridded_forcings1
+                    )
+                    input_forcings.regridded_forcings2 = (
+                        input_forcings.regridded_forcings2
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem = (
+                            input_forcings.regridded_forcings1_elem
+                        )
+                        input_forcings.regridded_forcings2_elem = (
+                            input_forcings.regridded_forcings2_elem
+                        )
 
                     input_forcings.file_in2 = tmp_file1
                     input_forcings.file_in1 = tmp_file1
@@ -1909,13 +2646,21 @@ def find_custom_hourly_neighbors(input_forcings, config_options, d_current, mpi_
                 else:
                     # The custom window has shifted. Reset fields 2 to
                     # be fields 1.
-                    if(config_options.grid_type == "gridded"):
-                        input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                    elif(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                        input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-                    elif(config_options.grid_type == "hydrofabric"):
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
+                    if config_options.grid_type == "gridded":
+                        input_forcings.regridded_forcings1[:, :, :] = (
+                            input_forcings.regridded_forcings2[:, :, :]
+                        )
+                    elif config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
+                    elif config_options.grid_type == "hydrofabric":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
 
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.file_in2 = tmp_file2
@@ -1926,28 +2671,38 @@ def find_custom_hourly_neighbors(input_forcings, config_options, d_current, mpi_
         if mpi_config.rank == 0:
             if not os.path.isfile(input_forcings.file_in2):
                 if input_forcings.enforce == 1:
-                    config_options.errMsg = "Expected input Custom file: " + input_forcings.file_in2 + " not found."
+                    config_options.errMsg = (
+                        "Expected input Custom file: "
+                        + input_forcings.file_in2
+                        + " not found."
+                    )
                     err_handler.log_critical(config_options, mpi_config)
                 else:
-                    config_options.statusMsg = "Expected input Custom file: " + \
-                                               input_forcings.file_in2 + " not found. Will not use in final layering."
+                    config_options.statusMsg = (
+                        "Expected input Custom file: "
+                        + input_forcings.file_in2
+                        + " not found. Will not use in final layering."
+                    )
                     err_handler.log_warning(config_options, mpi_config)
         err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
 
 
-def find_hourly_mrms_radar_neighbors(supplemental_precip, config_options, d_current, mpi_config):
-    """
+def find_hourly_mrms_radar_neighbors(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find hourly MRMS radar neighbor files.
+
     Function to calculate the previous and next MRMS radar-only QPE files. This
     will also calculate the neighboring radar quality index (RQI) files as well.
     :param supplemental_precip:
@@ -1979,121 +2734,184 @@ def find_hourly_mrms_radar_neighbors(supplemental_precip, config_options, d_curr
         next_mrms_date = prev_mrms_date + datetime.timedelta(seconds=3600.0)
 
     supplemental_precip.pcp_date1 = prev_mrms_date
-    #supplemental_precip.pcp_date2 = next_mrms_date
+    # supplemental_precip.pcp_date2 = next_mrms_date
     supplemental_precip.pcp_date2 = prev_mrms_date
 
+    # Used to populate paths below
+    date_path1 = supplemental_precip.pcp_date1.strftime("%Y%m%d")
+    date_path2 = supplemental_precip.pcp_date2.strftime("%Y%m%d")
+    hour1 = supplemental_precip.pcp_date1.strftime("%H")
+    hour2 = supplemental_precip.pcp_date2.strftime("%H")
+    gz_ext = ".gz" if supplemental_precip.file_type != NETCDF else ""
+
     # Calculate expected file paths.
+    # TODO: Update for keyValue 6 and 10
+
     if supplemental_precip.keyValue == 1:
-        tmp_file1 = supplemental_precip.inDir + "/RadarOnly_QPE/" + \
-            "MRMS_RadarOnly_QPE_01H_00.00_" + \
-            supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-            "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-            "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-        tmp_file2 = supplemental_precip.inDir + "/RadarOnly_QPE/" + \
-            "MRMS_RadarOnly_QPE_01H_00.00_" + \
-            supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-            "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-            "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-
-    elif supplemental_precip.keyValue == 2:
-        tmp_file1 = supplemental_precip.inDir + "/GaugeCorr_QPE/" + \
-                   "GaugeCorr_QPE_01H_00.00_" + \
-                   supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-                   "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-                   "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-        tmp_file2 = supplemental_precip.inDir + "/GaugeCorr_QPE/" + \
-                   "GaugeCorr_QPE_01H_00.00_" + \
-                   supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-                   "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-                   "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-
-    elif supplemental_precip.keyValue == 5 or supplemental_precip.keyValue == 6:
-        tmp_file1 = supplemental_precip.inDir + "/MultiSensor_QPE_01H_Pass1/" + \
-                    "MRMS_MultiSensor_QPE_01H_Pass1_00.00_" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-                    "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-        tmp_file2 = supplemental_precip.inDir + "/MultiSensor_QPE_01H_Pass2/" + \
-                    "MRMS_MultiSensor_QPE_01H_Pass2_00.00_" + \
-                    supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-                    "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-    elif supplemental_precip.keyValue == 10:
-        tmp_file1 = supplemental_precip.inDir + "/MultiSensor_QPE_01H_Pass1/" + \
-                    "MultiSensor_QPE_01H_Pass1_00.00_" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-                    "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-        tmp_file2 = supplemental_precip.inDir + "/MultiSensor_QPE_01H_Pass2/" + \
-                    "MultiSensor_QPE_01H_Pass2_00.00_" + \
-                    supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-                    "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
+        tmp_file1 = (
+            f"{supplemental_precip.inDir}/CONUS/RadarOnly_QPE_01H_00.00/{date_path1}"
+            f"/MRMS_RadarOnly_QPE_01H_00.00_{date_path1}-{hour1}0000"
+            f"{supplemental_precip.file_ext}{gz_ext}"
+        )
+        tmp_file2 = (
+            f"{supplemental_precip.inDir}/CONUS/RadarOnly_QPE_01H_00.00/{date_path2}"
+            f"/MRMS_RadarOnly_QPE_01H_00.00_{date_path2}-{hour2}0000"
+            f"{supplemental_precip.file_ext}{gz_ext}"
+        )
+    elif supplemental_precip.keyValue in [2, 5, 6, 10]:
+        tmp_file1 = (
+            f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass2_00.00/"
+            f"{date_path1}/MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path1}"
+            f"-{hour1}0000{supplemental_precip.file_ext}{gz_ext}"
+        )
+        tmp_file2 = (
+            f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass2_00.00/"
+            f"{date_path2}/MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path2}"
+            f"-{hour2}0000{supplemental_precip.file_ext}{gz_ext}"
+        )
+        if not (os.path.isfile(tmp_file1) or os.path.isfile(tmp_file2)):
+            tmp_file1 = (
+                f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass1_00.00/"
+                f"{date_path1}/MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path1}"
+                f"-{hour1}0000{supplemental_precip.file_ext}{gz_ext}"
+            )
+            tmp_file2 = (
+                f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass1_00.00/"
+                f"{date_path2}/MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path2}"
+                f"-{hour2}0000{supplemental_precip.file_ext}{gz_ext}"
+            )
     else:
         tmp_file1 = tmp_file2 = ""
 
     # Compose the RQI paths.
     if supplemental_precip.keyValue == 1 or supplemental_precip.keyValue == 2:
-       tmp_rqi_file1 = supplemental_precip.inDir + "/RadarQualityIndex/" + \
-           "RadarQualityIndex_00.00_" + \
-           supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-           "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-           "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-       tmp_rqi_file2 = supplemental_precip.inDir + "/RadarQualityIndex/" + \
-           "RadarQualityIndex_00.00_" + \
-           supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-           "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-           "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-    #elif supplemental_precip.keyValue == 5:
-    #   tmp_rqi_file1 = supplemental_precip.inDir + "/RadarQualityIndex/" + \
-    #       "MRMS_EXP_RadarQualityIndex_00.00_" + \
-    #       supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-    #       "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-    #       "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-    #   tmp_rqi_file2 = supplemental_precip.inDir + "/RadarQualityIndex/" + \
-    #       "MRMS_EXP_RadarQualityIndex_00.00_" + \
-    #       supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-    #       "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-    #       "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
+        tmp_rqi_file1 = (
+            supplemental_precip.inDir
+            + "/RadarQualityIndex/"
+            + date_path1
+            + "/"
+            + "MRMS_RadarQualityIndex_00.00_"
+            + date_path1
+            + "-"
+            + supplemental_precip.pcp_date1.strftime("%H")
+            + "0000"
+            + supplemental_precip.file_ext
+            + (".gz" if supplemental_precip.file_type != NETCDF else "")
+        )
+        tmp_rqi_file2 = (
+            supplemental_precip.inDir
+            + "/RadarQualityIndex/"
+            + date_path2
+            + "/"
+            + "MRMS_RadarQualityIndex_00.00_"
+            + date_path2
+            + "-"
+            + supplemental_precip.pcp_date2.strftime("%H")
+            + "0000"
+            + supplemental_precip.file_ext
+            + (".gz" if supplemental_precip.file_type != NETCDF else "")
+        )
+
+        # elif supplemental_precip.keyValue == 5:
+        #   tmp_rqi_file1 = supplemental_precip.inDir + "/RadarQualityIndex/" + \
+        #       "MRMS_EXP_RadarQualityIndex_00.00_" + \
+        #       supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
+        #       "-" + supplemental_precip.pcp_date1.strftime('%H') + \
+        #       "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.file_type != NETCDF else '')
+        #   tmp_rqi_file2 = supplemental_precip.inDir + "/RadarQualityIndex/" + \
+        #       "MRMS_EXP_RadarQualityIndex_00.00_" + \
+        #       supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
+        #       "-" + supplemental_precip.pcp_date2.strftime('%H') + \
+        #       "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.file_type != NETCDF else '')
+
+        # Accounting for potentially missing RQI files - KSL
+        # Original code required RQI files, but according to readme, this should only be necessary if using original NWM-Hydro domain
+
+        if not os.path.isfile(tmp_rqi_file1) or not os.path.isfile(tmp_rqi_file2):
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "RQI files not found. Continuing without RQI data as it's only required for original NWM WRF-Hydro domain."
+                err_handler.log_warning(config_options, mpi_config)
+                tmp_rqi_file1 = ""
+                tmp_rqi_file2 = ""
     else:
-       tmp_rqi_file1 = tmp_rqi_file2 = ""
+        tmp_rqi_file1 = tmp_rqi_file2 = ""
 
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous MRMS supplemental file: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next MRMS supplemental file: " + tmp_file2
-        err_handler.log_msg(config_options, mpi_config)
-        config_options.statusMsg = "Previous MRMS RQI supplemental file: " + tmp_rqi_file1
-        err_handler.log_msg(config_options, mpi_config)
-        config_options.statusMsg = "Next MRMS RQI supplemental file: " + tmp_rqi_file2
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+        if os.path.isfile(tmp_rqi_file1) and os.path.isfile(tmp_rqi_file2):
+            config_options.statusMsg = (
+                "Previous MRMS RQI supplemental file: " + tmp_rqi_file1
+            )
+            err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+            config_options.statusMsg = (
+                "Next MRMS RQI supplemental file: " + tmp_rqi_file2
+            )
+            err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
     err_handler.check_program_status(config_options, mpi_config)
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file1 or supplemental_precip.file_in2 != tmp_file2:
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
         if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
-            supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
-            supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
+            if os.path.isfile(tmp_rqi_file1) and os.path.isfile(tmp_rqi_file2):
+                supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
+                supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
+            else:
+                supplemental_precip.regridded_rqi1 = config_options.globalNdv
+                supplemental_precip.regridded_rqi2 = config_options.globalNdv
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                if os.path.isfile(tmp_rqi_file1) and os.path.isfile(tmp_rqi_file2):
+                    supplemental_precip.regridded_rqi1_elem = (
+                        supplemental_precip.regridded_rqi1_elem
+                    )
+                    supplemental_precip.regridded_rqi2_elem = (
+                        supplemental_precip.regridded_rqi2_elem
+                    )
+                else:
+                    supplemental_precip.regridded_rqi1_elem = config_options.globalNdv
+                    supplemental_precip.regridded_rqi2_elem = config_options.globalNdv
         else:
             # The forecast window has shifted. Reset fields 2 to
             # be fields 1.
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
 
             # supplemental_precip.regridded_precip1[:,:] = supplemental_precip.regridded_precip2[:,:]
             # supplemental_precip.regridded_rqi1[:, :] = supplemental_precip.regridded_rqi2[:, :]
@@ -2118,35 +2936,53 @@ def find_hourly_mrms_radar_neighbors(supplemental_precip, config_options, d_curr
     # errMod.check_program_status(ConfigOptions, MpiConfig)
 
     # Ensure we have the necessary new file
+
     if mpi_config.rank == 0:
-        if not os.path.isfile(supplemental_precip.file_in2) and (supplemental_precip.keyValue == 5 or supplemental_precip.keyValue == 6):
-            config_options.statusMsg = "MRMS file {} not found, will attempt to use {} instead.".format(
-                    supplemental_precip.file_in2, supplemental_precip.file_in1)
+        if not os.path.isfile(supplemental_precip.file_in2) and (
+            supplemental_precip.keyValue == 5 or supplemental_precip.keyValue == 6
+        ):
+            config_options.statusMsg = (
+                "MRMS file {} not found, will attempt to use {} instead.".format(
+                    supplemental_precip.file_in2, supplemental_precip.file_in1
+                )
+            )
             err_handler.log_warning(config_options, mpi_config)
             supplemental_precip.file_in2 = supplemental_precip.file_in1
         if not os.path.isfile(supplemental_precip.file_in2):
             if supplemental_precip.enforce == 1:
-                config_options.errMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input MRMS file: "
+                    + supplemental_precip.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + \
-                                           " not found. " + "Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input MRMS file: "
+                    + supplemental_precip.file_in2
+                    + " not found. "
+                    + "Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
-def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current, mpi_config):
-    """
+
+def find_hourly_wrf_arw_neighbors(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find hourly WRF-ARW neighbor files.
+
     Function to calculate the previous and next WRF-ARW Hi-Res Window files for the previous
     and next output timestep. These files will be used for supplemental precipitation.
     :param supplemental_precip:
@@ -2169,18 +3005,22 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
             shift += supplemental_precip.userCycleOffset
         else:
             shift -= supplemental_precip.userCycleOffset
-        current_arw_cycle -= datetime.timedelta(seconds=3600*shift)
+        current_arw_cycle -= datetime.timedelta(seconds=3600 * shift)
 
         # avoid forecast hours 0-3, shift back if necessary
         if 3 < (config_options.first_fcst_cycle.hour % 12) <= 9 and shift < 6:
-            current_arw_cycle -= datetime.timedelta(seconds=43200)  # shift back 12 hours
+            current_arw_cycle -= datetime.timedelta(
+                seconds=43200
+            )  # shift back 12 hours
 
     else:
         current_arw_cycle = config_options.current_fcst_cycle
 
     if mpi_config.rank == 0:
-        config_options.statusMsg = "Processing WRF-ARW supplemental precipitation from " \
-                                   "forecast cycle: " + current_arw_cycle.strftime('%Y-%m-%d %H')
+        config_options.statusMsg = (
+            "Processing WRF-ARW supplemental precipitation from "
+            "forecast cycle: " + current_arw_cycle.strftime("%Y-%m-%d %H")
+        )
         err_handler.log_msg(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
@@ -2191,8 +3031,10 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
         # Data only available for 00/12 UTC cycles.
         if current_arw_cycle.hour != 0 and current_arw_cycle.hour != 12:
             if mpi_config.rank == 0:
-                config_options.statusMsg = "No Hawaii WRF-ARW found for this cycle. " \
-                                           "No supplemental ARW precipitation will be used."
+                config_options.statusMsg = (
+                    "No Hawaii WRF-ARW found for this cycle. "
+                    "No supplemental ARW precipitation will be used."
+                )
                 err_handler.log_msg(config_options, mpi_config)
             supplemental_precip.file_in1 = None
             supplemental_precip.file_in2 = None
@@ -2203,8 +3045,10 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
         cycle = current_arw_cycle
         if cycle.hour != 6 and cycle.hour != 18:
             if mpi_config.rank == 0:
-                config_options.statusMsg = "No Puerto Rico WRF-ARW found for cycle {}. " \
-                                           "No supplemental ARW precipitation will be used.".format(cycle)
+                config_options.statusMsg = (
+                    "No Puerto Rico WRF-ARW found for cycle {}. "
+                    "No supplemental ARW precipitation will be used.".format(cycle)
+                )
                 err_handler.log_msg(config_options, mpi_config)
             supplemental_precip.file_in1 = None
             supplemental_precip.file_in2 = None
@@ -2212,8 +3056,10 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
         fcst_horizon = 48
 
     if mpi_config.rank == 0:
-        config_options.statusMsg = "Current ARW forecast cycle being used: " + \
-                                   current_arw_cycle.strftime('%Y-%m-%d %H')
+        config_options.statusMsg = (
+            "Current ARW forecast cycle being used: "
+            + current_arw_cycle.strftime("%Y-%m-%d %H")
+        )
         err_handler.log_msg(config_options, mpi_config)
 
     # Calculate the current forecast hour within this ARW cycle.
@@ -2222,8 +3068,10 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
 
     if current_arw_hour > fcst_horizon:
         if mpi_config.rank == 0:
-            config_options.statusMsg = "Current ARW forecast hour greater than max allowed " \
-                                       "of: " + str(fcst_horizon)
+            config_options.statusMsg = (
+                "Current ARW forecast hour greater than max allowed "
+                "of: " + str(fcst_horizon)
+            )
             err_handler.log_msg(config_options, mpi_config)
             supplemental_precip.file_in2 = None
             supplemental_precip.file_in1 = None
@@ -2248,8 +3096,10 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
     next_arw_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     if next_arw_forecast_hour > fcst_horizon:
         if mpi_config.rank == 0:
-            config_options.statusMsg = "Next ARW forecast hour greater than max allowed " \
-                                      "of: " + str(fcst_horizon)
+            config_options.statusMsg = (
+                "Next ARW forecast hour greater than max allowed "
+                "of: " + str(fcst_horizon)
+            )
             err_handler.log_msg(config_options, mpi_config)
             supplemental_precip.file_in2 = None
             supplemental_precip.file_in1 = None
@@ -2270,23 +3120,51 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
     # Calculate expected file paths.
     tmp_file1 = tmp_file2 = "(none)"
     if supplemental_precip.keyValue == 3 or supplemental_precip.keyValue == 8:
-        tmp_file1 = supplemental_precip.inDir + '/hiresw.' + \
-            current_arw_cycle.strftime('%Y%m%d') + '/hiresw.t' + \
-            current_arw_cycle.strftime('%H') + 'z.arw_2p5km.f' + \
-            str(prev_arw_forecast_hour).zfill(2) + '.hi' + supplemental_precip.file_ext
-        tmp_file2 = supplemental_precip.inDir + '/hiresw.' + \
-            current_arw_cycle.strftime('%Y%m%d') + '/hiresw.t' + \
-            current_arw_cycle.strftime('%H') + 'z.arw_2p5km.f' + \
-            str(next_arw_forecast_hour).zfill(2) + '.hi' + supplemental_precip.file_ext
+        tmp_file1 = (
+            supplemental_precip.inDir
+            + "/hiresw."
+            + current_arw_cycle.strftime("%Y%m%d")
+            + "/hiresw.t"
+            + current_arw_cycle.strftime("%H")
+            + "z.arw_2p5km.f"
+            + str(prev_arw_forecast_hour).zfill(2)
+            + ".hi"
+            + supplemental_precip.file_ext
+        )
+        tmp_file2 = (
+            supplemental_precip.inDir
+            + "/hiresw."
+            + current_arw_cycle.strftime("%Y%m%d")
+            + "/hiresw.t"
+            + current_arw_cycle.strftime("%H")
+            + "z.arw_2p5km.f"
+            + str(next_arw_forecast_hour).zfill(2)
+            + ".hi"
+            + supplemental_precip.file_ext
+        )
     elif supplemental_precip.keyValue == 4 or supplemental_precip.keyValue == 18:
-        tmp_file1 = supplemental_precip.inDir + '/hiresw.' + \
-            current_arw_cycle.strftime('%Y%m%d') + '/hiresw.t' + \
-            current_arw_cycle.strftime('%H') + 'z.arw_2p5km.f' + \
-            str(prev_arw_forecast_hour).zfill(2) + '.pr' + supplemental_precip.file_ext
-        tmp_file2 = supplemental_precip.inDir + '/hiresw.' + \
-            current_arw_cycle.strftime('%Y%m%d') + '/hiresw.t' + \
-            current_arw_cycle.strftime('%H') + 'z.arw_2p5km.f' + \
-            str(next_arw_forecast_hour).zfill(2) + '.pr' + supplemental_precip.file_ext
+        tmp_file1 = (
+            supplemental_precip.inDir
+            + "/hiresw."
+            + current_arw_cycle.strftime("%Y%m%d")
+            + "/hiresw.t"
+            + current_arw_cycle.strftime("%H")
+            + "z.arw_2p5km.f"
+            + str(prev_arw_forecast_hour).zfill(2)
+            + ".pr"
+            + supplemental_precip.file_ext
+        )
+        tmp_file2 = (
+            supplemental_precip.inDir
+            + "/hiresw."
+            + current_arw_cycle.strftime("%Y%m%d")
+            + "/hiresw.t"
+            + current_arw_cycle.strftime("%H")
+            + "z.arw_2p5km.f"
+            + str(next_arw_forecast_hour).zfill(2)
+            + ".pr"
+            + supplemental_precip.file_ext
+        )
 
     err_handler.check_program_status(config_options, mpi_config)
     if mpi_config.rank == 0:
@@ -2298,7 +3176,10 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file1 or supplemental_precip.file_in2 != tmp_file2:
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
         # if config_options.current_output_step == 1:
         #     supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
         #     supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
@@ -2326,30 +3207,39 @@ def find_hourly_wrf_arw_neighbors(supplemental_precip, config_options, d_current
     if mpi_config.rank == 0:
         if not os.path.isfile(supplemental_precip.file_in2):
             if supplemental_precip.enforce == 1:
-                config_options.errMsg = "Expected input ARW file: " + supplemental_precip.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input ARW file: "
+                    + supplemental_precip.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input ARW file: " + supplemental_precip.file_in2 + \
-                                          " not found. " + "Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input ARW file: "
+                    + supplemental_precip.file_in2
+                    + " not found. "
+                    + "Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
     # supplemental_precip.file_in2 = supplemental_precip.file_in1
 
 
 def find_sbcv2_lwf_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find SBCV2_LWF neighbor files.
+
     Function to calculate the previous and after hourly MRMS SBCV2_LWF files for use in processing.
     :param input_forcings:
     :param config_options:
@@ -2357,14 +3247,15 @@ def find_sbcv2_lwf_neighbors(input_forcings, config_options, d_current, mpi_conf
     :param mpi_config:
     :return:
     """
-
     # Set the input file frequency to be hourly.
     input_forcings.input_frequency = 60.0
 
     # First we need to find the nearest previous and next hour, which is
     # the previous/next MRMS files we will be using.
 
-    prev_date1 = datetime.datetime(d_current.year, d_current.month, d_current.day, d_current.hour)
+    prev_date1 = datetime.datetime(
+        d_current.year, d_current.month, d_current.day, d_current.hour
+    )
     dt_tmp = d_current - prev_date1
 
     if dt_tmp.total_seconds() == 0:
@@ -2381,11 +3272,18 @@ def find_sbcv2_lwf_neighbors(input_forcings, config_options, d_current, mpi_conf
     input_forcings.fcst_date2 = prev_mrms_date
 
     # Calculate expected file paths.
-    tmp_file1 = input_forcings.inDir + "/SBC_LWF/" + \
-                input_forcings.fcst_date1.strftime("%Y%m") + "/" + input_forcings.fcst_date1.strftime('%Y%m%d') +\
-                "/SBCV2_LWF." + input_forcings.fcst_date1.strftime('%Y%m%d') + \
-                "-" + input_forcings.fcst_date1.strftime('%H') + \
-                "0000.netcdf"
+    tmp_file1 = (
+        input_forcings.inDir
+        + "/SBC_LWF/"
+        + input_forcings.fcst_date1.strftime("%Y%m")
+        + "/"
+        + input_forcings.fcst_date1.strftime("%Y%m%d")
+        + "/SBCV2_LWF."
+        + input_forcings.fcst_date1.strftime("%Y%m%d")
+        + "-"
+        + input_forcings.fcst_date1.strftime("%H")
+        + "0000.netcdf"
+    )
     tmp_file2 = tmp_file1  # NO TEMPORAL INTERPOLATION HERE, YO!
 
     # Check to see if files are already set. If not, then reset, grids and
@@ -2394,9 +3292,13 @@ def find_sbcv2_lwf_neighbors(input_forcings, config_options, d_current, mpi_conf
         if config_options.current_output_step == 1:
             input_forcings.regridded_precip1 = input_forcings.regridded_precip1
             input_forcings.regridded_precip2 = input_forcings.regridded_precip2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_precip1_elem = input_forcings.regridded_precip1_elem
-                input_forcings.regridded_precip2_elem = input_forcings.regridded_precip2_elem
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_precip1_elem = (
+                    input_forcings.regridded_precip1_elem
+                )
+                input_forcings.regridded_precip2_elem = (
+                    input_forcings.regridded_precip2_elem
+                )
 
             input_forcings.file_in1 = tmp_file1
             input_forcings.file_in2 = tmp_file2
@@ -2407,15 +3309,21 @@ def find_sbcv2_lwf_neighbors(input_forcings, config_options, d_current, mpi_conf
             # if not np.any(input_forcings.regridded_forcings1):
             if input_forcings.regridded_precip1 is None:
                 if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
+                    config_options.statusMsg = (
+                        "Restarting forecast cycle. Will regrid previous: "
+                        + input_forcings.product_name
+                    )
                     err_handler.log_msg(config_options, mpi_config)
                 input_forcings.rstFlag = 1
                 input_forcings.regridded_precip1 = input_forcings.regridded_precip1
                 input_forcings.regridded_precip2 = input_forcings.regridded_precip2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_precip1_elem = input_forcings.regridded_precip1_elem
-                    input_forcings.regridded_precip2_elem = input_forcings.regridded_precip2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_precip1_elem = (
+                        input_forcings.regridded_precip1_elem
+                    )
+                    input_forcings.regridded_precip2_elem = (
+                        input_forcings.regridded_precip2_elem
+                    )
 
                 input_forcings.file_in2 = tmp_file1
                 input_forcings.file_in1 = tmp_file1
@@ -2424,13 +3332,21 @@ def find_sbcv2_lwf_neighbors(input_forcings, config_options, d_current, mpi_conf
             else:
                 # The forcing window has shifted. Reset fields 2 to
                 # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_precip1[:, :] = input_forcings.regridded_precip2[:, :]
-                elif(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_precip1[:] = input_forcings.regridded_precip2[:]
-                    input_forcings.regridded_precip1_elem[:] = input_forcings.regridded_precip2_elem[:]
-                elif(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_precip1[:] = input_forcings.regridded_precip2[:]
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_precip1[:, :] = (
+                        input_forcings.regridded_precip2[:, :]
+                    )
+                elif config_options.grid_type == "unstructured":
+                    input_forcings.regridded_precip1[:] = (
+                        input_forcings.regridded_precip2[:]
+                    )
+                    input_forcings.regridded_precip1_elem[:] = (
+                        input_forcings.regridded_precip2_elem[:]
+                    )
+                elif config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_precip1[:] = (
+                        input_forcings.regridded_precip2[:]
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
@@ -2441,40 +3357,52 @@ def find_sbcv2_lwf_neighbors(input_forcings, config_options, d_current, mpi_conf
     if mpi_config.rank == 0:
         if not os.path.isfile(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input SBCV2_LWF file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input SBCV2_LWF file: "
+                    + input_forcings.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input SBCV2_LWF file: " + \
-                                           input_forcings.file_in2 + " not found. Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input SBCV2_LWF file: "
+                    + input_forcings.file_in2
+                    + " not found. Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(input_forcings.file_in2):
         if input_forcings.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_precip2[:] = config_options.globalNdv
                 input_forcings.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 input_forcings.regridded_precip2[:] = config_options.globalNdv
 
-def _find_ak_ext_ana_precip_stage4(supplemental_precip, config_options, d_current, mpi_config):
+
+def _find_ak_ext_ana_precip_stage4(
+    supplemental_precip, config_options, d_current, mpi_config
+):
     # First we need to find the nearest previous and next hour, which is
     # the previous/next Stage IV files we will be using.
     d_current_epoch = int(d_current.strftime("%s"))
     six_hr_sec = 21600
     d_current_epoch -= 3600
     d_current_epoch += six_hr_sec
-    #if we're at an even 6 hour multiple move the time back 6 hours as d_current is included at the end of the prior range
-    #(begin_date,end_date]
-    if d_current_epoch%six_hr_sec == 0:
+    # if we're at an even 6 hour multiple move the time back 6 hours as d_current is included at the end of the prior range
+    # (begin_date,end_date]
+    if d_current_epoch % six_hr_sec == 0:
         d_current_epoch -= six_hr_sec
-    #next_stage4_date = datetime.datetime.fromtimestamp(d_current_epoch - d_current_epoch%six_hr_sec)
-    #d_prev_epoch = d_current_epoch-six_hr_sec
-    #prev_stage4_date = datetime.datetime.fromtimestamp(d_prev_epoch - d_prev_epoch%six_hr_sec)
-    prev_stage4_date = datetime.datetime.fromtimestamp(d_current_epoch - d_current_epoch%six_hr_sec)
+    # next_stage4_date = datetime.datetime.fromtimestamp(d_current_epoch - d_current_epoch%six_hr_sec)
+    # d_prev_epoch = d_current_epoch-six_hr_sec
+    # prev_stage4_date = datetime.datetime.fromtimestamp(d_prev_epoch - d_prev_epoch%six_hr_sec)
+    prev_stage4_date = datetime.datetime.fromtimestamp(
+        d_current_epoch - d_current_epoch % six_hr_sec
+    )
     next_stage4_date = prev_stage4_date
     # Set the input file frequency to be six-hourly.
     supplemental_precip.input_frequency = 360.0
@@ -2483,18 +3411,18 @@ def _find_ak_ext_ana_precip_stage4(supplemental_precip, config_options, d_curren
     supplemental_precip.pcp_date2 = next_stage4_date
 
     try:
-        #Use comma delimited string with first part containing Stage IV data and second part containing MRMS
-        stage4_in_dir = supplemental_precip.inDir.split(',')[0]
+        # Use comma delimited string with first part containing Stage IV data and second part containing MRMS
+        stage4_in_dir = supplemental_precip.inDir.split(",")[0]
     except IndexError:
         stage4_in_dir = None
 
     # Calculate expected file paths.
-    tmp_file_ext = ".grb2" if supplemental_precip.fileType == 'GRIB2' else ".grb2.nc"
+    tmp_file_ext = ".grb2" if supplemental_precip.file_type == "GRIB2" else ".grb2.nc"
     if stage4_in_dir and supplemental_precip.keyValue == 11:
         tmp_file1 = f"{stage4_in_dir}/st4_ak.{supplemental_precip.pcp_date1.strftime('%Y%m%d%H.06h')}{tmp_file_ext}"
-        #if d_current_epoch%six_hr_sec == 0:
+        # if d_current_epoch%six_hr_sec == 0:
         #    tmp_file2 = f"{stage4_in_dir}/st4_ak.{supplemental_precip.pcp_date2.strftime('%Y%m%d%H.06h')}{tmp_file_ext}"
-        #else:
+        # else:
         tmp_file2 = f"{stage4_in_dir}/st4_ak.{supplemental_precip.pcp_date2.strftime('%Y%m%d%H.06h')}{tmp_file_ext}"
     else:
         tmp_file1 = tmp_file2 = ""
@@ -2504,36 +3432,63 @@ def _find_ak_ext_ana_precip_stage4(supplemental_precip, config_options, d_curren
 
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous Stage IV supplemental file: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next Stage IV supplemental file: " + tmp_file2
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
     err_handler.check_program_status(config_options, mpi_config)
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file1 or supplemental_precip.file_in2 != tmp_file2:
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
         if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
         else:
             # The forecast window has shifted. Reset fields 2 to
             # be fields 1.
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
 
             # supplemental_precip.regridded_precip1[:,:] = supplemental_precip.regridded_precip2[:,:]
             # supplemental_precip.regridded_rqi1[:, :] = supplemental_precip.regridded_rqi2[:, :]
@@ -2558,43 +3513,58 @@ def _find_ak_ext_ana_precip_stage4(supplemental_precip, config_options, d_curren
     # errMod.check_program_status(ConfigOptions, MpiConfig)
 
     # Ensure we have the necessary new file
-    if not os.path.isfile(supplemental_precip.file_in2) and supplemental_precip.keyValue == 11:
+    if (
+        not os.path.isfile(supplemental_precip.file_in2)
+        and supplemental_precip.keyValue == 11
+    ):
         if mpi_config.rank == 0:
-            config_options.statusMsg = "Stage IV file {} not found, will attempt to use {} instead.".format(
-                supplemental_precip.file_in2, supplemental_precip.file_in1)
+            config_options.statusMsg = (
+                "Stage IV file {} not found, will attempt to use {} instead.".format(
+                    supplemental_precip.file_in2, supplemental_precip.file_in1
+                )
+            )
             err_handler.log_warning(config_options, mpi_config)
         supplemental_precip.file_in2 = supplemental_precip.file_in1
     if mpi_config.rank == 0 and not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.enforce == 1:
-            config_options.errMsg = "Expected input Stage IV file: " + supplemental_precip.file_in2 + " not found."
+            config_options.errMsg = (
+                "Expected input Stage IV file: "
+                + supplemental_precip.file_in2
+                + " not found."
+            )
             err_handler.log_critical(config_options, mpi_config)
         else:
-            config_options.statusMsg = "Expected input Stage IV file: " + supplemental_precip.file_in2 + \
-                                       " not found. " + "Will not use in final layering."
+            config_options.statusMsg = (
+                "Expected input Stage IV file: "
+                + supplemental_precip.file_in2
+                + " not found. "
+                + "Will not use in final layering."
+            )
             err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
-    
     supplemental_precip.ext_ana = "STAGE4"
 
 
-
-def _find_conus_ext_ana_precip_stage4(supplemental_precip, config_options, d_current, mpi_config):
+def _find_conus_ext_ana_precip_stage4(
+    supplemental_precip, config_options, d_current, mpi_config
+):
     # First we need to find the nearest previous and next hour, which is
     # the previous/next Stage IV files we will be using.
+
     prev_stage4_date = d_current - datetime.timedelta(hours=1)
-    next_stage4_date = prev_stage4_date
+    next_stage4_date = d_current
 
     # Set the input file frequency to be hourly.
     supplemental_precip.input_frequency = 60.0
@@ -2603,18 +3573,18 @@ def _find_conus_ext_ana_precip_stage4(supplemental_precip, config_options, d_cur
     supplemental_precip.pcp_date2 = next_stage4_date
 
     try:
-        #Use comma delimited string with first part containing Stage IV data and second part containing MRMS
-        stage4_in_dir = supplemental_precip.inDir.split(',')[0]
+        # Use comma delimited string with first part containing Stage IV data and second part containing MRMS
+        stage4_in_dir = supplemental_precip.inDir.split(",")[0]
     except IndexError:
         stage4_in_dir = None
 
     # Calculate expected file paths.
-    tmp_file_ext = ".grb2" if supplemental_precip.fileType == 'GRIB2' else ".grb2.nc"
+    tmp_file_ext = ".grb2" if supplemental_precip.file_type == "GRIB2" else ".grb2.nc"
     if stage4_in_dir and supplemental_precip.keyValue == 12:
         tmp_file1 = f"{stage4_in_dir}/st4_conus.{supplemental_precip.pcp_date1.strftime('%Y%m%d%H.01h')}{tmp_file_ext}"
-        #if d_current_epoch%six_hr_sec == 0:
+        # if d_current_epoch%six_hr_sec == 0:
         #    tmp_file2 = f"{stage4_in_dir}/st4_ak.{supplemental_precip.pcp_date2.strftime('%Y%m%d%H.06h')}{tmp_file_ext}"
-        #else:
+        # else:
         tmp_file2 = f"{stage4_in_dir}/st4_conus.{supplemental_precip.pcp_date2.strftime('%Y%m%d%H.01h')}{tmp_file_ext}"
     else:
         tmp_file1 = tmp_file2 = ""
@@ -2624,36 +3594,64 @@ def _find_conus_ext_ana_precip_stage4(supplemental_precip, config_options, d_cur
 
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous Stage IV supplemental file: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next Stage IV supplemental file: " + tmp_file2
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
     err_handler.check_program_status(config_options, mpi_config)
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file1 or supplemental_precip.file_in2 != tmp_file2:
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
         if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
+
         else:
             # The forecast window has shifted. Reset fields 2 to
             # be fields 1.
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
 
             # supplemental_precip.regridded_precip1[:,:] = supplemental_precip.regridded_precip2[:,:]
             # supplemental_precip.regridded_rqi1[:, :] = supplemental_precip.regridded_rqi2[:, :]
@@ -2678,40 +3676,56 @@ def _find_conus_ext_ana_precip_stage4(supplemental_precip, config_options, d_cur
     # errMod.check_program_status(ConfigOptions, MpiConfig)
 
     # Ensure we have the necessary new file
-    if not os.path.isfile(supplemental_precip.file_in2) and supplemental_precip.keyValue == 11:
+    if (
+        not os.path.isfile(supplemental_precip.file_in2)
+        and supplemental_precip.keyValue == 11
+    ):
         if mpi_config.rank == 0:
-            config_options.statusMsg = "Stage IV file {} not found, will attempt to use {} instead.".format(
-                supplemental_precip.file_in2, supplemental_precip.file_in1)
+            config_options.statusMsg = (
+                "Stage IV file {} not found, will attempt to use {} instead.".format(
+                    supplemental_precip.file_in2, supplemental_precip.file_in1
+                )
+            )
             err_handler.log_warning(config_options, mpi_config)
         supplemental_precip.file_in2 = supplemental_precip.file_in1
     if mpi_config.rank == 0 and not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.enforce == 1:
-            config_options.errMsg = "Expected input Stage IV file: " + supplemental_precip.file_in2 + " not found."
+            config_options.errMsg = (
+                "Expected input Stage IV file: "
+                + supplemental_precip.file_in2
+                + " not found."
+            )
             err_handler.log_critical(config_options, mpi_config)
         else:
-            config_options.statusMsg = "Expected input Stage IV file: " + supplemental_precip.file_in2 + \
-                                       " not found. " + "Will not use in final layering."
+            config_options.statusMsg = (
+                "Expected input Stage IV file: "
+                + supplemental_precip.file_in2
+                + " not found. "
+                + "Will not use in final layering."
+            )
             err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
-
 
     supplemental_precip.ext_ana = "STAGE4"
 
-def _find_ak_ext_ana_precip_mrms(supplemental_precip, config_options, d_current, mpi_config):
+
+def _find_ak_ext_ana_precip_mrms(
+    supplemental_precip, config_options, d_current, mpi_config
+):
     # First we need to find the nearest previous and next hour, which is
     # the previous/next MRMS files we will be using.
-    #next_mrms_date = d_current
+    # next_mrms_date = d_current
     prev_mrms_date = d_current - datetime.timedelta(hours=1)
     next_mrms_date = prev_mrms_date
 
@@ -2722,25 +3736,35 @@ def _find_ak_ext_ana_precip_mrms(supplemental_precip, config_options, d_current,
     supplemental_precip.pcp_date2 = next_mrms_date
 
     try:
-        #Use comma delimited string with first part containing Stage IV data and second part containing MRMS
-        mrms_in_dir = supplemental_precip.inDir.split(',')[1]
+        # Use comma delimited string with first part containing Stage IV data and second part containing MRMS
+        mrms_in_dir = supplemental_precip.inDir.split(",")[1]
     except IndexError:
         mrms_in_dir = None
 
     # Calculate expected file paths.
     if supplemental_precip.keyValue == 11:
-        tmp_file1 = mrms_in_dir + "/MultiSensor_QPE_01H_Pass1/" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + "/" + \
-                    "MRMS_MultiSensor_QPE_01H_Pass1_00.00_" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-                    "0000.grib2.gz"
-        tmp_file2 = mrms_in_dir + "/MultiSensor_QPE_01H_Pass2/" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + "/" + \
-                    "MRMS_MultiSensor_QPE_01H_Pass2_00.00_" + \
-                    supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-                    "0000.grib2.gz"
+        tmp_file1 = (
+            mrms_in_dir
+            + "/MultiSensor_QPE_01H_Pass1/"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+            + "/"
+            + "MRMS_MultiSensor_QPE_01H_Pass1_00.00_"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+            + "-"
+            + supplemental_precip.pcp_date1.strftime("%H")
+            + "0000.grib2.gz"
+        )
+        tmp_file2 = (
+            mrms_in_dir
+            + "/MultiSensor_QPE_01H_Pass2/"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+            + "/"
+            + "MRMS_MultiSensor_QPE_01H_Pass2_00.00_"
+            + supplemental_precip.pcp_date2.strftime("%Y%m%d")
+            + "-"
+            + supplemental_precip.pcp_date2.strftime("%H")
+            + "0000.grib2.gz"
+        )
     else:
         tmp_file1 = tmp_file2 = ""
 
@@ -2749,36 +3773,63 @@ def _find_ak_ext_ana_precip_mrms(supplemental_precip, config_options, d_current,
 
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous MRMS supplemental file: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next MRMS supplemental file: " + tmp_file2
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
     err_handler.check_program_status(config_options, mpi_config)
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file1 or supplemental_precip.file_in2 != tmp_file2:
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
         if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
         else:
             # The forecast window has shifted. Reset fields 2 to
             # be fields 1.
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
 
             # supplemental_precip.regridded_precip1[:,:] = supplemental_precip.regridded_precip2[:,:]
             # supplemental_precip.regridded_rqi1[:, :] = supplemental_precip.regridded_rqi2[:, :]
@@ -2803,19 +3854,33 @@ def _find_ak_ext_ana_precip_mrms(supplemental_precip, config_options, d_current,
     # errMod.check_program_status(ConfigOptions, MpiConfig)
 
     # Ensure we have the necessary new file
-    if not os.path.isfile(supplemental_precip.file_in2) and supplemental_precip.keyValue == 11:
+    if (
+        not os.path.isfile(supplemental_precip.file_in2)
+        and supplemental_precip.keyValue == 11
+    ):
         if mpi_config.rank == 0:
-            config_options.statusMsg = "MRMS file {} not found, will attempt to use {} instead.".format(
-                supplemental_precip.file_in2, supplemental_precip.file_in1)
+            config_options.statusMsg = (
+                "MRMS file {} not found, will attempt to use {} instead.".format(
+                    supplemental_precip.file_in2, supplemental_precip.file_in1
+                )
+            )
             err_handler.log_warning(config_options, mpi_config)
         supplemental_precip.file_in2 = supplemental_precip.file_in1
     if mpi_config.rank == 0 and not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.enforce == 1:
-            config_options.errMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + " not found."
+            config_options.errMsg = (
+                "Expected input MRMS file: "
+                + supplemental_precip.file_in2
+                + " not found."
+            )
             err_handler.log_critical(config_options, mpi_config)
         else:
-            config_options.statusMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + \
-                                       " not found. " + "Will not use in final layering."
+            config_options.statusMsg = (
+                "Expected input MRMS file: "
+                + supplemental_precip.file_in2
+                + " not found. "
+                + "Will not use in final layering."
+            )
             err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
@@ -2823,14 +3888,19 @@ def _find_ak_ext_ana_precip_mrms(supplemental_precip, config_options, d_current,
         if mpi_config.rank == 0:
             config_options.statusMsg = f"{supplemental_precip.file_in2} not found. Attempting to use Stage IV in place of MRMS"
             err_handler.log_warning(config_options, mpi_config)
-        _find_ak_ext_ana_precip_stage4(supplemental_precip, config_options, d_current, mpi_config)
+        _find_ak_ext_ana_precip_stage4(
+            supplemental_precip, config_options, d_current, mpi_config
+        )
     else:
         supplemental_precip.ext_ana = "MRMS"
 
-def _find_conus_ext_ana_precip_mrms(supplemental_precip, config_options, d_current, mpi_config):
+
+def _find_conus_ext_ana_precip_mrms(
+    supplemental_precip, config_options, d_current, mpi_config
+):
     # First we need to find the nearest previous and next hour, which is
     # the previous/next MRMS files we will be using.
-    #next_mrms_date = d_current
+    # next_mrms_date = d_current
     prev_mrms_date = d_current - datetime.timedelta(hours=1)
     next_mrms_date = prev_mrms_date
 
@@ -2841,25 +3911,35 @@ def _find_conus_ext_ana_precip_mrms(supplemental_precip, config_options, d_curre
     supplemental_precip.pcp_date2 = next_mrms_date
 
     try:
-        #Use comma delimited string with first part containing Stage IV data and second part containing MRMS
-        mrms_in_dir = supplemental_precip.inDir.split(',')[1]
+        # Use comma delimited string with first part containing Stage IV data and second part containing MRMS
+        mrms_in_dir = supplemental_precip.inDir.split(",")[1]
     except IndexError:
         mrms_in_dir = None
 
     # Calculate expected file paths.
     if supplemental_precip.keyValue == 12:
-        tmp_file1 = mrms_in_dir + "/MultiSensor_QPE_01H_Pass1/" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + "/" + \
-                    "MRMS_MultiSensor_QPE_01H_Pass1_00.00_" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-                    "0000.grib2.gz"
-        tmp_file2 = mrms_in_dir + "/MultiSensor_QPE_01H_Pass2/" + \
-                    supplemental_precip.pcp_date1.strftime('%Y%m%d') + "/" + \
-                    "MRMS_MultiSensor_QPE_01H_Pass2_00.00_" + \
-                    supplemental_precip.pcp_date2.strftime('%Y%m%d') + \
-                    "-" + supplemental_precip.pcp_date2.strftime('%H') + \
-                    "0000.grib2.gz"
+        tmp_file1 = (
+            mrms_in_dir
+            + "/MultiSensor_QPE_01H_Pass1/"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+            + "/"
+            + "MRMS_MultiSensor_QPE_01H_Pass1_00.00_"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+            + "-"
+            + supplemental_precip.pcp_date1.strftime("%H")
+            + "0000.grib2.gz"
+        )
+        tmp_file2 = (
+            mrms_in_dir
+            + "/MultiSensor_QPE_01H_Pass2/"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+            + "/"
+            + "MRMS_MultiSensor_QPE_01H_Pass2_00.00_"
+            + supplemental_precip.pcp_date2.strftime("%Y%m%d")
+            + "-"
+            + supplemental_precip.pcp_date2.strftime("%H")
+            + "0000.grib2.gz"
+        )
     else:
         tmp_file1 = tmp_file2 = ""
 
@@ -2868,36 +3948,63 @@ def _find_conus_ext_ana_precip_mrms(supplemental_precip, config_options, d_curre
 
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous MRMS supplemental file: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next MRMS supplemental file: " + tmp_file2
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
     err_handler.check_program_status(config_options, mpi_config)
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file1 or supplemental_precip.file_in2 != tmp_file2:
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
         if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
         else:
             # The forecast window has shifted. Reset fields 2 to
             # be fields 1.
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
 
             # supplemental_precip.regridded_precip1[:,:] = supplemental_precip.regridded_precip2[:,:]
             # supplemental_precip.regridded_rqi1[:, :] = supplemental_precip.regridded_rqi2[:, :]
@@ -2922,19 +4029,33 @@ def _find_conus_ext_ana_precip_mrms(supplemental_precip, config_options, d_curre
     # errMod.check_program_status(ConfigOptions, MpiConfig)
 
     # Ensure we have the necessary new file
-    if not os.path.isfile(supplemental_precip.file_in2) and supplemental_precip.keyValue == 12:
+    if (
+        not os.path.isfile(supplemental_precip.file_in2)
+        and supplemental_precip.keyValue == 12
+    ):
         if mpi_config.rank == 0:
-            config_options.statusMsg = "MRMS file {} not found, will attempt to use {} instead.".format(
-                supplemental_precip.file_in2, supplemental_precip.file_in1)
+            config_options.statusMsg = (
+                "MRMS file {} not found, will attempt to use {} instead.".format(
+                    supplemental_precip.file_in2, supplemental_precip.file_in1
+                )
+            )
             err_handler.log_warning(config_options, mpi_config)
         supplemental_precip.file_in2 = supplemental_precip.file_in1
     if mpi_config.rank == 0 and not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.enforce == 1:
-            config_options.errMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + " not found."
+            config_options.errMsg = (
+                "Expected input MRMS file: "
+                + supplemental_precip.file_in2
+                + " not found."
+            )
             err_handler.log_critical(config_options, mpi_config)
         else:
-            config_options.statusMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + \
-                                       " not found. " + "Will not use in final layering."
+            config_options.statusMsg = (
+                "Expected input MRMS file: "
+                + supplemental_precip.file_in2
+                + " not found. "
+                + "Will not use in final layering."
+            )
             err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
@@ -2942,28 +4063,18 @@ def _find_conus_ext_ana_precip_mrms(supplemental_precip, config_options, d_curre
         if mpi_config.rank == 0:
             config_options.statusMsg = f"{supplemental_precip.file_in2} not found. Attempting to use Stage IV in place of MRMS"
             err_handler.log_warning(config_options, mpi_config)
-        _find_conus_ext_ana_precip_stage4(supplemental_precip, config_options, d_current, mpi_config)
+        _find_conus_ext_ana_precip_stage4(
+            supplemental_precip, config_options, d_current, mpi_config
+        )
     else:
         supplemental_precip.ext_ana = "MRMS"
 
 
-def find_ak_ext_ana_precip_neighbors(supplemental_precip, config_options, d_current, mpi_config):
-    """
-    Function to calculate the previous and next Stage IV MPE files. 
-    :param supplemental_precip:
-    :param config_options:
-    :param d_current:
-    :param mpi_config:
-    :return:
-    """
+def find_ak_ext_ana_precip_neighbors(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find Alaska Extended Ana neighbor files.
 
-    # For extended AnA configuration, always try to find MRMS data first
-    # and if not, then MRMS function will automatically switch to StageIV precipitation
-    _find_ak_ext_ana_precip_mrms(supplemental_precip, config_options, d_current, mpi_config)
-
-
-def find_conus_ext_ana_precip_neighbors(supplemental_precip, config_options, d_current, mpi_config):
-    """
     Function to calculate the previous and next Stage IV MPE files.
     :param supplemental_precip:
     :param config_options:
@@ -2973,11 +4084,44 @@ def find_conus_ext_ana_precip_neighbors(supplemental_precip, config_options, d_c
     """
     # For extended AnA configuration, always try to find MRMS data first
     # and if not, then MRMS function will automatically switch to StageIV precipitation
-    _find_conus_ext_ana_precip_mrms(supplemental_precip, config_options, d_current, mpi_config)
+    _find_ak_ext_ana_precip_mrms(
+        supplemental_precip, config_options, d_current, mpi_config
+    )
 
 
-def find_hourly_nbm_neighbors(supplemental_precip, config_options, d_current, mpi_config):
+def find_conus_ext_ana_precip_neighbors(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find CONUS Extended Ana neighbor files.
+
+    Function to calculate the previous and next Stage IV MPE files.
+    :param supplemental_precip:
+    :param config_options:
+    :param d_current:
+    :param mpi_config:
+    :return:
     """
+    # For extended AnA configuration, always try to find MRMS data first
+    # and if not, then MRMS function will automatically switch to StageIV precipitation
+
+    if (
+        1 not in config_options.supp_precip_forcings
+        and 2 not in config_options.supp_precip_forcings
+    ):
+        _find_conus_ext_ana_precip_stage4(
+            supplemental_precip, config_options, d_current, mpi_config
+        )
+    else:
+        _find_conus_ext_ana_precip_mrms(
+            supplemental_precip, config_options, d_current, mpi_config
+        )
+
+
+def find_hourly_nbm_neighbors(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find hourly NBM neighbor files.
+
     Function to calculate the previous and next NBM/CORE/CONUS files. This
     will also calculate the neighboring radar quality index (RQI) files as well.
     :param supplemental_precip:
@@ -2986,10 +4130,7 @@ def find_hourly_nbm_neighbors(supplemental_precip, config_options, d_current, mp
     :param mpi_config:
     :return:
     """
-    nbm_out_freq = {
-        36: 60,
-        240: 360
-    }
+    nbm_out_freq = {36: 60, 240: 360}
 
     # First we need to find the nearest previous and next hour, which is
     # the previous/next NBM files we will be using.
@@ -3000,8 +4141,10 @@ def find_hourly_nbm_neighbors(supplemental_precip, config_options, d_current, mp
     current_min = d_current.minute
 
     # First find the current NBM forecast cycle that we are using.
-    current_nbm_cycle = config_options.current_fcst_cycle - \
-        datetime.timedelta(seconds=supplemental_precip.userCycleOffset * 60.0)
+    ana_offset = 1 if config_options.ana_flag else 0
+    current_nbm_cycle = config_options.current_fcst_cycle - datetime.timedelta(
+        seconds=(ana_offset + supplemental_precip.userCycleOffset) * 60.0
+    )
 
     # if Alaska SR, shift to previous cycle and add 3 hours to forecast ('f') if using all NBM precip
     if config_options.fcst_freq == 180 and supplemental_precip.keyValue == 9:
@@ -3009,7 +4152,7 @@ def find_hourly_nbm_neighbors(supplemental_precip, config_options, d_current, mp
 
     # Calculate the current forecast hour within this NBM cycle.
     dt_tmp = d_current - current_nbm_cycle
-    current_nbm_hour = int(dt_tmp.days*24) + int(dt_tmp.seconds/3600.0)
+    current_nbm_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
     # Set the input file frequency to be hourly for f001-f036 and 6-hourly beyond f036.
     if current_nbm_hour <= 36:
@@ -3018,24 +4161,28 @@ def find_hourly_nbm_neighbors(supplemental_precip, config_options, d_current, mp
         supplemental_precip.input_frequency = 360.0
 
     # Calculate the previous file to process.
-    min_since_last_output = (current_nbm_hour*60) % supplemental_precip.input_frequency
+    min_since_last_output = (
+        current_nbm_hour * 60
+    ) % supplemental_precip.input_frequency
     if min_since_last_output == 0:
         min_since_last_output = supplemental_precip.input_frequency
-    prev_nbm_date = d_current - datetime.timedelta(seconds=min_since_last_output*60)
+    prev_nbm_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
     supplemental_precip.fcst_date1 = prev_nbm_date
     if min_since_last_output == supplemental_precip.input_frequency:
         min_until_next_output = 0
     else:
-        min_until_next_output = supplemental_precip.input_frequency - min_since_last_output
+        min_until_next_output = (
+            supplemental_precip.input_frequency - min_since_last_output
+        )
     next_nbm_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
     supplemental_precip.fcst_date2 = next_nbm_date
 
     # Calculate the output forecast hours needed based on the prev/next dates.
     dt_tmp = next_nbm_date - current_nbm_cycle
-    next_nbm_forecast_hour = int(dt_tmp.days*24.0) + int(dt_tmp.seconds/3600.0)
+    next_nbm_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     supplemental_precip.fcst_hour2 = next_nbm_forecast_hour
     dt_tmp = prev_nbm_date - current_nbm_cycle
-    prev_nbm_forecast_hour = int(dt_tmp.days*24.0) + int(dt_tmp.seconds/3600.0)
+    prev_nbm_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     supplemental_precip.fcst_hour1 = prev_nbm_forecast_hour
     # If we are on the first NBM forecast hour (1), and we have calculated the previous forecast
     # hour to be 0, simply set both hours to be 1. Hour 0 will not produce the fields we need, and
@@ -3044,115 +4191,182 @@ def find_hourly_nbm_neighbors(supplemental_precip, config_options, d_current, mp
         prev_nbm_forecast_hour = 1
 
     # Calculate expected file paths.
-    if supplemental_precip.keyValue == 8 or supplemental_precip.keyValue == 21:                       # CONUS
-        tmp_file1 = supplemental_precip.inDir + "/blend." + \
-            current_nbm_cycle.strftime('%Y%m%d') + \
-            "/" + current_nbm_cycle.strftime('%H') + \
-            "/core/blend.t" + current_nbm_cycle.strftime('%H') + \
-            "z.core.f" + str(next_nbm_forecast_hour).zfill(3) + ".co" \
+    if supplemental_precip.keyValue == 8 or supplemental_precip.keyValue == 21:  # CONUS
+        tmp_file1 = (
+            supplemental_precip.inDir
+            + "/blend."
+            + current_nbm_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_nbm_cycle.strftime("%H")
+            + "/core/blend.t"
+            + current_nbm_cycle.strftime("%H")
+            + "z.core.f"
+            + str(next_nbm_forecast_hour).zfill(3)
+            + ".co"
             + supplemental_precip.file_ext
-        tmp_file2 = supplemental_precip.inDir + "/blend." + \
-            current_nbm_cycle.strftime('%Y%m%d') + \
-            "/" + current_nbm_cycle.strftime('%H') + \
-            "/core/blend.t" + current_nbm_cycle.strftime('%H') + \
-            "z.core.f" + str(prev_nbm_forecast_hour).zfill(3) + ".co" \
+        )
+        tmp_file2 = (
+            supplemental_precip.inDir
+            + "/blend."
+            + current_nbm_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_nbm_cycle.strftime("%H")
+            + "/core/blend.t"
+            + current_nbm_cycle.strftime("%H")
+            + "z.core.f"
+            + str(prev_nbm_forecast_hour).zfill(3)
+            + ".co"
             + supplemental_precip.file_ext
-    elif supplemental_precip.keyValue == 9:                     # ALASKA
-        tmp_file1 = supplemental_precip.inDir + "/blend." + \
-            current_nbm_cycle.strftime('%Y%m%d') + \
-            "/" + current_nbm_cycle.strftime('%H') + \
-            "/core/blend.t" + current_nbm_cycle.strftime('%H') + \
-            "z.core.f" + str(next_nbm_forecast_hour).zfill(3) + ".ak" \
+        )
+    elif supplemental_precip.keyValue == 9:  # ALASKA
+        tmp_file1 = (
+            supplemental_precip.inDir
+            + "/blend."
+            + current_nbm_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_nbm_cycle.strftime("%H")
+            + "/core/blend.t"
+            + current_nbm_cycle.strftime("%H")
+            + "z.core.f"
+            + str(next_nbm_forecast_hour).zfill(3)
+            + ".ak"
             + supplemental_precip.file_ext
-        tmp_file2 = supplemental_precip.inDir + "/blend." + \
-            current_nbm_cycle.strftime('%Y%m%d') + \
-            "/" + current_nbm_cycle.strftime('%H') + \
-            "/core/blend.t" + current_nbm_cycle.strftime('%H') + \
-            "z.core.f" + str(prev_nbm_forecast_hour).zfill(3) + ".ak" \
+        )
+        tmp_file2 = (
+            supplemental_precip.inDir
+            + "/blend."
+            + current_nbm_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_nbm_cycle.strftime("%H")
+            + "/core/blend.t"
+            + current_nbm_cycle.strftime("%H")
+            + "z.core.f"
+            + str(prev_nbm_forecast_hour).zfill(3)
+            + ".ak"
             + supplemental_precip.file_ext
+        )
+    elif supplemental_precip.keyValue == 15:  # PR
+        tmp_file1 = (
+            supplemental_precip.inDir
+            + "/blend."
+            + current_nbm_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_nbm_cycle.strftime("%H")
+            + "/core/blend.t"
+            + current_nbm_cycle.strftime("%H")
+            + "z.core.f"
+            + str(next_nbm_forecast_hour).zfill(3)
+            + ".pr"
+            + supplemental_precip.file_ext
+        )
+        tmp_file2 = (
+            supplemental_precip.inDir
+            + "/blend."
+            + current_nbm_cycle.strftime("%Y%m%d")
+            + "/"
+            + current_nbm_cycle.strftime("%H")
+            + "/core/blend.t"
+            + current_nbm_cycle.strftime("%H")
+            + "z.core.f"
+            + str(prev_nbm_forecast_hour).zfill(3)
+            + ".pr"
+            + supplemental_precip.file_ext
+        )
     else:
         tmp_file1 = tmp_file2 = ""
 
     if mpi_config.rank == 0:
         # config_options.statusMsg = "Prev NBM supplemental file: " + tmp_file2
-        # err_handler.log_msg(config_options, mpi_config)
+        # err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next NBM supplemental file: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
     err_handler.check_program_status(config_options, mpi_config)
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file1 or supplemental_precip.file_in2 != tmp_file2:
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
         supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
         supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
-        if(config_options.grid_type == "unstructured"):
-            supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-            supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
+        if config_options.grid_type == "unstructured":
+            supplemental_precip.regridded_precip1_elem = (
+                supplemental_precip.regridded_precip1_elem
+            )
+            supplemental_precip.regridded_precip2_elem = (
+                supplemental_precip.regridded_precip2_elem
+            )
 
         supplemental_precip.file_in1 = tmp_file1
         supplemental_precip.file_in2 = tmp_file2
+        LOG.debug(f"tmp_file1: {tmp_file1}")
+        LOG.debug(f"tmp_file2: {tmp_file2}")
         supplemental_precip.regridComplete = False
 
     # Ensure we have the necessary new file
     if mpi_config.rank == 0:
-        if not os.path.isfile(supplemental_precip.file_in2) and ((supplemental_precip.keyValue == 8) or (supplemental_precip.keyValue == 9)):
-            config_options.statusMsg = "NBM file {} not found, will attempt to use {} instead.".format(
-                    supplemental_precip.file_in2, supplemental_precip.file_in1)
-            err_handler.log_warning(config_options, mpi_config)
-            supplemental_precip.file_in2 = supplemental_precip.file_in1
-        if not os.path.isfile(supplemental_precip.file_in2):
-            if supplemental_precip.enforce == 1:
-                config_options.errMsg = "Expected input NBM file: " + supplemental_precip.file_in2 + " not found."
-                err_handler.log_critical(config_options, mpi_config)
-            else:
-                config_options.statusMsg = "Expected input NBM file: " + supplemental_precip.file_in2 + \
-                                           " not found. " + "Will not use in final layering."
-                err_handler.log_warning(config_options, mpi_config)
-                config_options.statusMsg = "You can use Util/pull_s3_grib_vars.py to Download NBM data from AWS-S3 archive."
-                err_handler.log_warning(config_options, mpi_config)
+        if not os.path.isfile(supplemental_precip.file_in2) and (
+            (supplemental_precip.keyValue == 8) or (supplemental_precip.keyValue == 9)
+        ):
+
+            if config_options.use_data_at_current_time:
+                if supplemental_precip.enforce == 1:
+                    config_options.errMsg = "Required input NBM file: " + supplemental_precip.file_in2 + " not found."
+                    err_handler.log_critical(config_options, mpi_config)
+                else:
+                    config_options.statusMsg = f"Expected input NBM file: {supplemental_precip.file_in2} not available, will not use in final layering."
+                    err_handler.log_msg(config_options, mpi_config)
+
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
     # Do we want to use NBM data at this timestep? If not, set the local slab of arrays to missing.
     if not config_options.use_data_at_current_time:
         if supplemental_precip.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
         if supplemental_precip.regridded_precip1 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip1[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip1_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip1[:] = config_options.globalNdv
 
 
 def find_ndfd_neighbors(input_forcings, config_options, d_current, mpi_config):
-
+    """Find NDFD neighbor files."""
     current_cycle = config_options.current_fcst_cycle
-    current_fcst = d_current-current_cycle
+    current_fcst = d_current - current_cycle
     input_forcings.fcst_hour2 = current_fcst.total_seconds() / 3600
 
-    tmp_file1 = os.path.join(input_forcings.inDir, 'NDFD', current_cycle.strftime('%Y%m%d'),
-                             'wgrbbul', 'ndfd_conus', 'ndfd_conus_%FIELD%.grib2')
+    tmp_file1 = os.path.join(
+        input_forcings.inDir,
+        "NDFD",
+        current_cycle.strftime("%Y%m%d"),
+        "wgrbbul",
+        "ndfd_conus",
+        "ndfd_conus_%FIELD%.grib2",
+    )
 
-    tmp_file2 = tmp_file1       # no temporal interp. supported yet
+    tmp_file2 = tmp_file1  # no temporal interp. supported yet
 
     if mpi_config.rank == 0:
         # Check to see if files are already set. If not, then reset, grids and
@@ -3161,9 +4375,13 @@ def find_ndfd_neighbors(input_forcings, config_options, d_current, mpi_config):
             if config_options.current_output_step == 1:
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
 
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
@@ -3174,15 +4392,25 @@ def find_ndfd_neighbors(input_forcings, config_options, d_current, mpi_config):
                 # if not np.any(input_forcings.regridded_forcings1):
                 if input_forcings.regridded_forcings1 is None:
                     if mpi_config.rank == 0:
-                        config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                                   input_forcings.productName
+                        config_options.statusMsg = (
+                            "Restarting forecast cycle. Will regrid previous: "
+                            + input_forcings.product_name
+                        )
                         err_handler.log_msg(config_options, mpi_config)
                     input_forcings.rstFlag = 1
-                    input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-                    input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                        input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
+                    input_forcings.regridded_forcings1 = (
+                        input_forcings.regridded_forcings1
+                    )
+                    input_forcings.regridded_forcings2 = (
+                        input_forcings.regridded_forcings2
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem = (
+                            input_forcings.regridded_forcings1_elem
+                        )
+                        input_forcings.regridded_forcings2_elem = (
+                            input_forcings.regridded_forcings2_elem
+                        )
 
                     input_forcings.file_in2 = tmp_file1
                     input_forcings.file_in1 = tmp_file1
@@ -3191,12 +4419,18 @@ def find_ndfd_neighbors(input_forcings, config_options, d_current, mpi_config):
                 else:
                     # The custom window has shifted. Reset fields 2 to
                     # be fields 1.
-                    if(config_options.grid_type == "gridded"):
-                        input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
+                    if config_options.grid_type == "gridded":
+                        input_forcings.regridded_forcings1[:, :, :] = (
+                            input_forcings.regridded_forcings2[:, :, :]
+                        )
                     else:
-                        input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    if(config_options.grid_type == "unstructured"):
-                        input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
 
                     input_forcings.file_in1 = tmp_file1
                     input_forcings.file_in2 = tmp_file2
@@ -3209,10 +4443,15 @@ def find_ndfd_neighbors(input_forcings, config_options, d_current, mpi_config):
     # Ensure we have the necessary new file
     file_missing = False
     if mpi_config.rank == 0:
-        for subfile in [input_forcings.file_in2.replace("%FIELD%", tag) for tag in ('tmp','wdir','wspd','qpf')]:
+        for subfile in [
+            input_forcings.file_in2.replace("%FIELD%", tag)
+            for tag in ("tmp", "wdir", "wspd", "qpf")
+        ]:
             if not os.path.isfile(subfile):
                 if input_forcings.enforce == 1:
-                    config_options.errMsg = f"Expected input NDFD file: {subfile} not found."
+                    config_options.errMsg = (
+                        f"Expected input NDFD file: {subfile} not found."
+                    )
                     err_handler.log_critical(config_options, mpi_config)
                 else:
                     config_options.statusMsg = f"Expected input NDFD file: {subfile} not found. Will not use in final layering."
@@ -3222,15 +4461,19 @@ def find_ndfd_neighbors(input_forcings, config_options, d_current, mpi_config):
     # If the file is missing, set the local slab of arrays to missing.
     if file_missing:
         if input_forcings.regridded_forcings2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
             else:
                 input_forcings.regridded_forcings2[:, :] = config_options.globalNdv
-            if(config_options.grid_type == "unstructured"):
+            if config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings2_elem[:, :] = config_options.globalNdv
 
-def find_hourly_mrms_precip_flag(supplemental_precip, config_options, d_current, mpi_config):
-    """
+
+def find_hourly_mrms_precip_flag(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find hourly MRMS neighbor files.
+
     Function to calculate the previous and next MRMS radar-only QPE files. This
     will also calculate the neighboring radar quality index (RQI) files as well.
     :param supplemental_precip:
@@ -3239,6 +4482,9 @@ def find_hourly_mrms_precip_flag(supplemental_precip, config_options, d_current,
     :param mpi_config:
     :return:
     """
+    # debug - ksl
+    LOG.info("Starting find_hourly_mrms_precip_flag method.")
+
     # First we need to find the nearest previous and next hour, which is
     # the previous/next MRMS files we will be using.
     current_yr = d_current.year
@@ -3263,14 +4509,20 @@ def find_hourly_mrms_precip_flag(supplemental_precip, config_options, d_current,
         next_mrms_date = prev_mrms_date + datetime.timedelta(seconds=3600.0)
 
     supplemental_precip.pcp_date1 = prev_mrms_date
-    #supplemental_precip.pcp_date2 = next_mrms_date
+    # supplemental_precip.pcp_date2 = next_mrms_date
     supplemental_precip.pcp_date2 = prev_mrms_date
 
     # Calculate expected file paths.
-    tmp_file = os.path.join(supplemental_precip.inDir,
-                            "PrecipFlag_00.00_" + supplemental_precip.pcp_date1.strftime('%Y%m%d') + \
-                            "-" + supplemental_precip.pcp_date1.strftime('%H') + \
-                            "0000" + supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else ''))
+    tmp_file = os.path.join(
+        supplemental_precip.inDir,
+        "PrecipFlag_00.00_"
+        + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+        + "-"
+        + supplemental_precip.pcp_date1.strftime("%H")
+        + "0000"
+        + supplemental_precip.file_ext
+        + (".gz" if supplemental_precip.file_type != NETCDF else ""),
+    )
 
     if mpi_config.rank == 0:
         config_options.statusMsg = "MRMS PrecipFlag file: " + tmp_file
@@ -3279,25 +4531,48 @@ def find_hourly_mrms_precip_flag(supplemental_precip, config_options, d_current,
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if supplemental_precip.file_in1 != tmp_file or supplemental_precip.file_in2 != tmp_file:
+    if (
+        supplemental_precip.file_in1 != tmp_file
+        or supplemental_precip.file_in2 != tmp_file
+    ):
         if config_options.current_output_step == 1:
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
             supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
             supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
-                supplemental_precip.regridded_rqi1_elem = supplemental_precip.regridded_rqi1_elem
-                supplemental_precip.regridded_rqi2_elem = supplemental_precip.regridded_rqi2_elem
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
         else:
             # The forecast window has shifted. Reset fields 2 to
             # be fields 1.
-            supplemental_precip.regridded_precip1 = supplemental_precip.regridded_precip1
-            supplemental_precip.regridded_precip2 = supplemental_precip.regridded_precip2
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip1_elem = supplemental_precip.regridded_precip1_elem
-                supplemental_precip.regridded_precip2_elem = supplemental_precip.regridded_precip2_elem
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
         supplemental_precip.file_in1 = tmp_file
         supplemental_precip.file_in2 = tmp_file
         supplemental_precip.regridComplete = False
@@ -3306,28 +4581,37 @@ def find_hourly_mrms_precip_flag(supplemental_precip, config_options, d_current,
     if mpi_config.rank == 0:
         if not os.path.isfile(supplemental_precip.file_in2):
             if supplemental_precip.enforce == 1:
-                config_options.errMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input MRMS file: "
+                    + supplemental_precip.file_in2
+                    + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input MRMS file: " + supplemental_precip.file_in2 + \
-                                           " not found. " + "Will not use in final layering."
+                config_options.statusMsg = (
+                    "Expected input MRMS file: "
+                    + supplemental_precip.file_in2
+                    + " not found. "
+                    + "Will not use in final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.
     if not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.regridded_precip2 is not None:
-            if(config_options.grid_type == "gridded"):
+            if config_options.grid_type == "gridded":
                 supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            elif(config_options.grid_type == "unstructured"):
+            elif config_options.grid_type == "unstructured":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
                 supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
-            elif(config_options.grid_type == "hydrofabric"):
+            elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
 
 def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """
+    """Find input neighbor files.
+
     Function to calculate the previous and after custom freq input cycles based on the current timestep.
     :param input_forcings:
     :param config_options:
@@ -3336,40 +4620,50 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
     :return:
     """
     if mpi_config.rank == 0:
-        config_options.statusMsg = "Processing %s Input Data. Calculating neighboring " \
-                                   "files for this output timestep" % input_forcings.productName
-        err_handler.log_msg(config_options, mpi_config)
-
+        config_options.statusMsg = (
+            "Processing %s Input Data. Calculating neighboring "
+            "files for this output timestep" % input_forcings.product_name
+        )
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
 
     # First find the current input forecast cycle that we are using.
+
+    # KSL - original ana_offset behavior
     ana_offset = 1 if config_options.ana_flag else 0
+    # ana_offset = 0
+
     current_input_cycle = config_options.current_fcst_cycle - datetime.timedelta(
-        seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0 * 60)
+        seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0 * 60
+    )
+
     input_horizon = input_forcings.forecast_horizons[current_input_cycle.hour]
 
     # If the user has specified a forcing horizon that is greater than what is available
     # for this time period, throw an error.
-    if (input_forcings.userFcstHorizon + input_forcings.userCycleOffset) / 60.0 > input_horizon:
-        config_options.errMsg = "User has specified a forecast horizon " + \
-                                "that is greater than the maximum allowed hours of: " + str(input_horizon)
-        err_handler.log_critical(config_options, mpi_config)
 
-    #err_handler.check_program_status(config_options, mpi_config)
-    #d_current = d_current + datetime.timedelta(seconds=input_forcings.currentFcstOffset * 60.0 * 60.0)
+    if not config_options.ana_flag:
+        if (
+            input_forcings.userFcstHorizon + input_forcings.userCycleOffset
+        ) / 60.0 > input_horizon:
+            config_options.errMsg = f"Config file ForecastInputHorizons exceeds maximum allowed hours of: {str(input_horizon)}"
+            err_handler.log_critical(config_options, mpi_config)
+
+    # err_handler.check_program_status(config_options, mpi_config)
+    # d_current = d_current + datetime.timedelta(seconds=input_forcings.currentFcstOffset * 60.0 * 60.0)
     # Calculate the current forecast hour within this Input cycle.
     dt_tmp = d_current - current_input_cycle
-    current_input_hour = int(dt_tmp.days*24) + int(dt_tmp.seconds/3600.0)
-    current_input_min = int(dt_tmp.seconds/60.0)
+    # current_input_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
+    current_input_min = int(dt_tmp.seconds / 60.0)
     # Calculate the previous file to process.
-    min_since_last_output = current_input_min % input_forcings.cycleFreq
+    min_since_last_output = current_input_min % input_forcings.cycle_freq
     if min_since_last_output == 0:
-        min_since_last_output = input_forcings.cycleFreq
+        min_since_last_output = input_forcings.cycle_freq
     prev_input_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
     input_forcings.fcst_date1 = prev_input_date
-    if min_since_last_output == input_forcings.cycleFreq:
+    if min_since_last_output == input_forcings.cycle_freq:
         min_until_next_output = 0
     else:
-        min_until_next_output = input_forcings.cycleFreq - min_since_last_output
+        min_until_next_output = input_forcings.cycle_freq - min_since_last_output
     next_input_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
     input_forcings.fcst_date2 = next_input_date
     dt_tmp = next_input_date - current_input_cycle
@@ -3379,109 +4673,198 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
         next_input_forecast_hour = 1
     hr_flag = 0
 
-    if 0 < input_forcings.cycleFreq % 60 < 60:
-        if(next_input_forecast_hour>1 and next_input_date.minute == 0):
+    if 0 < input_forcings.cycle_freq % 60 < 60:
+        if next_input_forecast_hour > 1 and next_input_date.minute == 0:
             next_input_forecast_hour = next_input_forecast_hour - 1
             hr_flag = 1
-        if(int(dt_tmp.seconds / 60.0)%60 == 0) and hr_flag == 1:
-            next_input_forecast_min = (next_input_forecast_hour - 1) * 60 + int(dt_tmp.seconds / (60.0 * (next_input_forecast_hour+1)))
-        elif(int(dt_tmp.seconds / 60.0)%60 == 0) and next_input_forecast_hour == 1:
-            next_input_forecast_min = (next_input_forecast_hour - 1) * 60 + int(dt_tmp.seconds / (60.0 * next_input_forecast_hour))
+        if (int(dt_tmp.seconds / 60.0) % 60 == 0) and hr_flag == 1:
+            next_input_forecast_min = (next_input_forecast_hour - 1) * 60 + int(
+                dt_tmp.seconds / (60.0 * (next_input_forecast_hour + 1))
+            )
+        elif (int(dt_tmp.seconds / 60.0) % 60 == 0) and next_input_forecast_hour == 1:
+            next_input_forecast_min = (next_input_forecast_hour - 1) * 60 + int(
+                dt_tmp.seconds / (60.0 * next_input_forecast_hour)
+            )
         else:
-            next_input_forecast_min = (next_input_forecast_hour - 1) * 60 + int(dt_tmp.seconds / 60.0)%60
+            next_input_forecast_min = (next_input_forecast_hour - 1) * 60 + int(
+                dt_tmp.seconds / 60.0
+            ) % 60
         input_forcings.fcst_min2 = next_input_forecast_min
     dt_tmp = prev_input_date - current_input_cycle
     prev_input_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     input_forcings.fcst_hour1 = prev_input_forecast_hour
     if prev_input_forecast_hour == 0:
         prev_input_forecast_hour = 1
-    if 0 < input_forcings.cycleFreq % 60 < 60:
-        prev_input_forecast_min = (prev_input_forecast_hour - 1) * 60 + int(dt_tmp.seconds / 60.0)%60
+    if 0 < input_forcings.cycle_freq % 60 < 60:
+        prev_input_forecast_min = (prev_input_forecast_hour - 1) * 60 + int(
+            dt_tmp.seconds / 60.0
+        ) % 60
         input_forcings.fcst_min1 = prev_input_forecast_min
 
     err_handler.check_program_status(config_options, mpi_config)
-    # Calculate expected file paths.
-    
 
-    pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
-    pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
+    if config_options.ana_flag == 1:
+        input_forcings.fcst_hour2 = input_forcings.fcst_hour2 - 1
+        input_forcings.fcst_hour1 = input_forcings.fcst_hour1 - 1
+    if config_options.ana_flag == 0:
+        # Calculate expected file paths.
+        pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
 
-    files1 = glob.glob(pattern1) + glob.glob(pattern2)
-    tmp_file1 = files1[0]
-    if mpi_config.rank == 0:
-        config_options.statusMsg = "Previous input file being used: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
-
-    pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(next_input_forecast_hour).zfill(2)}.grib2"
-    pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(next_input_forecast_hour).zfill(2)}.grib2"
-
-    files2 = glob.glob(pattern1) + glob.glob(pattern2)
-
-    tmp_file2 = files2[0]
-    if mpi_config.rank == 0:
+        files1 = glob.glob(pattern1) + glob.glob(pattern2)
+        tmp_file1 = files1[0]
         if mpi_config.rank == 0:
-            config_options.statusMsg = "Next input file being used: " + tmp_file2
-            err_handler.log_msg(config_options, mpi_config)
+            config_options.statusMsg = "Previous input file being used: " + tmp_file1
+            err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+
+        pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(next_input_forecast_hour).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(next_input_forecast_hour).zfill(2)}.grib2"
+
+        files2 = glob.glob(pattern1) + glob.glob(pattern2)
+
+        tmp_file2 = files2[0]
+        if mpi_config.rank == 0:
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Next input file being used: " + tmp_file2
+                err_handler.log_msg(config_options, mpi_config)
+
+    elif config_options.ana_flag == 1:
+        # Calculate expected file paths.
+        pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
+
+        files1 = glob.glob(pattern1) + glob.glob(pattern2)
+
+        tmp_file1 = files1[0]
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "Previous input file being used: " + tmp_file1
+            err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+
     err_handler.check_program_status(config_options, mpi_config)
 
     # Check to see if files are already set. If not, then reset, grids and
     # regridding objects to communicate things need to be re-established.
-    if input_forcings.file_in1 != tmp_file1 or input_forcings.file_in2 != tmp_file2 or (config_options.output_freq <= input_forcings.cycleFreq <= 60):
-        if config_options.current_output_step == 1:
-            input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
-            input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
-            input_forcings.file_in1 = tmp_file1
-            input_forcings.file_in2 = tmp_file2
-        else:
-            # Check to see if we are restarting from a previously failed instance. In this case,
-            # We are not on the first timestep, but no previous forcings have been processed.
-            # We need to process the previous input timestep for temporal interpolation purposes.
-            if input_forcings.regridded_forcings1 is None:
-                # if not np.any(input_forcings.regridded_forcings1):
-                if mpi_config.rank == 0:
-                    config_options.statusMsg = "Restarting forecast cycle. Will regrid previous: " + \
-                                               input_forcings.productName
-                    err_handler.log_msg(config_options, mpi_config)
-                input_forcings.rstFlag = 1
+
+    if config_options.ana_flag == 1:
+        if input_forcings.file_in1 != tmp_file1:
+            if config_options.current_output_step == 1:
                 input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
                 input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
-                if(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1_elem = input_forcings.regridded_forcings1_elem
-                    input_forcings.regridded_forcings2_elem = input_forcings.regridded_forcings2_elem
-                input_forcings.file_in2 = tmp_file1
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
                 input_forcings.file_in1 = tmp_file1
-                input_forcings.fcst_date2 = input_forcings.fcst_date1
-                input_forcings.fcst_hour2 = input_forcings.fcst_hour1
-                input_forcings.fcst_min2 = input_forcings.fcst_min1
+                input_forcings.file_in2 = tmp_file1
             else:
-                # The input window has shifted. Reset fields 2 to
-                # be fields 1.
-                if(config_options.grid_type == "gridded"):
-                    input_forcings.regridded_forcings1[:, :, :] = input_forcings.regridded_forcings2[:, :, :]
-                elif(config_options.grid_type == "hydrofabric"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                elif(config_options.grid_type == "unstructured"):
-                    input_forcings.regridded_forcings1[:, :] = input_forcings.regridded_forcings2[:, :]
-                    input_forcings.regridded_forcings1_elem[:, :] = input_forcings.regridded_forcings2_elem[:, :]
-
+                if config_options.grid_type == "gridded":
+                    input_forcings.regridded_forcings1[:, :, :] = (
+                        input_forcings.regridded_forcings2[:, :, :]
+                    )
+                elif config_options.grid_type == "hydrofabric":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                elif config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1[:, :] = (
+                        input_forcings.regridded_forcings2[:, :]
+                    )
+                    input_forcings.regridded_forcings1_elem[:, :] = (
+                        input_forcings.regridded_forcings2_elem[:, :]
+                    )
+                input_forcings.file_in1 = tmp_file1
+                input_forcings.file_in2 = tmp_file1
+            input_forcings.regridComplete = False
+    else:
+        if (
+            input_forcings.file_in1 != tmp_file1
+            or input_forcings.file_in2 != tmp_file2
+            or (config_options.output_freq <= input_forcings.cycle_freq <= 60)
+        ):
+            if config_options.current_output_step == 1:
+                input_forcings.regridded_forcings1 = input_forcings.regridded_forcings1
+                input_forcings.regridded_forcings2 = input_forcings.regridded_forcings2
+                if config_options.grid_type == "unstructured":
+                    input_forcings.regridded_forcings1_elem = (
+                        input_forcings.regridded_forcings1_elem
+                    )
+                    input_forcings.regridded_forcings2_elem = (
+                        input_forcings.regridded_forcings2_elem
+                    )
                 input_forcings.file_in1 = tmp_file1
                 input_forcings.file_in2 = tmp_file2
-        input_forcings.regridComplete = False
+            else:
+                # Check to see if we are restarting from a previously failed instance. In this case,
+                # We are not on the first timestep, but no previous forcings have been processed.
+                # We need to process the previous input timestep for temporal interpolation purposes.
+                if input_forcings.regridded_forcings1 is None:
+                    # if not np.any(input_forcings.regridded_forcings1):
+                    if mpi_config.rank == 0:
+                        config_options.statusMsg = (
+                            "Restarting forecast cycle. Will regrid previous: "
+                            + input_forcings.product_name
+                        )
+                        err_handler.log_msg(config_options, mpi_config)
+                    input_forcings.rstFlag = 1
+                    input_forcings.regridded_forcings1 = (
+                        input_forcings.regridded_forcings1
+                    )
+                    input_forcings.regridded_forcings2 = (
+                        input_forcings.regridded_forcings2
+                    )
+                    if config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1_elem = (
+                            input_forcings.regridded_forcings1_elem
+                        )
+                        input_forcings.regridded_forcings2_elem = (
+                            input_forcings.regridded_forcings2_elem
+                        )
+                    input_forcings.file_in2 = tmp_file1
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.fcst_date2 = input_forcings.fcst_date1
+                    input_forcings.fcst_hour2 = input_forcings.fcst_hour1
+                    input_forcings.fcst_min2 = input_forcings.fcst_min1
+                else:
+                    # The input window has shifted. Reset fields 2 to
+                    # be fields 1.
+                    if config_options.grid_type == "gridded":
+                        input_forcings.regridded_forcings1[:, :, :] = (
+                            input_forcings.regridded_forcings2[:, :, :]
+                        )
+                    elif config_options.grid_type == "hydrofabric":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                    elif config_options.grid_type == "unstructured":
+                        input_forcings.regridded_forcings1[:, :] = (
+                            input_forcings.regridded_forcings2[:, :]
+                        )
+                        input_forcings.regridded_forcings1_elem[:, :] = (
+                            input_forcings.regridded_forcings2_elem[:, :]
+                        )
+
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.file_in2 = tmp_file2
+            input_forcings.regridComplete = False
     err_handler.check_program_status(config_options, mpi_config)
 
     # Ensure we have the necessary new file
     if mpi_config.rank == 0:
         if not os.path.exists(input_forcings.file_in2):
             if input_forcings.enforce == 1:
-                config_options.errMsg = "Expected input file: " + input_forcings.file_in2 + " not found."
+                config_options.errMsg = (
+                    "Expected input file: " + input_forcings.file_in2 + " not found."
+                )
                 err_handler.log_critical(config_options, mpi_config)
             else:
-                config_options.statusMsg = "Expected input file: " + input_forcings.file_in2 + " not found. " \
-                                                                                                   "Will not use in " \
-                                                                                                   "final layering."
+                config_options.statusMsg = (
+                    "Expected input file: " + input_forcings.file_in2 + " not found. "
+                    "Will not use in "
+                    "final layering."
+                )
                 err_handler.log_warning(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
@@ -3489,12 +4872,17 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
     if not os.path.exists(input_forcings.file_in2):
         if input_forcings.regridded_forcings2 is not None:
             input_forcings.regridded_forcings2[:, :, :] = config_options.globalNdv
-            if(config_options.grid_type == "unstructured"):
-                input_forcings.regridded_forcings2_elem[:, :, :] = config_options.globalNdv
+            if config_options.grid_type == "unstructured":
+                input_forcings.regridded_forcings2_elem[:, :, :] = (
+                    config_options.globalNdv
+                )
 
 
-def find_custom_freq_neighbors(supplemental_precip, config_options, d_current, mpi_config):
-    """
+def find_custom_freq_neighbors(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find custom frequency supplemental precipitation neighbor files.
+
     Function to calculate the previous and next custom freq supp files.
     :param supplemental_precip:
     :param config_options:
@@ -3502,7 +4890,6 @@ def find_custom_freq_neighbors(supplemental_precip, config_options, d_current, m
     :param mpi_config:
     :return:
     """
-
     # First we need to find the nearest previous and next hour, which is
     # the previous/next MRMS files we will be using.
     current_yr = d_current.year
@@ -3513,29 +4900,47 @@ def find_custom_freq_neighbors(supplemental_precip, config_options, d_current, m
 
     # Set the input file frequency to be hourly.
     supplemental_precip.input_frequency = config_options.customSuppPcpFreq
-    prev_date1 = datetime.datetime(current_yr, current_mo, current_day, current_hr,current_min)
+    prev_date1 = datetime.datetime(
+        current_yr, current_mo, current_day, current_hr, current_min
+    )
     dt_tmp = d_current - prev_date1
     if dt_tmp.total_seconds() == 0:
         # We are on the hour, we can set this date to the be the "next" date.
         next_custom_date = d_current
-        prev_custom_date = d_current - datetime.timedelta(seconds=60*(config_options.customSuppPcpFreq))
+        prev_custom_date = d_current - datetime.timedelta(
+            seconds=60 * (config_options.customSuppPcpFreq)
+        )
     else:
         # We are between two hours.
         prev_custom_date = prev_date1
-        next_custom_date = prev_custom_date + datetime.timedelta(seconds=60*(config_options.customSuppPcpFreq))
+        next_custom_date = prev_custom_date + datetime.timedelta(
+            seconds=60 * (config_options.customSuppPcpFreq)
+        )
     supplemental_precip.pcp_date1 = prev_custom_date
-    #supplemental_precip.pcp_date2 = next_mrms_date
+    # supplemental_precip.pcp_date2 = next_mrms_date
     supplemental_precip.pcp_date2 = next_custom_date
     # Calculate expected file paths.
     if supplemental_precip.keyValue == 14:
-        tmp_file1 = supplemental_precip.inDir + '/' + \
-            supplemental_precip.pcp_date1.strftime('%Y%m%d') + '/' \
-            'MRMS_PrecipRate_00.00_' + supplemental_precip.pcp_date1.strftime('%Y%m%d-%H%M%S') +  \
-            supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
-        tmp_file2 = supplemental_precip.inDir + '/' + \
-            supplemental_precip.pcp_date2.strftime('%Y%m%d') + '/' \
-            'MRMS_PrecipRate_00.00_' + supplemental_precip.pcp_date2.strftime('%Y%m%d-%H%M%S') +  \
-            supplemental_precip.file_ext + ('.gz' if supplemental_precip.fileType != NETCDF else '')
+        tmp_file1 = (
+            supplemental_precip.inDir
+            + "/"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d")
+            + "/"
+            "MRMS_PrecipRate_00.00_"
+            + supplemental_precip.pcp_date1.strftime("%Y%m%d-%H%M%S")
+            + supplemental_precip.file_ext
+            + (".gz" if supplemental_precip.file_type != NETCDF else "")
+        )
+        tmp_file2 = (
+            supplemental_precip.inDir
+            + "/"
+            + supplemental_precip.pcp_date2.strftime("%Y%m%d")
+            + "/"
+            "MRMS_PrecipRate_00.00_"
+            + supplemental_precip.pcp_date2.strftime("%Y%m%d-%H%M%S")
+            + supplemental_precip.file_ext
+            + (".gz" if supplemental_precip.file_type != NETCDF else "")
+        )
 
         tmp_rqi_file1 = tmp_rqi_file2 = ""
 
@@ -3545,13 +4950,13 @@ def find_custom_freq_neighbors(supplemental_precip, config_options, d_current, m
 
     if mpi_config.rank == 0:
         config_options.statusMsg = "Previous Custom supplemental file: " + tmp_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next Custom supplemental file: " + tmp_file2
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Previous RQI supplemental file: " + tmp_rqi_file1
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
         config_options.statusMsg = "Next RQI supplemental file: " + tmp_rqi_file2
-        err_handler.log_msg(config_options, mpi_config)
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
     err_handler.check_program_status(config_options, mpi_config)
 
     supplemental_precip.file_in1 = tmp_file1
@@ -3563,5 +4968,7 @@ def find_custom_freq_neighbors(supplemental_precip, config_options, d_current, m
     if not os.path.isfile(supplemental_precip.file_in2):
         if supplemental_precip.regridded_precip2 is not None:
             supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
-            if(config_options.grid_type == "unstructured"):
-                supplemental_precip.regridded_precip2_elem[:, :] = config_options.globalNdv
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip2_elem[:, :] = (
+                    config_options.globalNdv
+                )

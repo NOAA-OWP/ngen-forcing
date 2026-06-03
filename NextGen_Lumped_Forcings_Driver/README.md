@@ -3,11 +3,12 @@
 2. The remaining Python module dependency here for the NextGen Lumped Forcings driver is the special exactextract Python bindings developed by GitHub contributors within the ExactExtract GitHub repository. The python bindings can be install by downloading python packages and following instructions on the GitHub repository link here: https://github.com/jdalrym2/exactextract/tree/coverage-fraction-pybindings (This will directly link the ExactExtract python bindings to your python executable or anaconda environment).
 
 # Example Execution of the NextGen Lumped Forcings Driver and Description of Python Arguments Required/Optional
-###################### Python executable sample code for executing lumped forcings driver #############################
+
+```
 from NextGen_lumped_forcings_driver import NextGen_lumped_forcings_driver
 
-NextGen_lumped_forcings_driver("/pathway/to/lumped_forcings/output",start_time="2010-01-01 00:00:00", end_time="2010-02-01 00:00:00", met_dataset="AORC",hyfabfile="/pathway/to/NextGen_hydrofabric_geopackage",hyfabfile_parquet=None, met_dataset_pathway="/pathway/to/data/source",weights_file=None,netcdf=False,csv=True,bias_calibration=False,downscaling=False,CONUS=False,AnA=False,num_processes=1)
-######################################################################################################################
+NextGen_lumped_forcings_driver("/pathway/to/lumped_forcings/output_directory",start_time="2010-01-01 00:00:00", end_time="2010-02-01 00:00:00", met_dataset="AORC",hyfabfile="/pathway/to/NextGen_hydrofabric_geopackage",hyfabfile_parquet=None, met_dataset_pathway="/pathway/to/data/source",weights_file=None,netcdf=False,csv=True,bias_calibration=False,downscaling=False,CONUS=False,AnA=False,num_processes=1)
+```
 
 The NextGen lumped forcings driver takes the following inputs:
 
@@ -23,8 +24,7 @@ The NextGen lumped forcings driver takes the following inputs:
 
 6. hyfabfile_parquet (string, default=None) = File pathway that points to the user specified NextGen hydrofabric VPU/CONUS parquet file containing the required forcing metadata to implement NCAR bias calibration and downscaling functions. This is within hydrofabric version 2.0 repository and newer versions as well moving forward. (Optional -> GFS, CFS, HRRR)
   
-7. met_dataset_pathway (string, default=None) = Pathway where forecast dataset is located to generate lumped forcings for AORC, GFS, HRRR, and CFS data. This is required when you specify data for one of these datasets. (Required -> GFS, CFS, HRRR, Optional for AORC if you're on the NWC servers where you can directly connect to the ERRDAP server and extract data, otherwise it's required then for AORC data)
-(AORC, GFS, and CFS modules require direct pathway to the netcdf (AORC) or grib2 files (GFS, CFS) for the given time span or forecast cycle you wish to produce files for. HRRR module requires pathway to the HRRR directory encapulating multiple HRRR forecast cycles (e.g. hrrr.20230104  hrrr.20230105) contained within that data directory for Short range and AnA configuration to properly assimilate the data)
+7. met_dataset_pathway (string, default=None) = Pathway where forecast dataset is located to generate lumped forcings for AORC, GFS, HRRR, and CFS data. This is required when you specify data for one of these datasets.AORC, GFS, and CFS modules require direct pathway to the netcdf (AORC) or grib2 files (GFS, CFS) for the given time span or forecast cycle you wish to produce files for. HRRR module requires pathway to the HRRR directory encapulating multiple HRRR forecast cycles (e.g. hrrr.20230104  hrrr.20230105) contained within that data directory for Short range and AnA configuration to properly assimilate the data. For the fastest extraction of AORC data, please use the `"s3://noaa-nws-aorc-v1-1-1km/"` option to enable the s3 bucket data extraction method. This is extremely useful for regridding a long-term timeseries for AORC data. 
 
 8. weights_file (string, default=None) = Pathway to where a given user has already produced the ExactExtract coverage fraction weights csv file for the current hydrofabric dataset they are inputing into the module from a previous run and instead would like the option to just feed it into the module and bypass the weights production step to optimize the file production runtime for a given meteorological forcing dataset
 
@@ -43,8 +43,7 @@ Water Model (NWM) Forcings Engine for operational forecast datasets (Optional ->
 
 14. AnA (boolean flag, default=False) = Python boolean flag (True, False) indicating whether or not the user is requesting an 'Analysis and Assimilation' operational configuration for the HRRR forecast data. This will produce lumped forcings for a 28-hour look back period (hourly frequency -28,..., -2, -1, 0-hour lookback) for hour number one (f01) within a given HRRR forecast cycle. This option is only valid for the HRRR meteoroloigcal forcing dataset. (Required -> HRRR)
 
-15. num_proccesses (integer, default=1) = The number of proccessors available to the Python lumped forcings driver. These python scripts utilize multi-threading procedures, which helps to speed up the production of the NextGen lumped forcings dataset.
-(Warning; requesting too many threads on  given environment may cause the system to run out of memory quickly as the script can only handle so many forcing files at once.)
+15. num_proccesses (integer, default=1) = The number of proccessors available to the Python lumped forcings driver. These python scripts utilize multi-threading procedures, which helps to speed up the production of the NextGen lumped forcings dataset. We recommend using multile processes for speeding up regridding with the AORC dataset, particulary if you're using the `met_dataset_pathway="s3://noaa-nws-aorc-v1-1-1km/"` option. (Warning; requesting too many threads on  given environment may cause the system to run out of memory quickly as the script can only handle so many forcing files at once.)
 
 The given user should utilize sample function calls for each forcings dataset available in the lumped forcings driver. The examples are shown within the Run_NextGen_lumped_driver.py script available in the repository.
 

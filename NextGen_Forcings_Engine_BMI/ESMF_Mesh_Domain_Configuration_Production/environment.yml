@@ -1,0 +1,12 @@
+name: ngen_esmf_mesh_prod
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10.0
+  - geopandas
+  - netCDF4
+  - pandas
+  - scipy
+  - numpy 
+  - shapely
+  - pyproj

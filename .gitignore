@@ -79,3 +79,6 @@ dist/
 
 venv
 .venv
+.idea
+
+/git_info.json

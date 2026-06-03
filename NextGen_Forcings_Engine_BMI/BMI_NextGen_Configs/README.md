@@ -1,3 +1,6 @@
+# Current Compatible configuration yaml files for project
+config_templates directory
+
 # NextGen Forcings Engine Forcing Engine Configuration File
 
 Input options to the forcing engine include:
@@ -59,7 +62,7 @@ Choose a set of value(s) of forcing variables to be processed for WRF-Hydro. Ple
 - Example- InputForcings: [3,25]
 
 ### InputForcingDirectories
-Specify the input directories for each forcing product. If a user has the ability to connect to the AWS servers and they specify configuration #12 (CONUS AORC data) or configuration #27 (NWM retrospective forcing data) then this specific configuration input can be left as a blank string ("").
+Specify the input directories for each forcing product. If a user has the ability to connect to the AWS servers and they specify configuration #12 (CONUS AORC data) or configuration #27 (NWM retrospective forcing data) then this specific configuration input can be left as a blank string (""). If a user is requesting for operational products that will be downloading forcing files from a server, then make sure you specify the exact pathway you intend for the forcing engine to store those datases. 
 - Example- InputForcingDirectories: [./GFS,./NDFD]
 
 ### InputForcingTypes
@@ -83,11 +86,11 @@ New variable currently for NWMv3.1 operations to properly ingest GFS 13km foreca
 - Example- SubOutputFreq: 0  
 
 ### ScratchDir
-Specify a scratch directory that will be used for storage of temporary files. These files will be removed automatically by the program. at the end of the BMI instance. However, this directory will also store the output forcing file if requested by the user as well (will not be deleted in this instance).
+Specify a scratch directory that will be used for storage of temporary files. These files will be removed automatically by the program. at the end of the BMI instance. However, this directory will also store the output NextGen forcing file if requested by the user as well (will not be deleted in this instance).
 - Example- ScratchDir: "./ScratchDir"
 
 ### Output
-Specify whether or not you would like to request a single netcdf output file containg all of the regridded meteorological forcing fields for the domain configuration you set up within the config.yml file. Output: 0=No, 1=Yes
+Specify whether or not you would like to request a single netcdf output file containg all of the regridded meteorological forcing fields for the domain configuration you set up within the config.yml file. Turn off if this is going to be used as a forcing provider BMI. Output: 0=No, 1=Yes
 - Example- Output: 1
 
 ### compressOutput
@@ -129,9 +132,13 @@ This option is for applying an offset to input forcings to use a different forec
 ### NWM_Geogrid
 This option is only for the NWM v3 retorspective forcing module option (27) that requires the geo_em_NWM_DOMAIN.nc file as input for the NextGen Forcings Engine to properly setup up the ESMF grid object for the NWM forcing files since that information is not readily available in the NWM v3 retrospective forcing files. 
 
+### Geopackage
+Specify the given NextGen hydrofabric geopackage that you wish to process into an ESMF compliant unstructured mesh and implement as your targeted domain for NextGen Forcing Engine BMI regridding method. This is required if your grid type is "hydrofabric" and you have not yet constructed the ESMF mesh file yet, which is highlighted in the GeoGridIn variable below.
+- Example- Geopackage: ./NextGen_hydrofabric_v3.gpkg
+
 ### GeogridIn
-Specify a geogrid file (e.g. latitude, longitude, mesh connectivity, elevation, slope) that defines domain to which the forcings are being processed to.
-- Example- GeogridIn: ./geo_em_CONUS.nc
+Specify a ESMF compliant mesh geogrid file (e.g. latitude, longitude, mesh connectivity, elevation, slope) that defines domain to which the forcings are being processed to. This will be produced for you if you have not already processed the hydrofabric geopackage input file that was specified in the Geopackage variable.
+- Example- GeogridIn: ./NextGen_hydrofabric_mesh.nc
 
 ### SpatialMetaIn
 Specify the optional land spatial metadata file. If found, coordinate projection information and coordinate will be translated from to the final output file. This variable is only a special case if the user is specifying the original WRF-Hydro domain from earlier NWM versions. Otherwise, just leave the one blank ('')
@@ -281,6 +288,7 @@ Choose a set of supplemental precipitation file(s) to layer into the final LDASI
 12. CONUS Stage IV NWS Precip
 13. MRMS PrecipFlag precipitation classification file
 14. Custom Frequency Supplementary Precipitation product (sub-hourly precip)
+15. NBM Puerto Rico
 - Example- SuppPcp: [1, 5, 13]
 
 ### SuppPcpForcingTypes
@@ -330,3 +338,7 @@ These are options for specifying custom input NetCDF forcing files (in minutes).
 ### includeLQFrac
 Include LQFRAC variable (liquid fraction of precipitation). Enable if using HRRR, RAP, GFS, MRMS, or NDFD since the forcing field is readily available for use.  
 - Example- includeLQFrac: 1
+
+### project
+Optional argument to specify which project code base you wish to use for NextGen compliant lumped netcdf forcing output. With the divergence of the forcing providers within the NOAA-OWP/ngen-forcing and NGWPC/ngen-forcing code branches, code has been constructed to ensure compatibility with the forcing providers between the two projects. Current options are "noaa_owp" or "ngwpc", with default to "noaa_owp" if not option is specified here. 
+- Example- project: "noaa_owp"

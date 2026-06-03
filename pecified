@@ -1,0 +1,1113 @@
+[1mdiff --git a/regrid.py b/../../../../../NextGen_Forcings_Engine_BMI/NextGen_Forcings_Engine/core/regrid.py[m
+[1mindex f9226ac..62d8ae5 100755[m
+[1m--- a/regrid.py[m
+[1m+++ b/../../../../../NextGen_Forcings_Engine_BMI/NextGen_Forcings_Engine/core/regrid.py[m
+[36m@@ -301,34 +301,36 @@[m [mdef regrid_ak_ext_ana(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+             # Create out regridded numpy arrays to hold the regridded data.[m
+[32m+[m[32m            force_count = 9 if config_options.include_lqfrac else 8[m
+[32m+[m
+             if config_options.grid_type == "gridded":[m
+                 input_forcings.regridded_forcings1 = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local, wrf_hydro_geo_meta.nx_local],[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local, wrf_hydro_geo_meta.nx_local],[m
+                     np.float32,[m
+                 )[m
+                 input_forcings.regridded_forcings2 = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local, wrf_hydro_geo_meta.nx_local],[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local, wrf_hydro_geo_meta.nx_local],[m
+                     np.float32,[m
+                 )[m
+             elif config_options.grid_type == "unstructured":[m
+                 input_forcings.regridded_forcings1 = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local], np.float32[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local], np.float32[m
+                 )[m
+                 input_forcings.regridded_forcings2 = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local], np.float32[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local], np.float32[m
+                 )[m
+                 input_forcings.regridded_forcings1_elem = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local_elem], np.float32[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local_elem], np.float32[m
+                 )[m
+                 input_forcings.regridded_forcings2_elem = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local_elem], np.float32[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local_elem], np.float32[m
+                 )[m
+[31m-            elif config_options.grid_type == "unstructured":[m
+[32m+[m[32m            elif config_options.grid_type == "hydrofabric":[m
+                 input_forcings.regridded_forcings1 = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local], np.float32[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local], np.float32[m
+                 )[m
+                 input_forcings.regridded_forcings2 = np.empty([m
+[31m-                    [9, wrf_hydro_geo_meta.ny_local], np.float32[m
+[32m+[m[32m                    [force_count, wrf_hydro_geo_meta.ny_local], np.float32[m
+                 )[m
+ [m
+         for force_count, nc_var in enumerate(input_forcings.netcdf_var_names):[m
+[36m@@ -1645,7 +1647,7 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+     # exit out of this routine as the regridded fields have already been set to NDV.[m
+     if not os.path.isfile(input_forcings.file_in2):[m
+         if mpi_config.rank == 0:[m
+[31m-            config_options.statusMsg = "No HRRR in_2 file found for this timestep."[m
+[32m+[m[32m            config_options.statusMsg = "No HRRR file found for this timestep."[m
+             err_handler.log_msg(config_options, mpi_config, True)  # log at debug level[m
+         return[m
+ [m
+[36m@@ -1817,6 +1819,7 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                     )[m
+                     err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m
+                     try:[m
+                         input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -2144,9 +2147,7 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                             var_tmp[var_tmp >= 0] = ([m
+                                 100 - var_tmp[var_tmp >= 0][m
+                             ) / 100  # convert frozen fraction to liquid fraction[m
+[31m-                            var_tmp[var_tmp < 0] = ([m
+[31m-                                1.0  # assume all liquid if not specifically given[m
+[31m-                            )[m
+[32m+[m[32m                            var_tmp[var_tmp < 0] = np.nan[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -2165,6 +2166,12 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -2200,6 +2207,9 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to perform mask test on regridded HRRR forcings: "[m
+[36m@@ -2230,6 +2240,9 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                     ][m
+                 # mpi_config.comm.barrier()[m
+ [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m
+             elif config_options.grid_type == "unstructured":[m
+                 # Regrid the input variables.[m
+                 var_tmp = None[m
+[36m@@ -2256,9 +2269,7 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                             var_tmp[var_tmp >= 0] = ([m
+                                 100 - var_tmp[var_tmp >= 0][m
+                             ) / 100  # convert frozen fraction to liquid fraction[m
+[31m-                            var_tmp[var_tmp < 0] = ([m
+[31m-                                1.0  # assume all liquid if not specifically given[m
+[31m-                            )[m
+[32m+[m[32m                            var_tmp[var_tmp < 0] = np.nan[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -2277,6 +2288,12 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -2312,6 +2329,9 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m[41m                    [m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to perform mask test on regridded HRRR forcings: "[m
+[36m@@ -2367,9 +2387,7 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                             var_tmp_elem[var_tmp_elem >= 0] = ([m
+                                 100 - var_tmp_elem[var_tmp_elem >= 0][m
+                             ) / 100  # convert frozen fraction to liquid fraction[m
+[31m-                            var_tmp_elem[var_tmp_elem < 0] = ([m
+[31m-                                1.0  # assume all liquid if not specifically given[m
+[31m-                            )[m
+[32m+[m[32m                            var_tmp_elem[var_tmp_elem < 0] = np.nan[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -2388,6 +2406,12 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask_elem = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask_elem = np.copy(mask_elem)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask_elem[np.isnan(var_sub_tmp_elem)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -2425,6 +2449,9 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                     input_forcings.esmf_field_out_elem.data[[m
+                         np.where(input_forcings.regridded_mask_elem == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+[32m+[m[32m                    input_forcings.esmf_field_out_elem.data[np.isnan(input_forcings.esmf_field_out_elem.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to perform mask test on regridded HRRR forcings: "[m
+[36m@@ -2455,6 +2482,10 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                     ][m
+                 # mpi_config.comm.barrier()[m
+ [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m[32m                mask_elem[:] = prev_mask_elem[m
+[32m+[m
+             elif config_options.grid_type == "hydrofabric":[m
+                 # Regrid the input variables.[m
+                 var_tmp = None[m
+[36m@@ -2481,9 +2512,7 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                             var_tmp[var_tmp >= 0] = ([m
+                                 100 - var_tmp[var_tmp >= 0][m
+                             ) / 100  # convert frozen fraction to liquid fraction[m
+[31m-                            var_tmp[var_tmp < 0] = ([m
+[31m-                                1.0  # assume all liquid if not specifically given[m
+[31m-                            )[m
+[32m+[m[32m                            var_tmp[var_tmp < 0] = np.nan[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -2502,6 +2531,12 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -2537,6 +2572,9 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to perform mask test on regridded HRRR forcings: "[m
+[36m@@ -2566,6 +2604,9 @@[m [mdef regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co[m
+                         input_forcings.input_map_output[force_count], :[m
+                     ][m
+                 # mpi_config.comm.barrier()[m
+[32m+[m[41m                [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+ [m
+     finally:[m
+         # Close the temporary NetCDF file and remove it.[m
+[36m@@ -2625,12 +2666,17 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+         return[m
+ [m
+     # Create a path for a temporary NetCDF file[m
+[31m-    file_name = f"RAP_CONUS_TMP-{mkfilename()}.nc"[m
+[32m+[m[32m    file_name = f"RAP_CONUS_BGRB-{mkfilename()}.nc"[m
+     file_uuid = str(mpi_config.uid64)[m
+     input_forcings.tmpFile = str([m
+         Path(config_options.scratch_dir) / f"{file_uuid}_{file_name}"[m
+     )[m
+ [m
+[32m+[m[32m    file_name = f"RAP_CONUS_PGRB-{mkfilename()}.nc"[m
+[32m+[m[32m    input_forcings.tmpFile2 = str([m
+[32m+[m[32m        Path(config_options.scratch_dir) / f"{file_uuid}_{file_name}"[m
+[32m+[m[32m    )[m
+[32m+[m
+     err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+     id_tmp = None[m
+[36m@@ -2670,7 +2716,7 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     "{}-{} hour acc fcst".format([m
+                         input_forcings.fcst_hour1, input_forcings.fcst_hour2[m
+                     )[m
+[31m-                    if grib_var in ("APCP", "FROZR")[m
+[32m+[m[32m                    if grib_var in ("APCP")[m
+                     else str(input_forcings.fcst_hour2) + " hour fcst"[m
+                 )[m
+                 fields.append([m
+[36m@@ -2684,6 +2730,19 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 )[m
+             fields.append(":(HGT):(surface):")[m
+ [m
+[32m+[m[32m            # categorical precip for liquid fraction[m
+[32m+[m[32m            fields.append(":(CFRZR):(surface):")[m
+[32m+[m[32m            fields.append(":(CICEP):(surface):")[m
+[32m+[m[32m            fields.append(":(CSNOW):(surface):")[m
+[32m+[m[32m            fields.append(":(CRAIN):(surface):")[m
+[32m+[m
+[32m+[m[32m            # dynamic lapse rate[m
+[32m+[m[32m            if input_forcings.t2dDownscaleOpt == 3:[m
+[32m+[m[32m                fields.append(":(HGT):(12 hybrid level):")[m
+[32m+[m[32m                fields.append(":(TMP):(12 hybrid level):")[m
+[32m+[m
+[32m+[m
+[32m+[m
+             # Create a temporary NetCDF file from the GRIB2 file.[m
+             if WGRIB2_env:[m
+                 cmd = ([m
+[36m@@ -2694,8 +2753,18 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     + " -netcdf "[m
+                     + input_forcings.tmpFile[m
+                 )[m
+[32m+[m
+[32m+[m[32m                cmd2 = ([m
+[32m+[m[32m                    '$WGRIB2 -match "('[m
+[32m+[m[32m                    + "|".join(fields)[m
+[32m+[m[32m                    + ')" '[m
+[32m+[m[32m                    + input_forcings.file_in2.replace("bgrb", "pgrb")[m
+[32m+[m[32m                    + " -netcdf "[m
+[32m+[m[32m                    + input_forcings.tmpFile2[m
+[32m+[m[32m                )[m
+             else:[m
+                 cmd = "(" + "|".join(fields) + ")"[m
+[32m+[m[32m                cmd2 = "(" + "|".join(fields) + ")"[m
+ [m
+             id_tmp = ioMod.open_grib2([m
+                 input_forcings.file_in2,[m
+[36m@@ -2707,6 +2776,18 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 special_case=False,[m
+             )[m
+             err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m
+[32m+[m[32m            id_tmp2 = ioMod.open_grib2([m
+[32m+[m[32m                input_forcings.file_in2.replace("bgrb", "pgrb"),[m
+[32m+[m[32m                input_forcings.tmpFile2,[m
+[32m+[m[32m                cmd2,[m
+[32m+[m[32m                config_options,[m
+[32m+[m[32m                mpi_config,[m
+[32m+[m[32m                inputVar=None,[m
+[32m+[m[32m                special_case=False,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m
+         else:[m
+             create_link([m
+                 "RAP",[m
+[36m@@ -2719,6 +2800,17 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 input_forcings.tmpFile, config_options, mpi_config[m
+             )[m
+ [m
+[32m+[m[32m            create_link([m
+[32m+[m[32m                "RAP",[m
+[32m+[m[32m                input_forcings.file_in2.replace("bgrb", "pgrb"),[m
+[32m+[m[32m                input_forcings.tmpFile2,[m
+[32m+[m[32m                config_options,[m
+[32m+[m[32m                mpi_config,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            id_tmp2 = ioMod.open_netcdf_forcing([m
+[32m+[m[32m                input_forcings.tmpFile2, config_options, mpi_config[m
+[32m+[m[32m            )[m
+[32m+[m
+         for force_count, grib_var in enumerate(input_forcings.grib_vars):[m
+             if mpi_config.rank == 0:[m
+                 config_options.statusMsg = "Processing Conus RAP Variable: " + grib_var[m
+[36m@@ -2726,7 +2818,9 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     config_options, mpi_config, True[m
+                 )  # log at debug level[m
+ [m
+[31m-            calc_regrid_flag = check_regrid_status([m
+[32m+[m
+[32m+[m[32m            if grib_var != "LQFRAC":[m
+[32m+[m[32m                calc_regrid_flag = check_regrid_status([m
+                 id_tmp,[m
+                 force_count,[m
+                 input_forcings,[m
+[36m@@ -2734,7 +2828,9 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 wrf_hydro_geo_meta,[m
+                 mpi_config,[m
+             )[m
+[31m-            err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m[32m                err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                calc_regrid_flag = False[m
+ [m
+             if calc_regrid_flag:[m
+                 if mpi_config.rank == 0:[m
+[36m@@ -2753,15 +2849,6 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+                 # Read in the RAP height field, which is used for downscaling purposes.[m
+[31m-                # if mpi_config.rank == 0:[m
+[31m-                #     config_options.statusMsg = "Reading in RAP elevation data."[m
+[31m-                #     err_handler.log_msg(config_options, mpi_config, True)  # log at debug level[m
+[31m-                # cmd = "$WGRIB2 " + input_forcings.file_in2 + " -match " + \[m
+[31m-                #       "\":(HGT):(surface):\" " + \[m
+[31m-                #       " -netcdf " + input_forcings.tmpFileHeight[m
+[31m-                # id_tmp_height = ioMod.open_grib2(input_forcings.file_in2, input_forcings.tmpFileHeight,[m
+[31m-                #                                  cmd, config_options, mpi_config, 'HGT_surface')[m
+[31m-                # err_handler.check_program_status(config_options, mpi_config)[m
+                 if config_options.grid_type == "gridded":[m
+                     # Regrid the height variable.[m
+                     var_tmp = None[m
+[36m@@ -2819,6 +2906,7 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                         input_forcings.esmf_field_out.data[[m
+                             np.where(input_forcings.regridded_mask == 0)[m
+                         ] = config_options.globalNdv[m
+[32m+[m
+                     except (ValueError, ArithmeticError) as npe:[m
+                         config_options.errMsg = ([m
+                             "Unable to perform mask search on RAP elevation data: "[m
+[36m@@ -2894,6 +2982,7 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                         input_forcings.esmf_field_out.data[[m
+                             np.where(input_forcings.regridded_mask == 0)[m
+                         ] = config_options.globalNdv[m
+[32m+[m
+                     except (ValueError, ArithmeticError) as npe:[m
+                         config_options.errMsg = ([m
+                             "Unable to perform mask search on RAP elevation data: "[m
+[36m@@ -2968,6 +3057,7 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                         input_forcings.esmf_field_out_elem.data[[m
+                             np.where(input_forcings.regridded_mask_elem == 0)[m
+                         ] = config_options.globalNdv[m
+[32m+[m
+                     except (ValueError, ArithmeticError) as npe:[m
+                         config_options.errMsg = ([m
+                             "Unable to perform mask search on RAP elevation data: "[m
+[36m@@ -3045,6 +3135,7 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                         input_forcings.esmf_field_out.data[[m
+                             np.where(input_forcings.regridded_mask == 0)[m
+                         ] = config_options.globalNdv[m
+[32m+[m
+                     except (ValueError, ArithmeticError) as npe:[m
+                         config_options.errMsg = ([m
+                             "Unable to perform mask search on RAP elevation data: "[m
+[36m@@ -3063,31 +3154,23 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                         err_handler.log_critical(config_options, mpi_config)[m
+                     err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[31m-                # Close the temporary NetCDF file and remove it.[m
+[31m-                # if mpi_config.rank == 0:[m
+[31m-                #     try:[m
+[31m-                #         id_tmp_height.close()[m
+[31m-                #     except OSError:[m
+[31m-                #         config_options.errMsg = "Unable to close temporary file: " + input_forcings.tmpFileHeight[m
+[31m-                #         err_handler.log_critical(config_options, mpi_config)[m
+[31m-                #[m
+[31m-                #     try:[m
+[31m-                #         os_utils.os_remove_retry(input_forcings.tmpFileHeight)[m
+[31m-                #     except OSError:[m
+[31m-                #         config_options.errMsg = "Unable to remove temporary file: " + input_forcings.tmpFileHeight[m
+[31m-                #         err_handler.log_critical(config_options, mpi_config)[m
+[31m-                # err_handler.check_program_status(config_options, mpi_config)[m
+[31m-[m
+             if config_options.grid_type == "gridded":[m
+                 # Regrid the input variables.[m
+                 var_tmp = None[m
+                 if mpi_config.rank == 0:[m
+                     try:[m
+[31m-                        var_tmp = id_tmp.variables[[m
+[31m-                            input_forcings.netcdf_var_names[force_count][m
+[31m-                        ][0, :, :][m
+[31m-                        if grib_var in ("APCP", "FROZR"):[m
+[31m-                            var_tmp /= 3600  # convert hourly accumulated precip to instantaneous rate[m
+[32m+[m[32m                        if grib_var == "LQFRAC":[m
+[32m+[m[32m                            var_tmp_CFRZR = id_tmp2.variables['CFRZR_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CICEP = id_tmp2.variables['CICEP_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CSNOW = id_tmp2.variables['CSNOW_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CRAIN = id_tmp2.variables['CRAIN_surface'][0, :, :][m
+[32m+[m
+[32m+[m[32m                            var_tmp = var_tmp_CRAIN / (var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+1)[m
+[32m+[m[32m                            var_tmp = np.where(var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+var_tmp_CRAIN == 0, np.nan, var_tmp)       # flag for temperature partitioning[m
+[32m+[m[32m                        else:[m
+[32m+[m[32m                            var_tmp = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][0, :, :][m
+[32m+[m[32m                            if grib_var in ("APCP",):[m
+[32m+[m[32m                                var_tmp /= 3600     # convert hourly accumulated precip to instantaneous rate[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -3106,6 +3189,11 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'LQFRAC':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -3140,9 +3228,12 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+ [m
+                 # Set any pixel cells outside the input domain to the global missing value.[m
+                 try:[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask calculation on RAP variable: "[m
+[36m@@ -3154,34 +3245,13 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[31m-                if force_count < 8:[m
+[31m-                    try:[m
+[31m-                        input_forcings.regridded_forcings2[[m
+[31m-                            input_forcings.input_map_output[force_count], :, :[m
+[31m-                        ] = input_forcings.esmf_field_out.data[m
+[31m-                    except (ValueError, KeyError, AttributeError) as err:[m
+[31m-                        config_options.errMsg = ([m
+[31m-                            "Unable to place RAP ESMF data into local array: "[m
+[31m-                            + str(err)[m
+[31m-                        )[m
+[31m-                        err_handler.log_critical(config_options, mpi_config)[m
+[31m-                    err_handler.check_program_status(config_options, mpi_config)[m
+[31m-                else:[m
+[31m-                    # handle liquid-phase precip calculation[m
+[31m-                    RAINRATE = 3  # TODO: determine this programmatically[m
+[31m-                    total_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.regridded_forcings2[RAINRATE],[m
+[31m-                        config_options.globalNdv,[m
+[31m-                    )[m
+[31m-                    frozn_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.esmf_field_out.data, config_options.globalNdv[m
+[31m-                    )[m
+[31m-                    # LOG.debug(f"rank {mpi_config.rank} has {(frozn_pcp > total_pcp).sum()} instances of frozn_pcp > total_pcp")[m
+[31m-                    frz_fract = frozn_pcp / total_pcp[m
+[31m-                    frz_fract[frz_fract > 1] = 1[m
+[31m-                    input_forcings.regridded_forcings2[[m
+[31m-                        input_forcings.input_map_output[force_count], :, :[m
+[31m-                    ] = (1 - frz_fract).filled(1.0)[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :] = \[m
+[32m+[m[32m                        input_forcings.esmf_field_out.data[m
+[32m+[m[32m                except (ValueError, KeyError, AttributeError) as err:[m
+[32m+[m[32m                    config_options.errMsg = "Unable to place RAP ESMF data into local gridded array: " + str(err)[m
+[32m+[m[32m                    err_handler.log_critical(config_options, mpi_config)[m
+[32m+[m[32m                err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+                 # If we are on the first timestep, set the previous regridded field to be[m
+                 # the latest as there are no states for time 0.[m
+[36m@@ -3198,11 +3268,18 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 var_tmp = None[m
+                 if mpi_config.rank == 0:[m
+                     try:[m
+[31m-                        var_tmp = id_tmp.variables[[m
+[31m-                            input_forcings.netcdf_var_names[force_count][m
+[31m-                        ][0, :, :][m
+[31m-                        if grib_var in ("APCP", "FROZR"):[m
+[31m-                            var_tmp /= 3600  # convert hourly accumulated precip to instantaneous rate[m
+[32m+[m[32m                        if grib_var == "LQFRAC":[m
+[32m+[m[32m                            var_tmp_CFRZR = id_tmp2.variables['CFRZR_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CICEP = id_tmp2.variables['CICEP_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CSNOW = id_tmp2.variables['CSNOW_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CRAIN = id_tmp2.variables['CRAIN_surface'][0, :, :][m
+[32m+[m
+[32m+[m[32m                            var_tmp = var_tmp_CRAIN / (var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+1)[m
+[32m+[m[32m                            var_tmp = np.where(var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+var_tmp_CRAIN == 0, np.nan, var_tmp)       # flag for temperature partitioning[m
+[32m+[m[32m                        else:[m
+[32m+[m[32m                            var_tmp = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][0, :, :][m
+[32m+[m[32m                            if grib_var in ("APCP",):[m
+[32m+[m[32m                                var_tmp /= 3600     # convert hourly accumulated precip to instantaneous rate[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -3221,6 +3298,12 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'LQFRAC':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -3255,9 +3338,12 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+ [m
+                 # Set any pixel cells outside the input domain to the global missing value.[m
+                 try:[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask calculation on RAP variable: "[m
+[36m@@ -3269,34 +3355,13 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[31m-                if force_count < 8:[m
+[31m-                    try:[m
+[31m-                        input_forcings.regridded_forcings2[[m
+[31m-                            input_forcings.input_map_output[force_count], :[m
+[31m-                        ] = input_forcings.esmf_field_out.data[m
+[31m-                    except (ValueError, KeyError, AttributeError) as err:[m
+[31m-                        config_options.errMsg = ([m
+[31m-                            "Unable to place RAP ESMF data into local array: "[m
+[31m-                            + str(err)[m
+[31m-                        )[m
+[31m-                        err_handler.log_critical(config_options, mpi_config)[m
+[31m-                    err_handler.check_program_status(config_options, mpi_config)[m
+[31m-                else:[m
+[31m-                    # handle liquid-phase precip calculation[m
+[31m-                    RAINRATE = 3  # TODO: determine this programmatically[m
+[31m-                    total_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.regridded_forcings2[RAINRATE],[m
+[31m-                        config_options.globalNdv,[m
+[31m-                    )[m
+[31m-                    frozn_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.esmf_field_out.data, config_options.globalNdv[m
+[31m-                    )[m
+[31m-                    # LOG.debug(f"rank {mpi_config.rank} has {(frozn_pcp > total_pcp).sum()} instances of frozn_pcp > total_pcp")[m
+[31m-                    frz_fract = frozn_pcp / total_pcp[m
+[31m-                    frz_fract[frz_fract > 1] = 1[m
+[31m-                    input_forcings.regridded_forcings2[[m
+[31m-                        input_forcings.input_map_output[force_count], :[m
+[31m-                    ] = (1 - frz_fract).filled(1.0)[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :] = \[m
+[32m+[m[32m                        input_forcings.esmf_field_out.data[m
+[32m+[m[32m                except (ValueError, KeyError, AttributeError) as err:[m
+[32m+[m[32m                    config_options.errMsg = "Unable to place RAP ESMF data into local unstructured node array: " + str(err)[m
+[32m+[m[32m                    err_handler.log_critical(config_options, mpi_config)[m
+[32m+[m[32m                err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+                 # If we are on the first timestep, set the previous regridded field to be[m
+                 # the latest as there are no states for time 0.[m
+[36m@@ -3308,15 +3373,25 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     ][m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m
+                 # Regrid the input variables.[m
+                 var_tmp_elem = None[m
+                 if mpi_config.rank == 0:[m
+                     try:[m
+[31m-                        var_tmp_elem = id_tmp.variables[[m
+[31m-                            input_forcings.netcdf_var_names[force_count][m
+[31m-                        ][0, :, :][m
+[31m-                        if grib_var in ("APCP", "FROZR"):[m
+[31m-                            var_tmp_elem /= 3600  # convert hourly accumulated precip to instantaneous rate[m
+[32m+[m[32m                        if grib_var == "LQFRAC":[m
+[32m+[m[32m                            var_tmp_CFRZR = id_tmp2.variables['CFRZR_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CICEP = id_tmp2.variables['CICEP_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CSNOW = id_tmp2.variables['CSNOW_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CRAIN = id_tmp2.variables['CRAIN_surface'][0, :, :][m
+[32m+[m
+[32m+[m[32m                            var_tmp_elem = var_tmp_CRAIN / (var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+1)[m
+[32m+[m[32m                            var_tmp_elem = np.where(var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+var_tmp_CRAIN == 0, np.nan, var_tmp_elem)       # flag for temperature partitioning[m
+[32m+[m[32m                        else:[m
+[32m+[m[32m                            var_tmp_elem = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][0, :, :][m
+[32m+[m[32m                            if grib_var in ("APCP",):[m
+[32m+[m[32m                                var_tmp_elem /= 3600     # convert hourly accumulated precip to instantaneous rate[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -3335,6 +3410,12 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask_elem = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask_elem = np.copy(mask_elem)[m
+[32m+[m[32m                if grib_var == 'LQFRAC':[m
+[32m+[m[32m                    mask_elem[np.isnan(var_sub_tmp_elem)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -3371,9 +3452,12 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+ [m
+                 # Set any pixel cells outside the input domain to the global missing value.[m
+                 try:[m
+[32m+[m[32m                    input_forcings.esmf_field_out_elem.data[np.isnan(input_forcings.esmf_field_out_elem.data)] = -50[m
+[32m+[m
+                     input_forcings.esmf_field_out_elem.data[[m
+                         np.where(input_forcings.regridded_mask_elem == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask calculation on RAP variable: "[m
+[36m@@ -3385,35 +3469,14 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[31m-                if force_count < 8:[m
+[31m-                    try:[m
+[31m-                        input_forcings.regridded_forcings2_elem[[m
+[31m-                            input_forcings.input_map_output[force_count], :[m
+[31m-                        ] = input_forcings.esmf_field_out_elem.data[m
+[31m-                    except (ValueError, KeyError, AttributeError) as err:[m
+[31m-                        config_options.errMsg = ([m
+[31m-                            "Unable to place RAP ESMF element data into local array: "[m
+[31m-                            + str(err)[m
+[31m-                        )[m
+[31m-                        err_handler.log_critical(config_options, mpi_config)[m
+[31m-                    err_handler.check_program_status(config_options, mpi_config)[m
+[31m-                else:[m
+[31m-                    # handle liquid-phase precip calculation[m
+[31m-                    RAINRATE = 3  # TODO: determine this programmatically[m
+[31m-                    total_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.regridded_forcings2_elem[RAINRATE],[m
+[31m-                        config_options.globalNdv,[m
+[31m-                    )[m
+[31m-                    frozn_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.esmf_field_out_elem.data,[m
+[31m-                        config_options.globalNdv,[m
+[31m-                    )[m
+[31m-                    # LOG.debug(f"rank {mpi_config.rank} has {(frozn_pcp > total_pcp).sum()} instances of frozn_pcp > total_pcp")[m
+[31m-                    frz_fract = frozn_pcp / total_pcp[m
+[31m-                    frz_fract[frz_fract > 1] = 1[m
+[31m-                    input_forcings.regridded_forcings2_elem[[m
+[31m-                        input_forcings.input_map_output[force_count], :[m
+[31m-                    ] = (1 - frz_fract).filled(1.0)[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    input_forcings.regridded_forcings2_elem[input_forcings.input_map_output[force_count], :] = \[m
+[32m+[m[32m                        input_forcings.esmf_field_out.data[m
+[32m+[m[32m                except (ValueError, KeyError, AttributeError) as err:[m
+[32m+[m[32m                    config_options.errMsg = "Unable to place RAP ESMF data into local unstructured elem array: " + str(err)[m
+[32m+[m[32m                    err_handler.log_critical(config_options, mpi_config)[m
+[32m+[m[32m                err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m
+ [m
+                 # If we are on the first timestep, set the previous regridded field to be[m
+                 # the latest as there are no states for time 0.[m
+[36m@@ -3425,16 +3488,27 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     ][m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m[32m                mask_elem[:] = prev_mask_elem[m
+[32m+[m
+             elif config_options.grid_type == "hydrofabric":[m
+                 # Regrid the input variables.[m
+                 var_tmp = None[m
+                 if mpi_config.rank == 0:[m
+                     try:[m
+[31m-                        var_tmp = id_tmp.variables[[m
+[31m-                            input_forcings.netcdf_var_names[force_count][m
+[31m-                        ][0, :, :][m
+[31m-                        if grib_var in ("APCP", "FROZR"):[m
+[31m-                            var_tmp /= 3600  # convert hourly accumulated precip to instantaneous rate[m
+[32m+[m[32m                        if grib_var == "LQFRAC":[m
+[32m+[m[32m                            var_tmp_CFRZR = id_tmp2.variables['CFRZR_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CICEP = id_tmp2.variables['CICEP_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CSNOW = id_tmp2.variables['CSNOW_surface'][0, :, :][m
+[32m+[m[32m                            var_tmp_CRAIN = id_tmp2.variables['CRAIN_surface'][0, :, :][m
+[32m+[m
+[32m+[m[32m                            var_tmp = var_tmp_CRAIN / (var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+1)[m
+[32m+[m[32m                            var_tmp = np.where(var_tmp_CFRZR+var_tmp_CSNOW+var_tmp_CICEP+var_tmp_CRAIN == 0, np.nan, var_tmp)       # flag for temperature partitioning[m
+[32m+[m[32m                        else:[m
+[32m+[m[32m                            var_tmp = id_tmp.variables[input_forcings.netcdf_var_names[force_count]][0, :, :][m
+[32m+[m[32m                            if grib_var in ("APCP",):[m
+[32m+[m[32m                                var_tmp /= 3600     # convert hourly accumulated precip to instantaneous rate[m
+                     except (ValueError, KeyError, AttributeError) as err:[m
+                         config_options.errMsg = ([m
+                             "Unable to extract: "[m
+[36m@@ -3453,6 +3527,12 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                 )[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'LQFRAC':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -3487,9 +3567,12 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+ [m
+                 # Set any pixel cells outside the input domain to the global missing value.[m
+                 try:[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask calculation on RAP variable: "[m
+[36m@@ -3501,34 +3584,13 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[31m-                if force_count < 8:[m
+[31m-                    try:[m
+[31m-                        input_forcings.regridded_forcings2[[m
+[31m-                            input_forcings.input_map_output[force_count], :[m
+[31m-                        ] = input_forcings.esmf_field_out.data[m
+[31m-                    except (ValueError, KeyError, AttributeError) as err:[m
+[31m-                        config_options.errMsg = ([m
+[31m-                            "Unable to place RAP ESMF data into local array: "[m
+[31m-                            + str(err)[m
+[31m-                        )[m
+[31m-                        err_handler.log_critical(config_options, mpi_config)[m
+[31m-                    err_handler.check_program_status(config_options, mpi_config)[m
+[31m-                else:[m
+[31m-                    # handle liquid-phase precip calculation[m
+[31m-                    RAINRATE = 3  # TODO: determine this programmatically[m
+[31m-                    total_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.regridded_forcings2[RAINRATE],[m
+[31m-                        config_options.globalNdv,[m
+[31m-                    )[m
+[31m-                    frozn_pcp = np.ma.masked_values([m
+[31m-                        input_forcings.esmf_field_out.data, config_options.globalNdv[m
+[31m-                    )[m
+[31m-                    # LOG.debug(f"rank {mpi_config.rank} has {(frozn_pcp > total_pcp).sum()} instances of frozn_pcp > total_pcp")[m
+[31m-                    frz_fract = frozn_pcp / total_pcp[m
+[31m-                    frz_fract[frz_fract > 1] = 1[m
+[31m-                    input_forcings.regridded_forcings2[[m
+[31m-                        input_forcings.input_map_output[force_count], :[m
+[31m-                    ] = (1 - frz_fract).filled(1.0)[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :] = \[m
+[32m+[m[32m                        input_forcings.esmf_field_out.data[m
+[32m+[m[32m                except (ValueError, KeyError, AttributeError) as err:[m
+[32m+[m[32m                    config_options.errMsg = "Unable to place RAP ESMF data into local hydrofaborc elem array: " + str(err)[m
+[32m+[m[32m                    err_handler.log_critical(config_options, mpi_config)[m
+[32m+[m[32m                err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+                 # If we are on the first timestep, set the previous regridded field to be[m
+                 # the latest as there are no states for time 0.[m
+[36m@@ -3539,6 +3601,10 @@[m [mdef regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con[m
+                         input_forcings.input_map_output[force_count], :[m
+                     ][m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m[41m                [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m
+ [m
+     finally:[m
+         # Close the temporary NetCDF file and remove it.[m
+[36m@@ -7602,20 +7668,15 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+ [m
+             if grib_var == "CPOFP":[m
+                 if mpi_config.rank == 0:[m
+[31m-                    # LOG.debug(f"CPOFP stats, min={var_tmp[var_tmp > 0].min()} mean={var_tmp[var_tmp > 0].mean()} max={var_tmp[var_tmp > 0].max()}")[m
+                     var_tmp[var_tmp >= 0] = ([m
+                         100 - var_tmp[var_tmp >= 0][m
+                     ) / 100  # convert frozen fraction to liquid fraction[m
+[31m-                    var_tmp[var_tmp < 0] = ([m
+[31m-                        1.0  # assume all liquid if not specifically given[m
+[31m-                    )[m
+[32m+[m[32m                    var_tmp[var_tmp < 0] = np.nan # flag as missing so we use temperature partitioning[m
+                     if config_options.grid_type == "unstructured":[m
+                         var_tmp_elem[var_tmp_elem >= 0] = ([m
+                             100 - var_tmp_elem[var_tmp_elem >= 0][m
+                         ) / 100  # convert frozen fraction to liquid fraction[m
+[31m-                        var_tmp_elem[var_tmp_elem < 0] = ([m
+[31m-                            1.0  # assume all liquid if not specifically given[m
+[31m-                        )[m
+[32m+[m[32m                        var_tmp_elem[var_tmp_elem < 0] = np.nan # flag as missing so we use temperature partitioning[m
+ [m
+             if config_options.grid_type == "gridded":[m
+                 var_sub_tmp = mpi_config.scatter_array([m
+[36m@@ -7642,6 +7703,13 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+             if config_options.grid_type == "gridded":[m
+[32m+[m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -7651,7 +7719,14 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     )[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+[31m-            if config_options.grid_type == "unstructured":[m
+[32m+[m[32m            elif config_options.grid_type == "unstructured":[m
+[32m+[m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -7661,6 +7736,13 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     )[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask_elem = input_forcings.esmf_grid_in_elem.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask_elem = np.copy(mask_elem)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask_elem[np.isnan(var_sub_tmp_elem)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -7671,6 +7753,13 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+             elif config_options.grid_type == "hydrofabric":[m
+[32m+[m
+[32m+[m[32m                # mask out missing frozen fraction[m
+[32m+[m[32m                mask = input_forcings.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m                prev_mask = np.copy(mask)[m
+[32m+[m[32m                if grib_var == 'CPOFP':[m
+[32m+[m[32m                    mask[np.isnan(var_sub_tmp)] = 0[m
+[32m+[m
+                 try:[m
+                     input_forcings.esmf_field_in.data[:, :] = var_sub_tmp[m
+                 except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -7721,6 +7810,9 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask search on GFS variable: "[m
+[36m@@ -7753,6 +7845,9 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     ][m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m
+             elif config_options.grid_type == "unstructured":[m
+                 if mpi_config.rank == 0:[m
+                     config_options.statusMsg = ([m
+[36m@@ -7793,6 +7888,9 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask search on GFS variable: "[m
+[36m@@ -7866,6 +7964,9 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     input_forcings.esmf_field_out_elem.data[[m
+                         np.where(input_forcings.regridded_mask_elem == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+[32m+[m[32m                    input_forcings.esmf_field_out_elem.data[np.isnan(input_forcings.esmf_field_out_elem.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask search on GFS variable: "[m
+[36m@@ -7898,6 +7999,10 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     ][m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m[32m                mask_elem[:] = prev_mask_elem[m
+[32m+[m
+             elif config_options.grid_type == "hydrofabric":[m
+                 if mpi_config.rank == 0:[m
+                     config_options.statusMsg = ([m
+[36m@@ -7938,6 +8043,9 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     input_forcings.esmf_field_out.data[[m
+                         np.where(input_forcings.regridded_mask == 0)[m
+                     ] = config_options.globalNdv[m
+[32m+[m
+[32m+[m[32m                    input_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50[m
+[32m+[m
+                 except (ValueError, ArithmeticError) as npe:[m
+                     config_options.errMsg = ([m
+                         "Unable to run mask search on GFS variable: "[m
+[36m@@ -7969,6 +8077,9 @@[m [mdef regrid_gfs(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                         input_forcings.input_map_output[force_count], :[m
+                     ][m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m[32m                # reset precip mask[m
+[32m+[m[32m                mask[:] = prev_mask[m
+[32m+[m
+ [m
+     finally:[m
+         # Close the temporary NetCDF file and remove it.[m
+[36m@@ -9947,8 +10058,13 @@[m [mdef regrid_mrms_precip_flag([m
+     var_sub_tmp = mpi_config.scatter_array(supplemental_precip, var_tmp, config_options)[m
+     err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m    mask = supplemental_precip.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m    prev_mask = np.copy(mask)[m
+[32m+[m[32m    mask[np.where(var_sub_tmp < 0)] = 0[m
+[32m+[m
+[32m+[m[41m   [m
+     try:[m
+[31m-        var_sub_tmp[var_sub_tmp <= 0] = 1.0  # all liquid if no other category[m
+[32m+[m[32m        var_sub_tmp[var_sub_tmp <= 0] = np.nan  # flag for temperature partitioning if not specified[m[41m [m
+         var_sub_tmp[var_sub_tmp == 3] = 0.0  # snow[m
+         var_sub_tmp[var_sub_tmp == 7] = 0.0  # hail[m
+         var_sub_tmp[var_sub_tmp > 0] = 1.0  # all other liquid categories[m
+[36m@@ -9972,14 +10088,14 @@[m [mdef regrid_mrms_precip_flag([m
+         err_handler.log_critical(config_options, mpi_config)[m
+     err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[31m-    # Set any missing data or pixel cells outside the input domain to a default of 100%[m
+[32m+[m[32m    # Set any missing data or pixel cells outside the input domain to use temperature partitioning[m
+     try:[m
+         supplemental_precip.esmf_field_out.data[[m
+             np.where(supplemental_precip.regridded_mask == 0)[m
+[31m-        ] = 1.0[m
+[32m+[m[32m        ] = config_options.globalNdv[m
+         supplemental_precip.esmf_field_out.data[[m
+[31m-            np.where(supplemental_precip.esmf_field_out.data < 0)[m
+[31m-        ] = 1.0[m
+[32m+[m[32m            np.isnan(supplemental_precip.esmf_field_out.data)[m
+[32m+[m[32m        ] = config_options.globalNdv[m
+     except (ValueError, ArithmeticError) as npe:[m
+         config_options.errMsg = "Unable to run mask search on MRMS PrecipFlag: " + str([m
+             npe[m
+[36m@@ -10025,13 +10141,16 @@[m [mdef regrid_mrms_precip_flag([m
+         )[m
+         err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m        # mask out missing frozen fraction[m
+[32m+[m[32m        mask_elem = supplemental_precip.esmf_grid_in.get_item(ESMF.GridItem.MASK)[m
+[32m+[m[32m        prev_mask_elem = np.copy(mask_elem)[m
+[32m+[m[32m        mask_elem[np.where(var_sub_tmp_elem < 0)] = 0[m
+[32m+[m
+         try:[m
+[31m-            var_sub_tmp_elem[var_sub_tmp_elem <= 0] = ([m
+[31m-                1.0  # all liquid if no other category[m
+[31m-            )[m
+[31m-            var_sub_tmp_elem[var_sub_tmp_elem == 3] = 0.0  # snow[m
+[31m-            var_sub_tmp_elem[var_sub_tmp_elem == 7] = 0.0  # hail[m
+[31m-            var_sub_tmp_elem[var_sub_tmp_elem > 0] = 1.0  # all other liquid categories[m
+[32m+[m[32m            var_sub_tmp_elem[var_sub_tmp_elem <= 0] = np.nan       # flag for temperature partitioning if not specified[m
+[32m+[m[32m            var_sub_tmp_elem[var_sub_tmp_elem == 3] = 0.0         # snow[m
+[32m+[m[32m            var_sub_tmp_elem[var_sub_tmp_elem == 7] = 0.0         # hail[m
+[32m+[m[32m            var_sub_tmp_elem[var_sub_tmp_elem >  0] = 1.0         # all other liquid categories[m
+ [m
+             supplemental_precip.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem[m
+         except (ValueError, KeyError, AttributeError) as err:[m
+[36m@@ -10058,7 +10177,7 @@[m [mdef regrid_mrms_precip_flag([m
+                 np.where(supplemental_precip.regridded_mask_elem == 0)[m
+             ] = 1.0[m
+             supplemental_precip.esmf_field_out_elem.data[[m
+[31m-                np.where(supplemental_precip.esmf_field_out_elem.data < 0)[m
+[32m+[m[32m                np.isnan(supplemental_precip.esmf_field_out_elem.data)[m
+             ] = 1.0[m
+         except (ValueError, ArithmeticError) as npe:[m
+             config_options.errMsg = ([m
+[36m@@ -10079,6 +10198,11 @@[m [mdef regrid_mrms_precip_flag([m
+                 supplemental_precip.regridded_precip2_elem[:][m
+             )[m
+         err_handler.check_program_status(config_options, mpi_config)[m
+[32m+[m[32m        # reset precip element mask[m
+[32m+[m[32m        mask_elem[:] = prev_mask_elem[m
+[32m+[m[41m        [m
+[32m+[m[32m    # reset precip mask[m
+[32m+[m[32m    mask[:] = prev_mask[m
+ [m
+     # Close the NetCDF file[m
+     if mpi_config.rank == 0:[m
+[36m@@ -12107,6 +12231,9 @@[m [mdef regrid_hourly_nbm([m
+ [m
+     err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m    config_options.statusMsg = forcings_or_precip.file_in1[m
+[32m+[m[32m    err_handler.log_msg(config_options, mpi_config)[m
+[32m+[m
+     config_options.statusMsg = "Processing NBM Variables"[m
+     err_handler.log_msg(config_options, mpi_config)[m
+ [m
+[36m@@ -13238,14 +13365,15 @@[m [mdef regrid_ndfd(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                     err_handler.log_critical(config_options, mpi_config)[m
+                 err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[31m-            # Convert the hourly precipitation total to a rate of mm/s[m
+[32m+[m[32m            # Convert the 6-hourly precipitation total to a rate of mm/s[m
+             if ndfd_var == "qpf":[m
+                 try:[m
+[32m+[m[32m                    hours = 6[m
+                     ind_valid = np.where([m
+                         input_forcings.esmf_field_out.data != config_options.globalNdv[m
+                     )[m
+                     input_forcings.esmf_field_out.data[ind_valid] = ([m
+[31m-                        input_forcings.esmf_field_out.data[ind_valid] / 3600.0[m
+[32m+[m[32m                        input_forcings.esmf_field_out.data[ind_valid] / (hours*3600.0)[m
+                     )[m
+                     if config_options.grid_type == "unstructured":[m
+                         ind_valid = np.where([m
+[36m@@ -13253,7 +13381,7 @@[m [mdef regrid_ndfd(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):[m
+                             != config_options.globalNdv[m
+                         )[m
+                         input_forcings.esmf_field_out_elem.data[ind_valid] = ([m
+[31m-                            input_forcings.esmf_field_out_elem.data[ind_valid] / 3600.0[m
+[32m+[m[32m                            input_forcings.esmf_field_out_elem.data[ind_valid] / (hours*3600.0)[m
+                         )[m
+                     del ind_valid[m
+                 except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:[m
+[36m@@ -14652,6 +14780,10 @@[m [mdef calculate_weights([m
+         err_handler.log_critical(config_options, mpi_config)[m
+     err_handler.check_program_status(config_options, mpi_config)[m
+ [m
+[32m+[m[32m    # Obtain ESMF mask for operational data[m
+[32m+[m[32m    mask = input_forcings.esmf_grid_in.add_item(ESMF.GridItem.MASK, ESMF.StaggerLoc.CENTER)[m
+[32m+[m[32m    mask[:] = np.ones(mask.shape)[m
+[32m+[m[41m  [m
+     # check if we're doing border trimming and set up mask[m
+     border = input_forcings.border  # // 5  # HRRR is a 3 km product[m
+     if border > 0:[m
+[36m@@ -15047,6 +15179,10 @@[m [mdef calculate_supp_pcp_weights([m
+             staggerloc=ESMF.StaggerLoc.CENTER,[m
+             coord_sys=ESMF.CoordSys.SPH_DEG,[m
+         )[m
+[32m+[m
+[32m+[m[32m        # Add ESMF Mask developed for operational product[m
+[32m+[m[32m        supplemental_precip.esmf_grid_in.add_item(ESMF.GridItem.MASK, ESMF.StaggerLoc.CENTER)[m
+[32m+[m
+     except ESMF.ESMPyException as esmf_error:[m
+         config_options.errMsg = ([m
+             "Unable to create source ESMF grid from temporary file: "[m
