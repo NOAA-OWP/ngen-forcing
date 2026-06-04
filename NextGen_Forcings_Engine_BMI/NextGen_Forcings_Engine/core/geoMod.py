@@ -270,12 +270,15 @@ class GriddedGeoMeta(GeoMeta):
         if self.mpi_config.rank == 0:
             try:
                 if self.ndim_lat == 3:
-                    return self.lat_var.shape[2]
+                    nx = self.lat_var.shape[2]
                 elif self.ndim_lat == 2:
-                    return self.lat_var.shape[1]
+                    nx = self.lat_var.shape[1]
                 else:
                     # NOTE Is this correct? using lon_var
-                    return self.lon_var.shape[0]
+                    nx = self.lon_var.shape[0]
+                print(f"[DEBUG GeoMeta] geogrid={self.config_options.geogrid}")
+                print(f"[DEBUG GeoMeta] ndim_lat={self.ndim_lat}, ny_global={self.ny_global}, nx_global={nx}")
+                return nx
             except Exception as e:
                 self.config_options.errMsg = f"Unable to extract X dimension size from {self.config_options.lon_var} in: {self.config_options.geogrid}"
                 log_critical(self.config_options, self.mpi_config)
@@ -396,6 +399,11 @@ class GriddedGeoMeta(GeoMeta):
             # Flag to grab entire array for AWS slicing
             if self.config_options.aws:
                 self.lat_bounds = var_tmp
+            print(f"[DEBUG GeoMeta] lat_var name: {self.config_options.lat_var}")
+            print(f"[DEBUG GeoMeta] latitude_grid shape: {var_tmp.shape}")
+            print(f"[DEBUG GeoMeta] latitude_grid min/max: {var_tmp.min():.4f} / {var_tmp.max():.4f}")
+            print(f"[DEBUG GeoMeta] latitude_grid corners: [0,0]={var_tmp[0,0]:.4f}, [-1,-1]={var_tmp[-1,-1]:.4f}")
+            print(f"[DEBUG GeoMeta] latitude_grid first row mean: {var_tmp[0,:].mean():.4f}, last row mean: {var_tmp[-1,:].mean():.4f}")
         else:
             var_tmp = None
         return var_tmp, "latitude_grid", self.config_options, False
@@ -430,6 +438,10 @@ class GriddedGeoMeta(GeoMeta):
             # Flag to grab entire array for AWS slicing
             if self.config_options.aws:
                 self.lon_bounds = var_tmp
+            print(f"[DEBUG GeoMeta] lon_var name: {self.config_options.lon_var}")
+            print(f"[DEBUG GeoMeta] longitude_grid shape: {var_tmp.shape}")
+            print(f"[DEBUG GeoMeta] longitude_grid min/max: {var_tmp.min():.4f} / {var_tmp.max():.4f}")
+            print(f"[DEBUG GeoMeta] longitude_grid corners: [0,0]={var_tmp[0,0]:.4f}, [-1,-1]={var_tmp[-1,-1]:.4f}")
         else:
             var_tmp = None
 
