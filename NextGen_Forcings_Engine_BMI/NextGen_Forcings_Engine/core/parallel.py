@@ -239,6 +239,9 @@ class MpiConfig:
         if self.config_options is None:
             self.log_debug("Cleanup: config_options is not set")
             return
+        if getattr(self.config_options, "grid_type", None) == "gridded":
+            self.log_debug("Cleanup: skipping geogrid cleanup for gridded mode")
+            return
         geogrid = getattr(self.config_options, "geogrid", None)
         if geogrid is not None:
             self.try_delete_file_no_reraise(geogrid)

@@ -121,6 +121,7 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
         self._job_meta = None
         self._mpi_meta = None
         self.geo_meta = None
+        self.GeoMeta = HydrofabricGeoMeta
         self._grid_type = None
         self._grids = None
         self._grid_map = None
@@ -233,7 +234,7 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
         # Initialize MPI communication
         self._mpi_meta = MpiConfig(self._job_meta)
 
-        self.geo_meta = HydrofabricGeoMeta(self._job_meta, self._mpi_meta)
+        self.geo_meta = self.GeoMeta(self._job_meta, self._mpi_meta)
 
         try:
             comm = MPI.Comm.f2py(self._comm) if self._comm is not None else None
@@ -1605,7 +1606,7 @@ class NWMv3_Forcing_Engine_BMI_model_Gridded(NWMv3_Forcing_Engine_BMI_model_Base
         # will support a BMI field for liquid fraction of precipitation
         self._output_var_names = BMI_MODEL["_output_var_names"]
         self._var_name_units_map = BMI_MODEL["_var_name_units_map"]
-        if self.config_options.include_lqfrac == 1:
+        if self._job_meta.include_lqfrac == 1:
             self._output_var_names += ["LQFRAC_ELEMENT"]
             self._var_name_units_map |= {
                 "LQFRAC_ELEMENT": ["Liquid Fraction of Precipitation", "%"]
