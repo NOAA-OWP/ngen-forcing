@@ -127,12 +127,33 @@ class GeoMeta:
         else:
             return True
 
+    # All config_options attributes that hold geogrid variable names.
+    # Used to select only the needed variables when opening the geogrid file.
+    _GEOGRID_VAR_ATTRS = (
+        "lat_var", "lon_var", "hgt_var", "cosalpha_var", "sinalpha_var",
+        "slope_var", "slope_azimuth_var", "slope_var_elem", "slope_azimuth_var_elem",
+        "nodecoords_var", "elemcoords_var", "elemconn_var", "numelemconn_var",
+        "element_id_var", "hgt_elem_var",
+    )
+
     @cached_property
     def geogrid_ds(self) -> xr.Dataset:
-        """Open the geogrid file and return the xarray dataset object."""
+        """Open the geogrid file and load only the variables needed by this run.
+
+        geo_em_CONUS.nc is ~8.9 GB; loading the whole file with ds.load() exhausts
+        RAM on standard instances. We open lazily, select only the variables
+        referenced by config_options, then load that subset into memory.
+        Global attributes (DX, DY, etc.) are preserved on the subset dataset.
+        """
         try:
             with xr.open_dataset(self.config_options.geogrid) as ds:
-                return ds.load()
+                needed = [
+                    getattr(self.config_options, attr)
+                    for attr in self._GEOGRID_VAR_ATTRS
+                    if getattr(self.config_options, attr, None) is not None
+                    and getattr(self.config_options, attr) in ds
+                ]
+                return ds[needed].load()
         except Exception as e:
             self.config_options.errMsg = "Unable to open geogrid file with xarray"
             log_critical(self.config_options, self.mpi_config)
