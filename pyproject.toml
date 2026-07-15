@@ -51,10 +51,13 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["NextGen_Forcings_Engine_BMI","."]
-include = ["NextGen_Forcings_Engine*", 
-    "Forcing_Extraction_Scripts*", 
+include = ["NextGen_Forcings_Engine*",
+    "Forcing_Extraction_Scripts*",
     "ESMF_Mesh_Domain_Configuration_Production*"]
 namespaces = false
+
+[tool.setuptools.package-data]
+"NextGen_Forcings_Engine_BMI" = ["BMI_NextGen_Configs/config_templates/*.yml"]
 
 [tool.setuptools.dynamic]
 version = { attr = "NextGen_Forcings_Engine.__version__" }

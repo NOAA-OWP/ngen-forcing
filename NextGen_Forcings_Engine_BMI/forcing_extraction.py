@@ -101,7 +101,14 @@ def retrieve_forcing(config_options: ConfigOptions):
             forcing_start_time = forcing_start_time + timedelta(hours=1)
 
         if supp_forcing_hours is not None:
-            forcing_start_time += timedelta(hours=supp_forcing_hours)
+            if supp_forcing_hours > 0 and input_horizons[i] > 0:
+                # Anchor end of window to the forecast horizon so all supp files
+                # are covered. ForecastDownloader extends forward via input_horizon,
+                # but FixedFileDownloader (e.g. MRMS) only looks backward.
+                forcing_start_time = refcstbdate + timedelta(minutes=input_horizons[i])
+            else:
+                forcing_start_time += timedelta(hours=supp_forcing_hours)
+            lookback_hours += supp_forcing_hours
 
         if ana_flag == 1:
             lookback_hours = lookback_hours + 1

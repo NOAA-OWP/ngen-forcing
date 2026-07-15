@@ -181,7 +181,7 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
         :raises RuntimeError: If the configuration file is invalid or missing.
         """
         # This is required prior to the first log message.
-        LOG.bind()
+        # LOG.bind()  # removed: bind() belonged to LoggerWithPayload wrapper (removed in e2c9c34)
 
         LOG.info("---------------------------")
         LOG.info(f"BMI Forcing Engine initialized with {config_file}")
