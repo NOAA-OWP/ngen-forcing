@@ -24,9 +24,8 @@ if TYPE_CHECKING:
     from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import (
         MpiConfig,
     )
-import ewts
-
-LOG = ewts.get_logger(ewts.FORCING_ID)
+import logging
+LOG = logging.getLogger("FORCING")
 
 
 class InputForcings:

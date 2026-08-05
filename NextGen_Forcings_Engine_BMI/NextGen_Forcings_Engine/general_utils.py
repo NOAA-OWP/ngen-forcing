@@ -182,12 +182,19 @@ def assert_equal_with_tol(
                 ]
                 failing = []
                 for key_with_vals_not_matching in keys_with_vals_not_matching:
-                    if not np.allclose(
-                        np.atleast_1d(v_expect[key_with_vals_not_matching]),
-                        np.atleast_1d(v_actual[key_with_vals_not_matching]),
-                        atol=1e-6,
-                        rtol=1e-10,
-                    ):
+                    try:
+                        close = np.allclose(
+                            np.atleast_1d(v_expect[key_with_vals_not_matching]),
+                            np.atleast_1d(v_actual[key_with_vals_not_matching]),
+                            atol=1e-6,
+                            rtol=1e-10,
+                        )
+                    except (TypeError, ValueError):
+                        close = (
+                            v_expect[key_with_vals_not_matching]
+                            == v_actual[key_with_vals_not_matching]
+                        )
+                    if not close:
                         failing.append(
                             (
                                 key_with_vals_not_matching,

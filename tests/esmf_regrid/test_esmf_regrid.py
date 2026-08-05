@@ -61,7 +61,10 @@ REGRID_KEYS_TO_CHECK: tuple[str] = REGRID_ARRAYS_TO_TRIM_EXTRA_ELEMENTS + (
 ### While the InputForcings class instance is the primary source of test results data,
 ### this is used to add supplemental attributes to the results data,
 ### for example "element_ids" (for hydrofabric discretization, these are catchment IDs).
-EXTRA_ATTRS: tuple[ClassAttrFetcher] = (ClassAttrFetcher("geo_meta", "element_ids"),)
+EXTRA_ATTRS: tuple[ClassAttrFetcher] = (
+    ClassAttrFetcher("geo_meta", "element_ids"),
+    ClassAttrFetcher("bmi_model_values", "CAT-ID"),
+)
 
 COMPOSITE_KEYS_TO_CHECK: tuple[str] = REGRID_KEYS_TO_CHECK + tuple(
     _.results_key_name for _ in EXTRA_ATTRS

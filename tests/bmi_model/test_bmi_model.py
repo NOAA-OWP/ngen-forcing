@@ -22,7 +22,16 @@ RETRO_FORCING_CONFIG_FILE__AORC_CONUS = (
 COMPOSITE_KEYS_TO_CHECK = ()
 GRID_TYPE = "hydrofabric"  # ["gridded","hydrofabric","unstructured"]
 ### Drop non-deterministic values (random IDs, timestamps, hashed paths)
-KEYS_TO_EXCLUDE = ("uid64", "d_program_init", "geogrid", "scratch_dir")
+### sic on "Azmuith" (author of data model probably intended "Azimuth")
+KEYS_TO_EXCLUDE = (
+    "uid64",
+    "d_program_init",
+    "geogrid",
+    "scratch_dir",
+    "Element_Elevation",
+    "Element_Slope",
+    "Element_Slope_Azmuith",
+)
 
 
 @pytest.mark.parametrize(

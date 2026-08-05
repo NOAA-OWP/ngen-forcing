@@ -57,9 +57,7 @@ if TYPE_CHECKING:
     from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import (
         MpiConfig,
     )
-
-import ewts
-
+import logging
 from ..esmf_utils import (
     esmf_field_retry,
     esmf_grid_retry,
@@ -69,7 +67,7 @@ from ..esmf_utils import (
     esmf_regridobj_call_retry,
 )
 
-LOG = ewts.get_logger(ewts.FORCING_ID)
+LOG = logging.getLogger("FORCING")
 
 
 if "WGRIB2" not in os.environ:

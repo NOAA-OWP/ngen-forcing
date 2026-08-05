@@ -1,0 +1,342 @@
+# syntax=docker/dockerfile:1.4
+
+############################################################################
+# Bookworm dependency base image for ngen-bmi-forcing / ngen
+#
+# Uses Debian packages where practical:
+#   - HDF5
+#   - NetCDF-C
+#   - NetCDF-Fortran
+#   - GDAL
+#   - UDUNITS2
+#
+# Builds from source where still needed:
+#   - WGRIB2
+#   - Boost
+#   - ESMF + ESMPy
+#   - ecFlow Python client
+############################################################################
+
+ARG BASE_IMAGE=python:3.12-slim-bookworm
+
+FROM ${BASE_IMAGE}
+
+ARG BASE_IMAGE
+ARG BASE_IMAGE_NAME="${BASE_IMAGE}"
+ARG BASE_IMAGE_DIGEST="unknown"
+ARG IMAGE_SOURCE="unknown"
+ARG IMAGE_REVISION="unknown"
+
+ARG ESMF_VERSION=8.8.0
+ARG BOOST_VERSION=1.86.0
+ARG ECFLOW_VERSION=5.15.2
+ARG ECBUILD_VERSION=3.14.2
+
+LABEL org.opencontainers.image.base.name="${BASE_IMAGE_NAME}" \
+      org.opencontainers.image.base.digest="${BASE_IMAGE_DIGEST}" \
+      org.opencontainers.image.source="${IMAGE_SOURCE}" \
+      org.opencontainers.image.revision="${IMAGE_REVISION}" \
+      io.ngwpc.boost.version="${BOOST_VERSION}" \
+      io.ngwpc.esmf.version="${ESMF_VERSION}" \
+      io.ngwpc.ecflow.version="${ECFLOW_VERSION}" \
+      io.ngwpc.ecbuild.version="${ECBUILD_VERSION}"
+
+ENV LANG="C.UTF-8" \
+    PATH="/usr/local/bin:${PATH}"
+
+############################################################################
+# System/FOSS dependencies
+############################################################################
+
+RUN --mount=type=cache,target=/var/cache/apt,id=apt-cache-bookworm,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,id=apt-lib-bookworm,sharing=locked \
+    set -eux && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        autoconf \
+        automake \
+        build-essential \
+        bzip2 \
+        ca-certificates \
+        ccache \
+        cmake \
+        curl \
+        gfortran \
+        git \
+        jq \
+        libaec-dev \
+        libbz2-dev \
+        libcurl4-openssl-dev \
+        libffi-dev \
+        libgdal-dev \
+        libhdf5-dev \
+        libnetcdf-dev \
+        libnetcdff-dev \
+        libopenjp2-7-dev \
+        libopenmpi-dev \
+        libpng-dev \
+        libproj-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        libudunits2-dev \
+        m4 \
+        netcdf-bin \
+        openmpi-bin \
+        pkg-config \
+        proj-bin \
+        proj-data \
+        uuid-dev \
+        xz-utils \
+        zlib1g-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-c"]
+
+RUN update-ccache-symlinks
+
+ENV PATH="/usr/lib/ccache:${PATH}:/usr/lib/x86_64-linux-gnu/openmpi/bin" \
+    CCACHE_DIR="/root/.cache/ccache" \
+    CCACHE_MAXSIZE="5G" \
+    CCACHE_COMPRESS="true"
+
+# Create the shared Python virtual environment early so Python packages built by
+# compiled dependencies, including ESMPy and mpi4py, install into the same venv
+# reused later by forcing, ngen, and downstream images.
+#
+# These must be separate ENV instructions. Docker expands references in an ENV
+# instruction using values defined before that instruction, so VIRTUAL_ENV is not
+# available when expanding PATH if both variables are first defined together.
+# Defining VIRTUAL_ENV first ensures PATH includes the venv's bin directory and
+# subsequent `python` and `pip` commands use the shared virtual environment.
+ENV VIRTUAL_ENV="/ngen-app/ngen-python"
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+RUN set -eux; \
+    mkdir -p /ngen-app; \
+    python -m venv "${VIRTUAL_ENV}"
+
+# Install the shared Python packaging and build tools before building ESMPy or
+# installing any other Python packages. Python 3.12 virtual environments do not
+# include setuptools by default, and source-based package installations require
+# current versions of setuptools, wheel, and the PEP 517 build tooling.
+#
+# These tools are installed into the shared virtual environment so they are also
+# available to the forcing, ngen, and downstream images that inherit it.
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
+    set -eux; \
+    python -m pip install --upgrade \
+        pip \
+        setuptools \
+        wheel \
+        build \
+        pyproject_hooks \
+        packaging
+
+ENV LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/openmpi/lib:/usr/local/lib:/usr/local/lib64"
+ENV OMPI_MCA_btl_vader_single_copy_mechanism=none
+ENV OMPI_MCA_btl=^openib,ofi
+ENV OMPI_MCA_pml=ob1
+ENV OMPI_MCA_btl_base_warn_component_unused=0
+
+############################################################################
+# WGRIB2
+############################################################################
+
+RUN --mount=type=cache,target=/root/.cache/ccache,id=ccache-bookworm \
+    set -eux; \
+    mkdir -p /tmp/build-wgrib2; \
+    cd /tmp/build-wgrib2; \
+    curl --location --output wgrib2.tgz \
+        "https://ftp.cpc.ncep.noaa.gov/wd51we/wgrib2/wgrib2.tgz"; \
+    mkdir wgrib2; \
+    tar --extract --directory wgrib2 --strip-components=1 --file wgrib2.tgz; \
+    cd wgrib2; \
+    export CC=gcc; \
+    export FC=gfortran; \
+    make \
+        USE_IPOLATES=3 \
+        USE_PNG=1 \
+        USE_AEC=0 \
+        USE_JASPER=0 \
+        USE_OPENJPEG=1 \
+        USE_G2CLIB=0 \
+        PREFIX=/usr/local; \
+    make lib; \
+    cp wgrib2/wgrib2 /usr/local/bin/; \
+    chmod +x /usr/local/bin/wgrib2; \
+    rm -rf /tmp/build-wgrib2
+
+ENV WGRIB2=/usr/local/bin/wgrib2
+
+# Prevent pip installations in this image and downstream images from replacing
+# NumPy 1.26.4 while resolving transitive dependencies.
+RUN printf '%s\n' \
+        'numpy==1.26.4' \
+        > /ngen-app/python-constraints.txt
+
+
+# Apply the NumPy pin automatically to subsequent pip installations in this
+# image and downstream images. A downstream installation that requires an
+# incompatible NumPy version will fail rather than replace NumPy 1.26.4.
+ENV PIP_CONSTRAINT="/ngen-app/python-constraints.txt"
+
+############################################################################
+# ESMF + ESMPy
+#
+# ESMF is the one large scientific library still built from source in this
+# Bookworm dependency image. Unlike the Rocky transition image, ESMF is built
+# against Bookworm's packaged HDF5/NetCDF stack, and that same stack remains
+# available at runtime. This avoids mixing distro NetCDF at build time with
+# /usr/local NetCDF at runtime.
+############################################################################
+
+RUN --mount=type=cache,target=/root/.cache/ccache,id=ccache-bookworm \
+    set -eux; \
+    mkdir -p /tmp/build-esmf; \
+    cd /tmp/build-esmf; \
+    curl --location --output "esmf-${ESMF_VERSION}.tar.gz" \
+        "https://github.com/esmf-org/esmf/archive/refs/tags/v${ESMF_VERSION}.tar.gz"; \
+    tar --extract --gzip --file "esmf-${ESMF_VERSION}.tar.gz"; \
+    cd "esmf-${ESMF_VERSION}"; \
+    export ESMF_DIR="$(pwd)"; \
+    export ESMF_INSTALL_PREFIX=/usr/local/esmf; \
+    export ESMF_COMPILER=gfortran; \
+    export ESMF_COMM=openmpi; \
+    export ESMF_NETCDF="nc-config"; \
+    export ESMF_BOPT=O; \
+    make all; \
+    make install; \
+    rm -rf /tmp/build-esmf
+
+ENV ESMFMKFILE=/usr/local/esmf/lib/libO/Linux.gfortran.64.openmpi.default/esmf.mk
+
+# Install ESMPy from the git tag, matching the original forcing Dockerfile.
+# The source tarball can build the same code, but ESMPy's package versioning
+# depends on git metadata and may otherwise report a beta-looking version.
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
+    set -eux; \
+    python -m pip install \
+        setuptools-git-versioning; \
+    git clone --depth 1 --branch "v${ESMF_VERSION}" \
+        https://github.com/esmf-org/esmf.git /tmp/esmf; \
+    cd /tmp/esmf/src/addon/esmpy; \
+    python -m pip install \
+        .; \
+    cd /; \
+    rm -rf /tmp/esmf
+
+############################################################################
+# Boost
+#
+# Bookworm provides Boost 1.74, but LASAM requires Boost >= 1.79.
+# Build Boost from source and install a copy of the source tree under /opt/boost
+# so downstream CMake builds can use -DBOOST_ROOT=/opt/boost.
+#
+# The sed call removes Boost.NumPy. The ecFlow Python client needs
+# Boost.Python but does not need Boost.NumPy, which can be problematic here.
+# Boost.Python is required by the ecFlow Python client.
+############################################################################
+
+RUN --mount=type=cache,target=/root/.cache/ccache,id=ccache-bookworm \
+    set -eux; \
+    mkdir -p /tmp/build-boost; \
+    cd /tmp/build-boost; \
+    curl --location --output boost.tar.gz \
+        "https://archives.boost.io/release/${BOOST_VERSION%%[a-z]*}/source/boost_${BOOST_VERSION//./_}.tar.gz"; \
+    mkdir boost; \
+    tar --extract --directory boost --strip-components=1 --file boost.tar.gz; \
+    cd boost; \
+    ./bootstrap.sh; \
+    sed -i 's/boost-install boost_python boost_numpy/boost-install boost_python/' libs/python/build/Jamfile; \
+    CPLUS_INCLUDE_PATH="/usr/local/include/python3.12" \
+        ./b2 install --prefix=/usr/local; \
+    rm -rf /opt/boost; \
+    mkdir --parents /opt/boost; \
+    cp -a /tmp/build-boost/boost/. /opt/boost/; \
+    strip --strip-debug /usr/local/lib/libboost_*.so.* || true; \
+    rm -f /usr/local/lib/libboost_*.a; \
+    rm -rf /tmp/build-boost
+
+############################################################################
+# Stable Python dependencies
+#
+# mpi4py is built from source so it links against the same Bookworm OpenMPI
+# installation used by ESMF, ESMPy, and ngen.
+############################################################################
+
+# pybind11 is required to build the ecFlow Python client
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
+    set -eux; \
+    python -m pip install \
+        "numpy==1.26.4" \
+        netcdf4 \
+        bmipy \
+        pandas; \
+    python -m pip install \
+        --no-binary=mpi4py \
+        mpi4py; \
+    python -m pip install \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch \
+        torchvision
+
+
+############################################################################
+# ecFlow Python client (requires build from source)
+############################################################################
+
+RUN --mount=type=cache,target=/root/.cache/ccache,id=ccache-bookworm \
+    --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
+    set -eux; \
+    mkdir -p /tmp/build-ecflow; \
+    python -m pip install "pybind11>=2.10.3"; \
+    cd /tmp/build-ecflow; \
+    git clone --depth 1 --branch "${ECFLOW_VERSION}" \
+        https://github.com/ecmwf/ecflow.git; \
+    git clone --depth 1 --branch "${ECBUILD_VERSION}" \
+        https://github.com/ecmwf/ecbuild.git; \
+    PYBIND11_CMAKE_DIR="$(python -c \
+        'import pybind11; print(pybind11.get_cmake_dir())')"; \
+    cmake -B ecflow/build -S ecflow \
+        -DCMAKE_INSTALL_PREFIX="${VIRTUAL_ENV}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="${PYBIND11_CMAKE_DIR}" \
+        -DENABLE_PYTHON=ON \
+        -DENABLE_SERVER=OFF \
+        -DENABLE_UI=OFF \
+        -DENABLE_TESTS=OFF \
+        -DENABLE_DOCS=OFF \
+        -DENABLE_SSL=ON \
+        -DENABLE_STATIC_BOOST_LIBS=OFF \
+        -DBOOST_ROOT=/usr/local \
+        -DBoost_NO_SYSTEM_PATHS=on \
+        -DPython3_EXECUTABLE="$(which python)"; \
+    cmake --build ecflow/build \
+        --parallel "$(( $(nproc) < 4 ? $(nproc) : 4 ))"; \
+    cmake --install ecflow/build; \
+    python -m pip uninstall -y pybind11; \
+    python -c "import ecflow; print(f'ecFlow Python client version {ecflow.__version__} installed successfully')"; \
+    rm -rf /tmp/build-ecflow
+
+WORKDIR /
+
+
+# Verify that all installed Python packages have compatible dependencies and
+# that later installations did not replace NumPy 1.26.4.
+RUN set -eux; \
+    test "$(command -v python)" = "${VIRTUAL_ENV}/bin/python"; \
+    test "${PIP_CONSTRAINT}" = "/ngen-app/python-constraints.txt"; \
+    grep -qx 'numpy==1.26.4' "${PIP_CONSTRAINT}"; \
+    python -m pip check; \
+    python -c "import sys, setuptools, wheel, build, pyproject_hooks, packaging; \
+assert sys.executable == '${VIRTUAL_ENV}/bin/python', sys.executable; \
+print('Python:', sys.executable); \
+print('setuptools:', setuptools.__version__)"; \
+    python -c "import numpy as np; \
+assert np.__version__ == '1.26.4', np.__version__; \
+np.linalg.svd(np.eye(8)); \
+print('NumPy version:', np.__version__)"
+
+WORKDIR /
+
+ENTRYPOINT ["/bin/bash"]

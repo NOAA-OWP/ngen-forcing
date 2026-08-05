@@ -1,6 +1,8 @@
 import argparse
-import os
+from pathlib import Path
 from types import SimpleNamespace
+import numpy as np
+import geopandas as gpd
 
 import yaml
 from NextGen_Forcings_Engine.core.config import ConfigOptions
@@ -19,13 +21,17 @@ def create_mesh(cfg: ConfigOptions):
     """
     # Set the mesh file name based on the hydrofabric file
     hyfab_name = cfg.geopackage
-    mesh_outPath = cfg.geogrid
+    mesh_out_path = Path(cfg.geogrid)
 
-    # Check if the mesh file already exists and skip conversion if it does
-    if not os.path.exists(mesh_outPath):
-        convert_hyfab_to_esmf(hyfab_gpkg=hyfab_name, esmf_mesh_output=mesh_outPath)
-    else:
-        print(f"ESMF mesh file already exists at {mesh_outPath}, skipping conversion.")
+    if mesh_out_path.is_file():
+        # If the mesh netCDF file already exists,
+        # read the true catchment IDs off the divides.
+        # The generation will sort the IDs,
+        # so return the sorted IDs from the geopackage
+        # to maintain the true->false ID indexing
+        hyfab = gpd.read_file(hyfab_name, layer='divides')
+        return np.sort(hyfab.div_id.values, copy=True, dtype=np.int64)
+    return convert_hyfab_to_esmf(hyfab_gpkg=hyfab_name, esmf_mesh_output=mesh_out_path)
 
 
 def main():

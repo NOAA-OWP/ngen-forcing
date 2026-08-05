@@ -8,14 +8,54 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from urllib import error, request
 
-# Use the Error, Warning, and Trapping System Package for logging
-import ewts
+# Use the Error and Warning Trapping System Package for logging
 import requests
 from bs4 import BeautifulSoup
 
-LOG = ewts.get_logger(ewts.FORCING_ID)
+LOG = logging.getLogger("FORCING")
 
+try:
+    from ewts.helper import getenv_any
+    from ewts.logger import configure_existing_logger
+    FORCING_USE_EWTS = True
+except ImportError:
+    FORCING_USE_EWTS = False
 
+class StdoutStyleFormatter(logging.Formatter):
+
+    INFO_FORMAT = (
+        "%(asctime)s %(name)-8s %(levelname)-7s %(message)s"
+    )
+
+    DETAILED_FORMAT = (
+        "%(asctime)s %(name)-8s %(levelname)-7s "
+        "%(message)s "
+        "[%(filename)s.%(funcName)s(L%(lineno)s)]"
+    )
+
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = self.INFO_FORMAT
+        else:
+            self._style._fmt = self.DETAILED_FORMAT
+
+        return super().format(record)
+
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    
+
+def _configure_stdout_logging():
+    LOG.setLevel(logging.INFO)
+
+    if not LOG.handlers:
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(StdoutStyleFormatter())
+        LOG.addHandler(handler)
+
+    LOG.propagate = False
 class ForecastDownloader(ABC):
     """Abstract base class for structured forecast data downloads.
 
@@ -55,14 +95,15 @@ class ForecastDownloader(ABC):
         :param ens_number: Ensemble number to fetch (if applicable)
         :param input_horizon: Maximum forecast hour to download (None = download all available timesteps)
         """
-        global LOG
-        if hasattr(LOG, "bind"):
-            # This is required prior to the first log message for the ewts package
-            LOG.bind()
+        if FORCING_USE_EWTS:
+            val = getenv_any("EWTS_USE_NGEN_BRIDGE", "").strip().lower()
+            if val in {"1", "true", "yes", "on"}:
+                configure_existing_logger(LOG)
+            else:
+                _configure_stdout_logging()
+                LOG.warning("ewts package installed but EWTS_USE_NGEN_BRIDGE not on. Falling back to default logging.")
         else:
-            # Fallback to default root logger
-            logging.basicConfig()
-            LOG = logging.getLogger()
+            _configure_stdout_logging()
 
         if lookback_hours <= lagback_hours:
             raise ValueError(

@@ -99,6 +99,10 @@ class supplemental_precip:
             14: "Custom_Freq_Supp_Pcp",
             15: "NBM_CORE_PR_APCP",
             16: "NBM_CORE_HAWAII_APCP",
+            # 17: "Alaska_MRMS_1HR_Radar_Only",
+            # 18: "Hawaii_MRMS_1HR_Radar_Only",
+            # 19: "Puerto_Rico_MRMS_1HR_Radar_Only",
+            # 20: "Puerto_Rico_MRMS_1HR_Gage_Corrected",
         }
         self.product_name = product_names[self.keyValue]
 
@@ -135,6 +139,10 @@ class supplemental_precip:
             14: None,
             15: None,
             16: None,
+            # 17: None,
+            # 18: None,
+            # 19: None,
+            # 20: None,
         }
         self.grib_vars = grib_vars_in[self.keyValue]
 
@@ -155,6 +163,10 @@ class supplemental_precip:
             14: ["BLAH"],
             15: ["BLAH"],
             16: ["BLAH"],
+            # 17: ["BLAH"],
+            # 18: ["BLAH"],
+            # 19: ["BLAH"],
+            # 20: ["BLAH"],
         }
         self.grib_levels = grib_levels_in[self.keyValue]
 
@@ -175,6 +187,10 @@ class supplemental_precip:
             14: ["PrecipFlag_0mabovemeansealevel"],
             15: ["APCP_surface"],
             16: ["APCP_surface"],
+            # 17: ["RadarOnlyQPE01H_0mabovemeansealevel"],
+            # 18: ["RadarOnlyQPE01H_0mabovemeansealevel"],
+            # 19: ["RadarOnlyQPE01H_0mabovemeansealevel"],
+            # 20: ["MultiSensorQPE01H_0mabovemeansealevel"],
         }
         self.netcdf_var_names = netcdf_variables[self.keyValue]
 
@@ -195,6 +211,10 @@ class supplemental_precip:
             14: None,
             15: None,
             16: None,
+            # 17: None,
+            # 18: None,
+            # 19: None,
+            # 20: None,
         }
         self.rqi_netcdf_var_names = netcdf_rqi_variables[self.keyValue]
 
@@ -215,6 +235,10 @@ class supplemental_precip:
             14: 3,
             15: 3,
             16: 3,
+            # 17: 3,
+            # 18: 3,
+            # 19: 3,
+            # 20: 3,
         }
         self.output_var_idx = output_variables[self.keyValue]
 
@@ -247,6 +271,10 @@ class supplemental_precip:
             14: time_handling.find_custom_freq_neighbors,
             15: time_handling.find_hourly_nbm_neighbors,
             16: time_handling.find_hourly_nbm_neighbors,
+            # 17: time_handling.find_hourly_mrms_radar_neighbors,
+            # 18: time_handling.find_hourly_mrms_radar_neighbors,
+            # 19: time_handling.find_hourly_mrms_radar_neighbors,
+            # 20: time_handling.find_hourly_mrms_radar_neighbors,
         }
 
         find_neighbor_files[self.keyValue](self, ConfigOptions, dCurrent, MpiConfig)
@@ -289,6 +317,10 @@ class supplemental_precip:
             14: regrid.regrid_mrms_hourly,
             15: regrid.regrid_hourly_nbm,
             16: regrid.regrid_hourly_nbm,
+            # 17: regrid.regrid_mrms_hourly,
+            # 18: regrid.regrid_mrms_hourly,
+            # 19: regrid.regrid_mrms_hourly,
+            # 20: regrid.regrid_mrms_hourly,
         }
         regrid_inputs[self.keyValue](self, ConfigOptions, wrfHyroGeoMeta, MpiConfig)
         # try:

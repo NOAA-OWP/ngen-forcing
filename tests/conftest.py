@@ -95,6 +95,7 @@ def bmi_forcing_fixture_geomod(
     """
     (
         config_file,
+        extra_attrs,
         keys_to_check,
         keys_to_exclude,
         grid_type,
@@ -109,6 +110,7 @@ def bmi_forcing_fixture_geomod(
     )
     return BMIForcingFixture_GeoMod(
         bmi_model=bmi_model,
+        extra_attrs=extra_attrs,
         keys_to_check=keys_to_check,
         keys_to_exclude=keys_to_exclude,
     )

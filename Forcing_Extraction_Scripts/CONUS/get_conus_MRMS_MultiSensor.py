@@ -28,7 +28,9 @@ class MRMSMultiSensorConusDownloader(FixedFileDownloader, ABC):
     def get_file_specs(self, d_start):
         specs = []
         for pass_num in ["Pass1", "Pass2"]:
-            subdir = f"MultiSensor_QPE_01H_{pass_num}_00.00/{d_start.strftime('%Y%m%d')}"
+            subdir = (
+                f"MultiSensor_QPE_01H_{pass_num}_00.00/{d_start.strftime('%Y%m%d')}"
+            )
             filename = f"MRMS_MultiSensor_QPE_01H_{pass_num}_00.00_{d_start.strftime('%Y%m%d')}-{d_start.strftime('%H')}0000.grib2.gz"
             specs.append((subdir, filename))
         return specs

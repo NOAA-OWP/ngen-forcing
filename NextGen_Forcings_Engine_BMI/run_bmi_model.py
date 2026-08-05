@@ -70,7 +70,7 @@ def print_post_update(model, start_time) -> None:
         if model._job_meta.include_lqfrac == 1:
             LQFRAC = np.zeros(varsize, dtype=float)
         if model._grid_type == "hydrofabric":
-            CAT_IDS = np.zeros(varsize, dtype=int)
+            CAT_IDS = np.zeros(varsize, dtype=np.int64)
 
     elif model._grid_type == "unstructured":
         # Unstructured grid (element + node)

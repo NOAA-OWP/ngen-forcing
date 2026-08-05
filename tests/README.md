@@ -134,30 +134,3 @@ The test suite is configured via `pytest.ini` at the repository root:
 ## Test Data
 
 Test data is stored in the `test_data/` directory. Tests may reference files from this location for input data and expected results validation.
-
-## Writing New Tests
-
-When adding new tests:
-
-1. Place test files in the appropriate subdirectory
-2. Name test files with the `test_*.py` prefix
-3. Name test functions with the `test_*` prefix
-4. Use fixtures from `conftest.py` for common setup
-5. Place test data files in `test_data/` with descriptive names
-
-Example test structure:
-
-```python
-import pytest
-
-def test_my_feature():
-    """Test description."""
-    # Arrange
-    input_data = ...
-
-    # Act
-    result = function_under_test(input_data)
-
-    # Assert
-    assert result == expected_output
-```

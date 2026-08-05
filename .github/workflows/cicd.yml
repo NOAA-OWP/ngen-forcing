@@ -8,6 +8,7 @@ on:
       - master
       - nwm-master
       - development
+      - development-pw
       - release-candidate
   pull_request:
     branches:
@@ -16,11 +17,33 @@ on:
       - main
       - nwm-master
       - development
+      - development-pw
       - release-candidate
   workflow_dispatch:
     inputs:
-      BMI_BASE_TAG:
-        description: 'BMI_BASE_TAG'
+      REBUILD_DEPS:
+        description: 'Force a rebuild of the dependencies image before building forcing'
+        required: false
+        default: false
+        type: boolean
+      DEPS_BASE_REPO:
+        description: 'Base image to compile the dependencies from (default python)'
+        required: false
+        type: string
+      DEPS_BASE_TAG:
+        description: 'Dependencies base image tag (default 3.12-slim-bookworm)'
+        required: false
+        type: string
+      DEPS_BASE_SUFFIX:
+        description: 'Override the published deps name suffix (default derived, e.g. bookworm)'
+        required: false
+        type: string
+      DEPS_IMAGE_REPO:
+        description: 'Deps image repo to build forcing FROM when not rebuilding deps (default ghcr.io/<org>/ngen-dependencies-bookworm)'
+        required: false
+        type: string
+      DEPS_IMAGE_TAG:
+        description: 'Deps image tag to build forcing FROM when not rebuilding deps (default latest)'
         required: false
         type: string
       GHCR_ORG:
@@ -52,12 +75,36 @@ on:
         description: 'NWM_FCST_MGR_REF'
         required: false
         type: string
+      EVAL_MGR_ORG:
+        description: 'EVAL_MGR_ORG'
+        required: false
+        type: string
+      EVAL_MGR_REF:
+        description: 'EVAL_MGR_REF'
+        required: false
+        type: string
+      NWM_METRICS_ORG:
+        description: 'NWM_METRICS_ORG'
+        required: false
+        type: string
+      NWM_METRICS_REF:
+        description: 'NWM_METRICS_REF'
+        required: false
+        type: string
       MSW_MGR_ORG:
         description: 'MSW_MGR_ORG'
         required: false
         type: string
       MSW_MGR_REF:
         description: 'MSW_MGR_REF'
+        required: false
+        type: string
+      BOOST_VERSION:
+        description: 'Deps image: Boost version (blank = Dockerfile default; forces a deps rebuild)'
+        required: false
+        type: string
+      ESMF_VERSION:
+        description: 'Deps image: ESMF version (blank = Dockerfile default; forces a deps rebuild)'
         required: false
         type: string
 
@@ -68,7 +115,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  BMI_BASE_REPO: rockylinux
 
 jobs:
   # set variables for use in other jobs
@@ -77,18 +123,13 @@ jobs:
     outputs:
       org: ${{ steps.vars.outputs.org }}
       bmi_image: ${{ steps.vars.outputs.bmi_image }}
-      bmi_base_name: ${{ steps.vars.outputs.bmi_base_name }}
-      bmi_base_tag: ${{ steps.vars.outputs.bmi_base_tag }}
-      bmi_base_digest: ${{ steps.vars.outputs.bmi_base_digest }}
-      bmi_base_revision: ${{ steps.vars.outputs.bmi_base_revision }}
-      ewts_revision: ${{ steps.vars.outputs.ewts_revision }}
       commit_sha: ${{ steps.vars.outputs.commit_sha }}
       commit_sha_short: ${{ steps.vars.outputs.commit_sha_short }}
       test_image_tag: ${{ steps.vars.outputs.test_image_tag }}
       alias_tag: ${{ steps.vars.outputs.alias_tag }}
       clean_ref: ${{ steps.vars.outputs.clean_ref }}
       default_ref: ${{ steps.vars.outputs.default_ref }}
-      ewts_cache_bust: ${{ steps.vars.outputs.ewts_cache_bust }}
+      ewts_revision: ${{ steps.vars.outputs.ewts_revision }}
     steps:
       - name: Compute image vars
         id: vars
@@ -121,34 +162,17 @@ jobs:
           SHORT_SHA="${REAL_SHA:0:7}"
 
           # default source-repo ref: follow the release-line branch we're building from
-          # (development / ngwpc-candidate / ngwpc-release); tags and other branches fall
-          # back to development. Override per source repo via the *_REF dispatch inputs.
+          # (development / development-pw / ngwpc-candidate / ngwpc-release); tags and
+          # other branches fall back to development. Override per source repo via the
+          # *_REF dispatch inputs.
           case "${GITHUB_REF_TYPE}:${GITHUB_REF_NAME}" in
-            branch:development|branch:ngwpc-candidate|branch:ngwpc-release)
+            branch:development|branch:development-pw|branch:ngwpc-candidate|branch:ngwpc-release)
               DEFAULT_REF="$GITHUB_REF_NAME" ;;
             *)
               DEFAULT_REF="development" ;;
           esac
           # use an explicit *_REF input if provided, else DEFAULT_REF
           ref_or_default() { [ -n "$1" ] && echo "$1" || echo "$DEFAULT_REF"; }
-
-          # skopeo is needed to inspect the base image
-          if ! command -v skopeo >/dev/null 2>&1; then
-            sudo apt-get update -y
-            sudo apt-get install -y --no-install-recommends skopeo
-          fi
-
-          # base image metadata for BMI Dockerfile labels
-          BMI_BASE_TAG_INPUT="${{ github.event.inputs.BMI_BASE_TAG || '' }}"
-          if [ -n "$BMI_BASE_TAG_INPUT" ]; then
-            BMI_BASE_TAG="$BMI_BASE_TAG_INPUT"
-          else
-            BMI_BASE_TAG="8"
-          fi
-          BMI_BASE_NAME="${BMI_BASE_REPO}:${BMI_BASE_TAG}"
-          BMI_BASE_INSPECT=$(skopeo inspect --override-os linux --override-arch amd64 "docker://${BMI_BASE_NAME}")
-          BMI_BASE_DIGEST=$(echo "$BMI_BASE_INSPECT" | jq -r '.Digest // "unknown"')
-          BMI_BASE_REVISION=$(echo "$BMI_BASE_INSPECT" | jq -r '.Labels["org.opencontainers.image.revision"] // .Labels["io.ngwpc.image.base.revision"] // "unknown"')
 
           # resolve each source repo's ref (branch/tag/SHA) to its commit SHA for revision labels
           resolve_sha() {
@@ -162,6 +186,9 @@ jobs:
             echo "${sha:-unknown}"
           }
 
+          # EWTS_REVISION is the resolved commit SHA: it labels the image AND doubles
+          # as the EWTS_CACHE_BUST build-arg, so a new commit on the requested ref
+          # reinstalls EWTS instead of a stale cache.
           EWTS_REVISION=$(resolve_sha "https://github.com/${{ inputs.EWTS_ORG || github.repository_owner }}/nwm-ewts.git" "$(ref_or_default "${{ inputs.EWTS_REF }}")")
 
           # logic for the tags:
@@ -182,31 +209,11 @@ jobs:
             ALIAS="${TIMESTAMP}-${CLEAN_REF}"
           fi
 
-          # Resolve EWTS ref for Docker cache busting
-          EWTS_ORG="${{ inputs.EWTS_ORG || github.repository_owner }}"
-          EWTS_REF="${{ inputs.EWTS_REF || 'development' }}"
-
-          if [[ "${EWTS_REF}" =~ ^[0-9a-f]{7,40}$ ]]; then
-            EWTS_CACHE_BUST="${EWTS_REF}"
-          else
-            EWTS_CACHE_BUST="$(git ls-remote "https://github.com/${EWTS_ORG}/nwm-ewts.git" "${EWTS_REF}" | awk '{print $1}')"
-          fi
-
-          if [ -z "${EWTS_CACHE_BUST}" ]; then
-            echo "ERROR: Could not resolve EWTS_REF=${EWTS_REF}"
-            exit 1
-          fi
-
           # save outputs
           cat >> "$GITHUB_OUTPUT" <<EOF
           org=${ORG}
           bmi_image=${IMAGE_BASE}/ngen-bmi-forcing
-          bmi_base_name=${BMI_BASE_NAME}
-          bmi_base_tag=${BMI_BASE_TAG}
-          bmi_base_digest=${BMI_BASE_DIGEST}
-          bmi_base_revision=${BMI_BASE_REVISION}
           ewts_revision=${EWTS_REVISION}
-          ewts_cache_bust=${EWTS_CACHE_BUST}
           test_image_tag=${TEST_TAG}
           alias_tag=${ALIAS}
           commit_sha=${REAL_SHA}
@@ -214,6 +221,51 @@ jobs:
           clean_ref=${CLEAN_REF}
           default_ref=${DEFAULT_REF}
           EOF
+
+  # detect whether this change touched the dependency image files, so the deps
+  # rebuild below runs only when needed (or when manually forced)
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      deps: ${{ steps.filter.outputs.deps || 'false' }}
+      versions: ${{ steps.versions.outputs.set || 'false' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            deps:
+              - 'Dockerfile.dependencies'
+              - '.github/workflows/dependencies.yml'
+      - name: Detect dependency version overrides
+        id: versions
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          # if any dependency version input was provided, force a deps rebuild so
+          # the override actually takes effect
+          if [ -n "${{ inputs.BOOST_VERSION }}${{ inputs.ESMF_VERSION }}" ]; then
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # rebuild the compiled-dependencies base image, ONLY when the deps files
+  # changed or a rebuild is forced. pipeline-bmi `needs` this, so forcing always
+  # builds AFTER the new base exists. This is the reusable workflow dependencies.yml.
+  dependencies:
+    name: dependencies
+    needs: changes
+    if: ${{ needs.changes.outputs.deps == 'true' || inputs.REBUILD_DEPS || needs.changes.outputs.versions == 'true' }}
+    uses: ./.github/workflows/dependencies.yml
+    with:
+      DEPS_BASE_REPO: ${{ inputs.DEPS_BASE_REPO || 'python' }}
+      DEPS_BASE_TAG: ${{ inputs.DEPS_BASE_TAG || '3.12-slim-bookworm' }}
+      DEPS_BASE_SUFFIX: ${{ inputs.DEPS_BASE_SUFFIX || 'bookworm' }}
+      GHCR_ORG: ${{ inputs.GHCR_ORG }}
+      BOOST_VERSION: ${{ inputs.BOOST_VERSION }}
+      ESMF_VERSION: ${{ inputs.ESMF_VERSION }}
 
   # CodeQL scan
   codeql-scan:
@@ -248,12 +300,14 @@ jobs:
   # build ngen-bmi-forcing Docker image
   pipeline-bmi:
     name: pipeline-bmi
-    if: |
-      (github.event_name == 'pull_request') ||
-      (github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch')
+    # run whether the deps rebuild happened or was skipped, but not if anything
+    # upstream failed or was cancelled
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
-    needs: setup
+    needs:
+      - setup
+      - changes
+      - dependencies
     outputs:
       bmi_digest: ${{ steps.build_bmi_image.outputs.digest }}
     steps:
@@ -266,6 +320,36 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve base (deps) image
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # if the dependencies job rebuilt the image this run, build FROM exactly
+          # that; otherwise use the override inputs, else this org's deps :latest
+          REPO="${{ needs.dependencies.outputs.image }}"
+          TAG="${{ needs.dependencies.outputs.tag }}"
+          [ -n "$REPO" ] || REPO="${{ inputs.DEPS_IMAGE_REPO }}"
+          [ -n "$REPO" ] || REPO="${REGISTRY}/${{ needs.setup.outputs.org }}/ngen-dependencies-bookworm"
+          [ -n "$TAG" ] || TAG="${{ inputs.DEPS_IMAGE_TAG }}"
+          [ -n "$TAG" ] || TAG="latest"
+
+          # inspect the base for the OCI base.* labels on the forcing image
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+          INSPECT=$(skopeo inspect --override-os linux --override-arch amd64 "docker://${REPO}:${TAG}" 2>/dev/null || echo '{}')
+          DIGEST=$(echo "$INSPECT" | jq -r '.Digest // "unknown"')
+          REVISION=$(echo "$INSPECT" | jq -r '.Labels["org.opencontainers.image.revision"] // .Labels["io.ngwpc.image.base.revision"] // "unknown"')
+
+          cat >> "$GITHUB_OUTPUT" <<EOF
+          repo=${REPO}
+          tag=${TAG}
+          digest=${DIGEST}
+          revision=${REVISION}
+          EOF
       - name: Build & push BMI Forcing
         id: build_bmi_image # set ID to capture output from this step to use outputs like digest, imageid, and metadata
         uses: docker/build-push-action@v7
@@ -279,13 +363,13 @@ jobs:
           push: true
           tags: ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }}
           build-args: |
-            BMI_BASE_TAG=${{ needs.setup.outputs.bmi_base_tag }}
-            BMI_BASE_DIGEST=${{ needs.setup.outputs.bmi_base_digest }}
-            BMI_BASE_REVISION=${{ needs.setup.outputs.bmi_base_revision }}
+            DEPS_IMAGE=${{ steps.base.outputs.repo }}:${{ steps.base.outputs.tag }}
+            DEPS_IMAGE_DIGEST=${{ steps.base.outputs.digest }}
+            DEPS_IMAGE_REVISION=${{ steps.base.outputs.revision }}
             EWTS_ORG=${{ inputs.EWTS_ORG || github.repository_owner }}
             EWTS_REF=${{ inputs.EWTS_REF || needs.setup.outputs.default_ref }}
             EWTS_REVISION=${{ needs.setup.outputs.ewts_revision }}
-            EWTS_CACHE_BUST=${{ needs.setup.outputs.ewts_cache_bust }}
+            EWTS_CACHE_BUST=${{ needs.setup.outputs.ewts_revision }}
             IMAGE_SOURCE=https://github.com/${{ github.repository }}
             IMAGE_VENDOR=${{ github.repository_owner }}
             IMAGE_VERSION=${{ needs.setup.outputs.clean_ref }}
@@ -311,7 +395,7 @@ jobs:
       - name: Unit Test BMI
         run: |
           docker run --rm ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }} \
-          echo "Running BMI Forcing Unit Tests..."
+          -c 'echo "Running BMI Forcing Unit Tests..."'
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@v0.2.6
         with:
@@ -355,22 +439,41 @@ jobs:
             --all \
             "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:${ALIAS_TAG}"
 
-          # tag with 'latest' if on development branch
+          # Branch-keyed promotion: development promotes 'latest' (bookworm/AWS
+          # lane); development-pw promotes 'latest-pw' (rocky/PW lane). Do not
+          # manually dispatch a cross-lane build from either branch: promotion
+          # keys off the branch name, so the tested image would promote under
+          # the wrong alias.
           if [ "$GITHUB_REF_NAME" = "development" ]; then
             skopeo copy \
               --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
               --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
               --all \
               "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest"
+          elif [ "$GITHUB_REF_NAME" = "development-pw" ]; then
+            skopeo copy \
+              --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --all \
+              "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest-pw"
           fi
 
   # trigger downstream repo ngen
   # always passes TRIGGER_DOWNSTREAM=true to ngen so the chain propagates to nwm-cal-mgr and nwm-fcst-mgr
   trigger-ngen:
     name: trigger-ngen
-    if: |
-      success() && (
-        (github.event_name == 'push' && (github.ref_name == 'development' || github.ref_name == 'ngwpc-candidate' || github.ref_name == 'ngwpc-release')) ||
+    if: >-
+      !cancelled() && !failure() &&
+      (
+        (
+          github.event_name == 'push' &&
+          (
+            github.ref_name == 'development' ||
+            github.ref_name == 'development-pw' ||
+            github.ref_name == 'ngwpc-candidate' ||
+            github.ref_name == 'ngwpc-release'
+          )
+        ) ||
         (github.event_name == 'workflow_dispatch' && inputs.TRIGGER_DOWNSTREAM)
       )
     runs-on: ubuntu-latest
@@ -395,6 +498,10 @@ jobs:
           EWTS_REF: ${{ inputs.EWTS_REF || needs.setup.outputs.default_ref }}
           MSW_MGR_ORG: ${{ inputs.MSW_MGR_ORG || github.repository_owner }}
           MSW_MGR_REF: ${{ inputs.MSW_MGR_REF || needs.setup.outputs.default_ref }}
+          EVAL_MGR_ORG: ${{ inputs.EVAL_MGR_ORG || github.repository_owner }}
+          EVAL_MGR_REF: ${{ inputs.EVAL_MGR_REF || needs.setup.outputs.default_ref }}
+          NWM_METRICS_ORG: ${{ inputs.NWM_METRICS_ORG || github.repository_owner }}
+          NWM_METRICS_REF: ${{ inputs.NWM_METRICS_REF || needs.setup.outputs.default_ref }}
           GHCR_ORG: ${{ inputs.GHCR_ORG || needs.setup.outputs.org }}
           NGEN_FORCING_IMAGE_TAG: ${{ needs.setup.outputs.alias_tag }}
         run: |
@@ -408,5 +515,9 @@ jobs:
             -f EWTS_REF="$EWTS_REF" \
             -f MSW_MGR_ORG="$MSW_MGR_ORG" \
             -f MSW_MGR_REF="$MSW_MGR_REF" \
+            -f EVAL_MGR_ORG="$EVAL_MGR_ORG" \
+            -f EVAL_MGR_REF="$EVAL_MGR_REF" \
+            -f NWM_METRICS_ORG="$NWM_METRICS_ORG" \
+            -f NWM_METRICS_REF="$NWM_METRICS_REF" \
             -f GHCR_ORG="$GHCR_ORG" \
             -f NGEN_FORCING_IMAGE_TAG="$NGEN_FORCING_IMAGE_TAG"

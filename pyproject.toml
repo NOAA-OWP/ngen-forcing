@@ -57,7 +57,7 @@ include = ["NextGen_Forcings_Engine*",
 namespaces = false
 
 [tool.setuptools.package-data]
-"NextGen_Forcings_Engine_BMI" = ["BMI_NextGen_Configs/config_templates/*.yml"]
+"NextGen_Forcings_Engine_BMI" = ["BMI_NextGen_Configs/**/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "NextGen_Forcings_Engine.__version__" }

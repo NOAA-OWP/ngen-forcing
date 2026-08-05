@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 # Use the Error, Warning, and Trapping System Package for logging
-import ewts
 import numpy as np
 
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.err_handler import (
@@ -19,7 +18,7 @@ from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.time_handling impo
 
 from . import mpi_utils
 
-LOG = ewts.get_logger(ewts.FORCING_ID)
+LOG = logging.getLogger("FORCING")
 FORCE_COUNT = 27
 
 
