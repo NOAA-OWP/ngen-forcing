@@ -1928,14 +1928,6 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                     )
                 err_handler.check_program_status(config_options, mpi_config)
 
-                if mpi_config.rank == 0:
-                    out_data = input_forcings.esmf_field_out.data
-                    n_nodata = int(np.sum(out_data == config_options.globalNdv))
-                    n_total = out_data.size
-                    print(f"[DEBUG regrid out] var={input_forcings.netcdf_var_names[force_count]}, esmf_field_out shape: {out_data.shape}")
-                    print(f"[DEBUG regrid out] min/max: {out_data.min():.4f} / {out_data.max():.4f}")
-                    print(f"[DEBUG regrid out] no-data count: {n_nodata}/{n_total} ({100*n_nodata/n_total:.1f}%)")
-
                 try:
                     input_forcings.regridded_forcings2[
                         input_forcings.input_map_output[force_count], :, :
@@ -11294,10 +11286,6 @@ def check_regrid_status(
         esmf_lon = wrf_hydro_geo_meta.esmf_grid.get_coords(0)
         esmf_lon[:, :] = wrf_hydro_geo_meta.longitude_grid
         wrf_hydro_geo_meta.esmf_lon = esmf_lon
-        if mpi_config.rank == 0:
-            print(f"[DEBUG dest grid] populated ESMF destination grid coords")
-            print(f"[DEBUG dest grid] esmf_lat min/max: {esmf_lat.min():.4f} / {esmf_lat.max():.4f}")
-            print(f"[DEBUG dest grid] esmf_lon min/max: {esmf_lon.min():.4f} / {esmf_lon.max():.4f}")
 
     # If the destination ESMF field hasn't been created, create it here.
     if not input_forcings.esmf_field_out:
@@ -12041,17 +12029,9 @@ def calculate_weights(
     err_handler.check_program_status(config_options, mpi_config)
 
     if mpi_config.rank == 0 and lat_tmp is not None and lon_tmp is not None:
-        print(f"[DEBUG calc_weights] product={input_forcings.product_name}, lat_var='{lat_var}', lon_var='{lon_var}'")
-        print(f"[DEBUG calc_weights] raw lat_tmp shape: {lat_tmp.shape}, lon_tmp shape: {lon_tmp.shape}")
-        print(f"[DEBUG calc_weights] lat_tmp min/max: {lat_tmp.min():.4f} / {lat_tmp.max():.4f}")
-        print(f"[DEBUG calc_weights] lon_tmp min/max: {lon_tmp.min():.4f} / {lon_tmp.max():.4f}")
-        print(f"[DEBUG calc_weights] lat_tmp corners: [0,0]={lat_tmp[0,0]:.4f}, [-1,-1]={lat_tmp[-1,-1]:.4f}")
-        print(f"[DEBUG calc_weights] lon_tmp corners: [0,0]={lon_tmp[0,0]:.4f}, [-1,-1]={lon_tmp[-1,-1]:.4f}")
-        print(f"[DEBUG calc_weights] input_forcings.ny_global={input_forcings.ny_global}, nx_global={input_forcings.nx_global}")
         # Normalize source longitudes from 0-360 to -180/+180 to match geo_em geogrid convention
         if lon_tmp.max() > 180:
             lon_tmp = np.where(lon_tmp > 180, lon_tmp - 360, lon_tmp)
-            print(f"[DEBUG calc_weights] lon_tmp normalized to -180/+180: min/max={lon_tmp.min():.4f} / {lon_tmp.max():.4f}")
 
     # Scatter global GFS latitude grid to processors..
     if mpi_config.rank == 0:
@@ -12086,11 +12066,6 @@ def calculate_weights(
 
     input_forcings.esmf_lats[:, :] = var_sub_lat_tmp
     input_forcings.esmf_lons[:, :] = var_sub_lon_tmp
-    if mpi_config.rank == 0:
-        print(f"[DEBUG ESMF src] esmf_lats (get_coords(1)) shape={input_forcings.esmf_lats.shape}")
-        print(f"[DEBUG ESMF src] esmf_lats min/max: {input_forcings.esmf_lats.min():.4f} / {input_forcings.esmf_lats.max():.4f}")
-        print(f"[DEBUG ESMF src] esmf_lons (get_coords(0)) shape={input_forcings.esmf_lons.shape}")
-        print(f"[DEBUG ESMF src] esmf_lons min/max: {input_forcings.esmf_lons.min():.4f} / {input_forcings.esmf_lons.max():.4f}")
     del var_sub_lat_tmp
     del var_sub_lon_tmp
     del lat_tmp
