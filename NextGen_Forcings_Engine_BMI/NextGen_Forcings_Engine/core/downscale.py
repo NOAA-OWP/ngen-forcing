@@ -39,7 +39,7 @@ def run_downscaling(input_forcings, config_options, geo_meta_wrf_hydro, mpi_conf
 
     # Dictionary mapping to shortwave radiation downscaling
     downscale_sw = {0: no_downscale, 1: ncar_topo_adj}
-    downscale_sw[input_forcings.swDowscaleOpt](
+    downscale_sw[input_forcings.swDownscaleOpt](
         input_forcings, config_options, geo_meta_wrf_hydro, mpi_config
     )
     err_handler.check_program_status(config_options, mpi_config)

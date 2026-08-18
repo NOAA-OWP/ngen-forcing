@@ -80,7 +80,7 @@ def process_forecasts(
             # move on.
             continue
 
-        if (not ConfigOptions.ana_flag) or (ConfigOptions.logFile is None):
+        if not ConfigOptions.ana_flag:
             if MpiConfig.rank == 0:
                 # If the cycle directory doesn't exist, create it.
                 if not os.path.isdir(fcstCycleOutDir):
@@ -91,36 +91,6 @@ def process_forecasts(
                             "Unable to create output directory: " + fcstCycleOutDir
                         )
                         err_handler.err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
-            err_handler.check_program_status(ConfigOptions, MpiConfig)
-
-            # Compose a path to a log file, which will contain information
-            # about this forecast cycle.
-            # ConfigOptions.logFile = ConfigOptions.output_dir + "/LOG_" + \
-
-            if ConfigOptions.ana_flag:
-                log_time = ConfigOptions.e_date_proc
-            else:
-                log_time = ConfigOptions.current_fcst_cycle
-
-            ConfigOptions.logFile = (
-                ConfigOptions.scratch_dir
-                + "/LOG_"
-                + ConfigOptions.nwmConfig
-                + (
-                    "_"
-                    if ConfigOptions.nwmConfig != "long_range"
-                    else "_mem" + str(ConfigOptions.cfsv2EnsMember) + "_"
-                )
-                + ConfigOptions.d_program_init.strftime("%Y%m%d%H%M")
-                + "_"
-                + log_time.strftime("%Y%m%d%H%M")
-            )
-
-            # Initialize the log file.
-            try:
-                err_handler.init_log(ConfigOptions, MpiConfig)
-            except Exception:
-                err_handler.err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)
 
         # Log information about this forecast cycle
@@ -365,13 +335,6 @@ def process_forecasts(
                 )
                 err_handler.log_msg(ConfigOptions, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)
-
-            if MpiConfig.rank == 0:
-                # Close the log file.
-                try:
-                    err_handler.close_log(ConfigOptions, MpiConfig)
-                except Exception:
-                    err_handler.err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
 
             # Success.... Now touch an empty complete file for this forecast cycle to indicate
             # completion in case the code is re-ran.

@@ -54,7 +54,7 @@ def run_bias_correction(input_forcings, config_options, geo_meta_wrf_hydro, mpi_
         3: ncar_temp_gfs_bias_correct,
         4: ncar_temp_hrrr_bias_correct,
     }
-    bias_correct_temperature[input_forcings.t2dBiasCorrectOpt](
+    bias_correct_temperature[input_forcings.t2BiasCorrectOpt](
         input_forcings, config_options, mpi_config, 0
     )
     err_handler.check_program_status(config_options, mpi_config)
@@ -65,7 +65,7 @@ def run_bias_correction(input_forcings, config_options, geo_meta_wrf_hydro, mpi_
         1: cfsv2_nldas_nwm_bias_correct,
         2: ncar_tbl_correction,
     }
-    bias_correct_humidity[input_forcings.q2dBiasCorrectOpt](
+    bias_correct_humidity[input_forcings.q2BiasCorrectOpt](
         input_forcings, config_options, mpi_config, 1
     )
     err_handler.check_program_status(config_options, mpi_config)
@@ -114,12 +114,12 @@ def run_bias_correction(input_forcings, config_options, geo_meta_wrf_hydro, mpi_
         4: ncar_wspd_hrrr_bias_correct,
     }
     # Run for U-Wind
-    bias_correct_wind[input_forcings.windBiasCorrectOpt](
+    bias_correct_wind[input_forcings.windBiasCorrect](
         input_forcings, config_options, mpi_config, 2
     )
     err_handler.check_program_status(config_options, mpi_config)
     # Run for V-Wind
-    bias_correct_wind[input_forcings.windBiasCorrectOpt](
+    bias_correct_wind[input_forcings.windBiasCorrect](
         input_forcings, config_options, mpi_config, 3
     )
     err_handler.check_program_status(config_options, mpi_config)
@@ -2473,7 +2473,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
     id_nldas_param = nldas_param_file = None
     if mpi_config.rank == 0:
         nldas_param_file = (
-            input_forcings.paramDir
+            input_forcings.dScaleParamDirs
             + "/NLDAS_Climo/nldas2_"
             + config_options.current_output_date.strftime("%m%d%H")
             + "_dist_params.nc"
@@ -2700,7 +2700,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
     if mpi_config.rank == 0:
         # Read in the CFSv2 parameter files, based on the previous CFSv2 dates
         cfs_param_path1 = (
-            input_forcings.paramDir
+            input_forcings.dScaleParamDirs
             + "/CFSv2_Climo/cfs_"
             + cfs_param_path_vars[force_num]
             + "_"
@@ -2711,7 +2711,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
         )
 
         cfs_param_path2 = (
-            input_forcings.paramDir
+            input_forcings.dScaleParamDirs
             + "/CFSv2_Climo/cfs_"
             + cfs_param_path_vars[force_num]
             + "_"

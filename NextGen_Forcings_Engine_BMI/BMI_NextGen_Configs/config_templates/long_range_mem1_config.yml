@@ -4,7 +4,7 @@ NWM_VERSION: 4.0
 NWM_CONFIG: "long_range_mem1"
 InputForcings: [7] 
 InputForcingDirectories: ["{root_dir}/raw_input/CFS"]
-InputForcingTypes: ["GRIB2"]
+InputForcingTypes: ["GRIB2_CFS"]
 InputMandatory: [1]
 OutputFrequency: 360
 SubOutputHour: 0

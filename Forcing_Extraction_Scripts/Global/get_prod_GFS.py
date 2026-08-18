@@ -26,7 +26,13 @@ class GFSDownloader(ForecastDownloader):
     def get_download_targets(self, _):
         hourly = range(1, 121)  # 1 through 120
         every_3h = range(123, 241, 3)  # 123 through 240, step of 3
-        return list(hourly) + list(every_3h)
+        target_hours = list(hourly) + list(every_3h)
+
+        # Filter download targets by input_horizon if specific
+        if self.input_horizon is not None:
+            target_hours = [hour for hour in target_hours if hour <= self.input_horizon]
+
+        return target_hours
 
     def build_output_dir(self, d_start, _):
         return os.path.join(

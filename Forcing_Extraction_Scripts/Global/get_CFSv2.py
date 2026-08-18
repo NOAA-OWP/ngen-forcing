@@ -23,7 +23,7 @@ class CFSv2Downloader(ForecastDownloader):
         return "https://noaa-cfs-pds.s3.amazonaws.com"
 
     def get_download_targets(self, d_start):
-        return range(0, 721, 6) if d_start.hour in [0, 6, 12, 18] else []
+        return range(0, 727, 6) if d_start.hour in [0, 6, 12, 18] else []
 
     def should_process_hour(self, d_start):
         return d_start.hour in [0, 6, 12, 18]

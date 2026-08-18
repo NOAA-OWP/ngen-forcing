@@ -7,7 +7,6 @@ Also, creating output files.
 
 import datetime
 import gzip
-import logging
 import math
 import os
 import shutil
@@ -15,15 +14,14 @@ import subprocess
 import sys
 from typing import Optional
 
+import ewts
 import numpy as np
 from netCDF4 import Dataset
 
-
 from . import err_handler
 
-import logging
-from nextgen_forcings_ewts import MODULE_NAME
-LOG = logging.getLogger(MODULE_NAME)
+LOG = ewts.get_logger(ewts.FORCING_ID)
+
 
 if "WGRIB2" not in os.environ:
     WGRIB2_env = False
@@ -966,7 +964,9 @@ class OutputObj:
             ]
 
         if ConfigOptions.forcing_output == 1 and MpiConfig.rank == 0:
-            LOG.debug(f"Writing output forcing file for timestamp {self.outDate.strftime('%Y-%m-%d %H:%M')}: {self.outPath}")
+            LOG.debug(
+                f"Writing output forcing file for timestamp {self.outDate.strftime('%Y-%m-%d %H:%M')}: {self.outPath}"
+            )
             # Only output on the master processor.
             try:
                 # Try opening the output file and populating the time variable
@@ -989,7 +989,6 @@ class OutputObj:
         # Now loop through each variable, collect the data (call on each processor), assemble into the final
         # output grid, and place into the output file (if on processor 0).
         for i_var, varTmp in enumerate(output_variable_attribute_dict):
-
             # Collect data from the various processors, and place into the output file.
             try:
                 if ConfigOptions.grid_type == "gridded":
@@ -1003,7 +1002,8 @@ class OutputObj:
                     dataOutTmp = MpiConfig.merge_slabs_gatherv(
                         self.output_local[output_variable_attribute_dict[varTmp][0], :],
                         ConfigOptions,
-                    allgather=True)
+                        allgather=True,
+                    )
                     # NOTE this assumes that the var order here matches var order elsewhere.
                     self.output_global[i_var, :] = dataOutTmp.flatten()
                 elif ConfigOptions.grid_type == "unstructured":
@@ -1052,7 +1052,11 @@ class OutputObj:
 
             err_handler.check_program_status(ConfigOptions, MpiConfig)
 
-        if ConfigOptions.forcing_output == 1 and MpiConfig.rank == 0 and idOut is not None:
+        if (
+            ConfigOptions.forcing_output == 1
+            and MpiConfig.rank == 0
+            and idOut is not None
+        ):
             # Close the NetCDF file
             try:
                 idOut.close()
@@ -1124,7 +1128,7 @@ def open_grib2(
         try:
             # WCOSS fix for WGRIB2 crashing when called on the same file twice in python
             if not os.environ.get("MFE_SILENT") and not special_case:
-                LOG.debug(f"Wgrib2 command: {Wgrib2Cmd}", True)  # log at debug level
+                LOG.debug(f"Wgrib2 command: {Wgrib2Cmd}")  # log at debug level
 
             # set up GRIB2TABLE if needed:
             if not os.environ.get("GRIB2TABLE"):

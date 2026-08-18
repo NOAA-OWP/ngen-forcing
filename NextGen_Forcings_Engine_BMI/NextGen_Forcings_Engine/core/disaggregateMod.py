@@ -128,7 +128,7 @@ def ak_ext_ana_disaggregate(
         # (begin_date,end_date]
         date_iter += timedelta(hours=1)
         while date_iter <= end_date:
-            tmp_file = f"{input_forcings.inDir}/{date_iter.strftime('%Y%m%d%H')}/{date_iter.strftime('%Y%m%d%H')}00.LDASIN_DOMAIN1"
+            tmp_file = f"{input_forcings.input_force_dirs}/{date_iter.strftime('%Y%m%d%H')}/{date_iter.strftime('%Y%m%d%H')}00.LDASIN_DOMAIN1"
             if os.path.exists(tmp_file):
                 config_options.statusMsg = f"Reading {input_forcings.netcdf_var_names[3]} from {tmp_file} for disaggregation"
                 err_handler.log_msg(config_options, mpi_config)

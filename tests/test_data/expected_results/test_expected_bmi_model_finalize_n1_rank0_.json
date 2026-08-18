@@ -1,0 +1,154 @@
+{
+  "cfg_bmi": {
+    "AnAFlag": 0,
+    "DownscalingParamDirs": [
+      "/ngen-app/data"
+    ],
+    "ElemConn": "elementConn",
+    "ElemCoords": "centerCoords",
+    "ElemID": "element_id",
+    "ForcingTemporalInterpolation": [
+      0
+    ],
+    "ForecastFrequency": 60,
+    "ForecastInputHorizons": [
+      4260
+    ],
+    "ForecastInputOffsets": [
+      0
+    ],
+    "ForecastShift": 0,
+    "GRID_TYPE": "hydrofabric",
+    "GeogridIn": "/workspaces/nwm-rte/src/ngen-forcing/tests/test_data/esmf_mesh/gauge_01123000_ESMF_Mesh.nc",
+    "Geopackage": "/workspaces/nwm-rte/src/ngen-forcing/tests/test_data/gpkg/gauge_01123000.gpkg",
+    "HGTVAR": "Element_Elevation",
+    "HumidityBiasCorrection": [
+      0
+    ],
+    "HumidityDownscaling": [
+      0
+    ],
+    "IgnoredBorderWidths": [
+      0
+    ],
+    "InputForcingDirectories": [
+      "s3://null"
+    ],
+    "InputForcingTypes": [
+      "GRIB2"
+    ],
+    "InputForcings": [
+      12
+    ],
+    "InputMandatory": [
+      0
+    ],
+    "LookBack": -9999,
+    "LwBiasCorrection": [
+      0
+    ],
+    "NWM_CONFIG": "AORC",
+    "NWM_VERSION": 4.0,
+    "NodeCoords": "nodeCoords",
+    "NumElemConn": "numElementConn",
+    "Output": 0,
+    "OutputFrequency": 60,
+    "PrecipBiasCorrection": [
+      0
+    ],
+    "PrecipDownscaling": [
+      0
+    ],
+    "PressureBiasCorrection": [
+      0
+    ],
+    "PressureDownscaling": [
+      0
+    ],
+    "RefcstBDateProc": "201307010000",
+    "RegridOpt": [
+      1
+    ],
+    "RegridOptSuppPcp": [],
+    "RqiMethod": 0,
+    "RqiThreshold": 0.9,
+    "SLOPE": "Element_Slope",
+    "SLOPE_AZIMUTH": "Element_Slope_Azmuith",
+    "ScratchDir": "/ngen-app/data/scratch/AORC/",
+    "ShortwaveDownscaling": [
+      0
+    ],
+    "SpatialMetaIn": "",
+    "SubOutFreq": 0,
+    "SubOutputHour": 0,
+    "SuppPcp": [],
+    "SuppPcpDirectories": [],
+    "SuppPcpForcingTypes": [],
+    "SuppPcpInputOffsets": [],
+    "SuppPcpMandatory": [],
+    "SuppPcpParamDir": "",
+    "SuppPcpTemporalInterpolation": [],
+    "SwBiasCorrection": [
+      0
+    ],
+    "TemperatureBiasCorrection": [
+      0
+    ],
+    "TemperatureDownscaling": [
+      0
+    ],
+    "WindBiasCorrection": [
+      0
+    ],
+    "cfsEnsNumber": 1,
+    "compressOutput": 0,
+    "custom_input_fcst_freq": [],
+    "floatOutput": 0,
+    "includeLQFrac": 1,
+    "initial_time": 0,
+    "time_step_seconds": 3600
+  },
+  "geo_meta": null,
+  "grid_4": {
+    "_grid_x": [
+      -72.04918711744217,
+      -72.0498876679477,
+      -72.05118870198277,
+      -72.04754380872834,
+      -72.0554434265969,
+      -72.03341338948294,
+      -72.07444419922648
+    ],
+    "_grid_y": [
+      41.824530105139985,
+      41.79153684369973,
+      41.739617787523294,
+      41.68903878715741,
+      41.66453348086255,
+      41.721705460500516,
+      41.77940007526497
+    ],
+    "_grid_z": null,
+    "_id": 4,
+    "_origin": [
+      0.0,
+      0.0
+    ],
+    "_rank": 2,
+    "_shape": [
+      0,
+      0
+    ],
+    "_size": 7,
+    "_spacing": [
+      0.0,
+      0.0
+    ],
+    "_type": "unstructured",
+    "_units": [
+      -1,
+      -1
+    ]
+  },
+  "var_array_lengths": 1
+}

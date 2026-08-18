@@ -1,0 +1,618 @@
+{
+  "border": 0,
+  "coarse_input_forcings1": null,
+  "coarse_input_forcings2": null,
+  "cycle_freq": -9999,
+  "enforce": 0,
+  "esmf_field_in": {
+    "_data": null,
+    "_finalized": false,
+    "_grid": {
+      "_area": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "_areatype": 6,
+      "_coord_sys": 1,
+      "_coords": [
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ]
+      ],
+      "_decount": 1,
+      "_finalized": false,
+      "_has_corners": false,
+      "_lower_bounds": [
+        [
+          0,
+          0
+        ],
+        null,
+        null,
+        null
+      ],
+      "_mask": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "_max_index": [
+        28,
+        14
+      ],
+      "_meta": {},
+      "_ndims": 2,
+      "_num_peri_dims": 0,
+      "_ocgis": {},
+      "_periodic_dim": null,
+      "_pole_dim": null,
+      "_pole_kind": null,
+      "_rank": 2,
+      "_size": [
+        [
+          14,
+          14
+        ],
+        null,
+        null,
+        null
+      ],
+      "_staggerloc": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "_struct": {},
+      "_type": 6,
+      "_upper_bounds": [
+        [
+          14,
+          14
+        ],
+        null,
+        null,
+        null
+      ]
+    },
+    "_lower_bounds": [
+      0,
+      0
+    ],
+    "_meta": {},
+    "_name": "AORC_NATIVE",
+    "_ndbounds": null,
+    "_rank": 2,
+    "_staggerloc": 0,
+    "_struct": {},
+    "_type": 6,
+    "_upper_bounds": [
+      14,
+      14
+    ],
+    "_xd": 0
+  },
+  "esmf_field_in_elem": null,
+  "esmf_field_out": {
+    "_data": [
+      99263.83797955123,
+      99864.20759754517,
+      99984.1178572765,
+      99951.00373610242
+    ],
+    "_finalized": false,
+    "_grid": {
+      "_area": [
+        null,
+        null
+      ],
+      "_coord_sys": null,
+      "_coords": [
+        [
+          "hash_-2029877471422530764",
+          "hash_-2626201295507711994"
+        ],
+        [
+          [
+            -72.04918711744217,
+            -72.0498876679477,
+            -72.05118870198277,
+            -72.04754380872834
+          ],
+          [
+            41.824530105139985,
+            41.79153684369973,
+            41.739617787523294,
+            41.68903878715741
+          ]
+        ]
+      ],
+      "_finalized": false,
+      "_mask": [
+        null,
+        null
+      ],
+      "_meta": {},
+      "_parametric_dim": 2,
+      "_rank": 1,
+      "_size": [
+        496,
+        4
+      ],
+      "_size_owned": [
+        496,
+        4
+      ],
+      "_spatial_dim": null,
+      "_struct": {}
+    },
+    "_lower_bounds": [
+      0
+    ],
+    "_meta": {},
+    "_name": "AORCFORCING_REGRIDDED",
+    "_ndbounds": null,
+    "_rank": 1,
+    "_staggerloc": 1,
+    "_struct": {},
+    "_type": 6,
+    "_upper_bounds": [
+      4
+    ],
+    "_xd": 0
+  },
+  "esmf_field_out_elem": null,
+  "esmf_grid_in": {
+    "_area": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "_areatype": 6,
+    "_coord_sys": 1,
+    "_coords": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ],
+    "_decount": 1,
+    "_finalized": false,
+    "_has_corners": false,
+    "_lower_bounds": [
+      [
+        0,
+        0
+      ],
+      null,
+      null,
+      null
+    ],
+    "_mask": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "_max_index": [
+      28,
+      14
+    ],
+    "_meta": {},
+    "_ndims": 2,
+    "_num_peri_dims": 0,
+    "_ocgis": {},
+    "_periodic_dim": null,
+    "_pole_dim": null,
+    "_pole_kind": null,
+    "_rank": 2,
+    "_size": [
+      [
+        14,
+        14
+      ],
+      null,
+      null,
+      null
+    ],
+    "_staggerloc": [
+      true,
+      false,
+      false,
+      false
+    ],
+    "_struct": {},
+    "_type": 6,
+    "_upper_bounds": [
+      [
+        14,
+        14
+      ],
+      null,
+      null,
+      null
+    ]
+  },
+  "esmf_grid_in_elem": null,
+  "esmf_lats": null,
+  "esmf_lons": null,
+  "fcst_date1": null,
+  "fcst_date2": null,
+  "fcst_hour1": null,
+  "fcst_hour2": null,
+  "file_ext": ".grib2",
+  "file_in1": "s3://null/AORC-OWP_2013070102z.grib2",
+  "file_in2": "s3://null/AORC-OWP_2013070102z.grib2",
+  "file_type": "GRIB2",
+  "final_forcings": [
+    [
+      1.100000023841858,
+      1.0,
+      0.8858484625816345,
+      0.7788757085800171
+    ],
+    [
+      3.2642452716827393,
+      3.2708349227905273,
+      3.2864480018615723,
+      3.254810094833374
+    ],
+    [
+      402.1012878417969,
+      402.48565673828125,
+      402.3548889160156,
+      401.989013671875
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      295.295166015625,
+      295.3619384765625,
+      295.36065673828125,
+      295.25482177734375
+    ],
+    [
+      0.016059407964348793,
+      0.01599999889731407,
+      0.015986448153853416,
+      0.01599999889731407
+    ],
+    [
+      99263.8359375,
+      99864.2109375,
+      99984.1171875,
+      99951.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      -9999.0,
+      -9999.0,
+      -9999.0,
+      -9999.0
+    ]
+  ],
+  "final_forcings_elem": null,
+  "find_neighbor_files_map": {
+    "1": "find_nldas_neighbors",
+    "10": "find_custom_hourly_neighbors",
+    "11": "find_custom_hourly_neighbors",
+    "12": "find_aorc_neighbors",
+    "13": "find_nam_nest_neighbors",
+    "14": "find_nam_nest_neighbors",
+    "15": "find_nam_nest_neighbors",
+    "16": "find_nam_nest_neighbors",
+    "17": "find_nam_nest_neighbors",
+    "18": "find_hourly_wrf_arw_neighbors",
+    "19": "find_ak_hrrr_neighbors",
+    "20": "find_ak_hrrr_neighbors",
+    "21": "find_aorc_neighbors",
+    "22": "find_ak_hrrr_neighbors",
+    "23": "find_era5_neighbors",
+    "24": "find_hourly_nbm_neighbors",
+    "25": "find_ndfd_neighbors",
+    "26": "find_input_neighbors",
+    "27": "find_nwm_neighbors",
+    "3": "find_gfs_neighbors",
+    "5": "find_conus_hrrr_neighbors",
+    "6": "find_conus_rap_neighbors",
+    "7": "find_cfsv2_neighbors",
+    "8": "find_hourly_wrf_arw_neighbors",
+    "9": "find_gfs_neighbors"
+  },
+  "forecast_horizons": null,
+  "globalPcpRate1": null,
+  "globalPcpRate1_elem": null,
+  "globalPcpRate2": null,
+  "globalPcpRate2_elem": null,
+  "grib_levels": null,
+  "grib_mes_idx": null,
+  "grib_vars": [
+    "TMP",
+    "SPFH",
+    "UGRD",
+    "VGRD",
+    "APCP",
+    "DSWRF",
+    "DLWRF",
+    "PRES"
+  ],
+  "height": [
+    NaN,
+    NaN,
+    NaN,
+    NaN
+  ],
+  "height_elem": null,
+  "inDir": "s3://null",
+  "input_map_output": [
+    4,
+    5,
+    0,
+    1,
+    3,
+    7,
+    2,
+    6
+  ],
+  "keyValue": 12,
+  "lapseGrid": null,
+  "lwBiasCorrectOpt": 0,
+  "ndv": null,
+  "netcdf_var_names": [
+    "TMP_2maboveground",
+    "SPFH_2maboveground",
+    "UGRD_10maboveground",
+    "VGRD_10maboveground",
+    "APCP_surface",
+    "DSWRF_surface",
+    "DLWRF_surface",
+    "PRES_surface"
+  ],
+  "nwmPRISM_denGrid": null,
+  "nwmPRISM_numGrid": null,
+  "nx_global": 14,
+  "nx_local": 14,
+  "nx_local_corner": null,
+  "ny_global": 28,
+  "ny_local": 14,
+  "ny_local_corner": null,
+  "outFreq": null,
+  "paramDir": "/ngen-app/data",
+  "precipBiasCorrectOpt": 0,
+  "precipDownscaleOpt": 0,
+  "product_name": "AORC",
+  "psfcBiasCorrectOpt": 0,
+  "psfcDownscaleOpt": 0,
+  "psfcTmp": null,
+  "psfcTmp_elem": null,
+  "q2dBiasCorrectOpt": 0,
+  "q2dDownscaleOpt": 0,
+  "regridComplete": false,
+  "regridObj_elem": null,
+  "regridOpt": 1,
+  "regrid_map": {
+    "1": "regrid_conus_rap",
+    "10": "regrid_custom_hourly_netcdf",
+    "11": "regrid_custom_hourly_netcdf",
+    "12": "regrid_custom_hourly_netcdf",
+    "13": "regrid_nam_nest",
+    "14": "regrid_nam_nest",
+    "15": "regrid_nam_nest",
+    "16": "regrid_nam_nest",
+    "17": "regrid_nam_nest",
+    "18": "regrid_hourly_wrf_arw",
+    "19": "regrid_conus_hrrr",
+    "20": "regrid_conus_hrrr",
+    "21": "regrid_custom_hourly_netcdf",
+    "22": "regrid_conus_hrrr",
+    "23": "regrid_era5",
+    "24": "regrid_hourly_nbm",
+    "25": "regrid_ndfd",
+    "26": "regrid_conus_hrrr",
+    "27": "regrid_nwm",
+    "3": "regrid_gfs",
+    "5": "regrid_conus_hrrr",
+    "6": "regrid_conus_rap",
+    "7": "regrid_cfsv2",
+    "8": "regrid_hourly_wrf_arw",
+    "9": "regrid_gfs"
+  },
+  "regridded_forcings1": [
+    [
+      1.100000023841858,
+      1.100000023841858,
+      1.0,
+      0.9000000357627869
+    ],
+    [
+      3.5624279975891113,
+      3.6000001430511475,
+      3.6000001430511475,
+      3.6000001430511475
+    ],
+    [
+      401.1370544433594,
+      401.5856628417969,
+      401.5168762207031,
+      401.3915100097656
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      296.09698486328125,
+      296.16192626953125,
+      296.07421875,
+      296.009033203125
+    ],
+    [
+      0.016559408977627754,
+      0.016499999910593033,
+      0.016462579369544983,
+      0.01636631414294243
+    ],
+    [
+      99160.265625,
+      99751.3046875,
+      99866.5625,
+      99835.5234375
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      9.18803377088496e-41,
+      4.364694391755724e-40,
+      0.0,
+      -6.165852519510108e+34
+    ]
+  ],
+  "regridded_forcings1_elem": null,
+  "regridded_forcings2": [
+    [
+      1.100000023841858,
+      1.0,
+      0.8858484625816345,
+      0.7788757085800171
+    ],
+    [
+      3.2642452716827393,
+      3.2708349227905273,
+      3.2864480018615723,
+      3.254810094833374
+    ],
+    [
+      402.1012878417969,
+      402.48565673828125,
+      402.3548889160156,
+      401.989013671875
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      295.295166015625,
+      295.3619384765625,
+      295.36065673828125,
+      295.25482177734375
+    ],
+    [
+      0.016059407964348793,
+      0.01599999889731407,
+      0.015986448153853416,
+      0.01599999889731407
+    ],
+    [
+      99263.8359375,
+      99864.2109375,
+      99984.1171875,
+      99951.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      -9999.0,
+      -9999.0,
+      -9999.0,
+      -9999.0
+    ]
+  ],
+  "regridded_forcings2_elem": null,
+  "regridded_mask": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "regridded_mask_AORC": [
+    NaN,
+    NaN,
+    NaN,
+    NaN
+  ],
+  "regridded_mask_elem": null,
+  "regridded_mask_elem_AORC": null,
+  "regridded_precip1": null,
+  "regridded_precip1_elem": null,
+  "regridded_precip2": null,
+  "regridded_precip2_elem": null,
+  "rqiClimoGrid": null,
+  "rstFlag": 0,
+  "skip": false,
+  "swBiasCorrectOpt": 0,
+  "swDowscaleOpt": 0,
+  "t2dBiasCorrectOpt": 0,
+  "t2dDownscaleOpt": 0,
+  "t2dTmp": null,
+  "t2dTmp_elem": null,
+  "temporal_interpolate_inputs_map": {
+    "0": "no_interpolation",
+    "1": "nearest_neighbor",
+    "2": "weighted_average"
+  },
+  "timeInterpOpt": 0,
+  "tmpFile": null,
+  "tmpFileHeight": null,
+  "userCycleOffset": 0,
+  "userFcstHorizon": 4260,
+  "windBiasCorrectOpt": 0,
+  "x_lower_bound": 0,
+  "x_lower_bound_corner": null,
+  "x_upper_bound": 14,
+  "x_upper_bound_corner": null,
+  "y_lower_bound": 0,
+  "y_lower_bound_corner": null,
+  "y_upper_bound": 14,
+  "y_upper_bound_corner": null
+}

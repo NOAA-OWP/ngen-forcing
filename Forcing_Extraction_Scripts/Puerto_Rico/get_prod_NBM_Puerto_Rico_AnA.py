@@ -19,7 +19,7 @@ class NBMAnAPuertoRicoDownloader(ForecastDownloader):
 
     def get_download_targets(self, _):
         """Sets the forecast hours to download."""
-        return range(0, 2)
+        return range(1, 2)
 
     def build_output_dir(self, d_start, _):
         """Creates the output directory path."""

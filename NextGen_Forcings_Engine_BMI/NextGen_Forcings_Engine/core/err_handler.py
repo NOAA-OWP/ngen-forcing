@@ -1,17 +1,22 @@
+import inspect
 import logging
 import os
 import sys
 import traceback
-from logging import FileHandler
 
 import numpy as np
 from mpi4py import MPI
 from scipy import spatial
 
-from nextgen_forcings_ewts import MODULE_NAME
+# Use the Error, Warning, and Trapping System Package for logging
+import ewts
+LOG = ewts.get_logger(ewts.FORCING_ID)
 
-LOG = logging.getLogger(MODULE_NAME)
-log_name = MODULE_NAME
+
+def in_exception_context() -> bool:
+    if sys.exc_info()[0] is not None:
+        return True
+    return False
 
 
 def err_out_screen(err_msg: str, exc: BaseException | None = None):
@@ -29,8 +34,20 @@ def err_out_screen(err_msg: str, exc: BaseException | None = None):
     if exc is not None:
         err_msg += f" - {exc}"
     err_msg_out = "ERROR: " + err_msg
+
     print(err_msg_out, flush=True)
-    traceback.print_exc()  # Only prints if an exception is currently being handled
+    LOG.critical(err_msg_out)
+
+    if in_exception_context():
+        tb = traceback.format_exc()
+        tb_msg = f"TRACEBACK: {tb}"
+        print(tb_msg, flush=True, file=sys.stderr)
+        LOG.critical(tb_msg)
+
+    final_msg = f"Calling sys.exit(1) from object {repr(inspect.currentframe().f_code.co_name)}"
+    print(final_msg, flush=True, file=sys.stderr)
+    LOG.critical(final_msg)
+
     sys.exit(1)
 
 
@@ -60,8 +77,8 @@ def err_out_screen_para(err_msg: str, MpiConfig, exc: BaseException | None = Non
 def check_program_status(
     ConfigOptions, MpiConfig, rank_0_reduce: bool = True, any_rank_abort: bool = False
 ):
-    """
-    Generic function to check the err statuses for each processor in the program.
+    """Check the err statuses for each processor in the program.
+
     If any flags come back, gracefully exit the program.
     :param ConfigOptions:
     :param MpiConfig:
@@ -100,7 +117,7 @@ def check_program_status(
 
     if (not rank_0_reduce) and (not any_rank_abort):
         raise ValueError(
-            f"When rank_0_reduce is Falsy, any_rank_abort must be Truthy, but both are Falsy."
+            "When rank_0_reduce is Falsy, any_rank_abort must be Truthy, but both are Falsy."
         )
 
     if MpiConfig.rank != 0 or rank_0_reduce:
@@ -114,75 +131,14 @@ def check_program_status(
             stack = traceback.format_stack()[:-1]
             for frame in stack:
                 LOG.error(frame)
-            MpiConfig.comm.Abort(1)
-            sys.exit(1)
+            MpiConfig.abort_with_cleanup(1)
 
     # Sync up processors.
     # When this is enabled, then all ranks wait for rank 0 to evaluate the
     # collected error flags and call Abort() as appropriate, before continuing.
     # When this is not enabled, then non-0 ranks may continue execution after sending
     # their error flag, since non-0 ranks do not block on reduce().
-    MpiConfig.comm.barrier()
-
-
-def init_log(ConfigOptions, MpiConfig):
-    """Initialize the per-cycle log file once on rank 0.
-
-    Initialize the per‑cycle log file once on rank 0.
-    We only want a single log file per cycle—not one per catchment—so we check
-    existing FileHandlers to avoid opening multiple handlers for the same file.
-    """
-    # Only the master rank sets up logging
-    if MpiConfig.rank != 0:
-        return
-
-    global log_name
-    global LOG
-
-    # Check for ngen Error and Warning Trapping System named logger
-    logger = logging.getLogger(MODULE_NAME)
-
-    # checking whether the logger object has an attribute named _initialized,
-    # and if it does, whether its value is True. If the attribute doesn't exist,
-    # it defaults to False.
-    if getattr(logger, "_initialized", False):
-        for handler in logger.handlers:
-            if isinstance(handler, logging.FileHandler):
-                ConfigOptions.logFile = handler.baseFilename
-                break
-        log_name = MODULE_NAME
-        LOG = logger
-        return  # logger already initialized, nothing else to do
-
-    log_name = "logForcing"
-    filename = ConfigOptions.logFile
-
-    try:
-        logger = logging.getLogger(log_name)
-
-        # If a FileHandler for this filename is already attached, skip (prevents one log per catchment)
-        for handler in logger.handlers:
-            if (
-                isinstance(handler, FileHandler)
-                and getattr(handler, "baseFilename", None) == filename
-            ):
-                LOG = logger
-                return
-
-        # Otherwise, create and attach a new FileHandler
-        formatter = logging.Formatter(
-            "[%(asctime)s]: %(levelname)s - %(message)s", datefmt="%m/%d %H:%M:%S"
-        )
-        file_handler = FileHandler(filename, mode="a")
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
-        LOG = logger
-
-    except Exception as e:
-        ConfigOptions.errMsg = f"Unable to initialize log file '{filename}': {e}"
-        err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
-
+    # MpiConfig.comm.barrier()
 
 def err_out(ConfigOptions):
     """Error out after an error message has been logged for a forecast cycle.
@@ -192,17 +148,12 @@ def err_out(ConfigOptions):
     :param ConfigOptions:
     :return:
     """
-    if not LOG.hasHandlers():
-        ConfigOptions.errMsg = (
-            "Unable to obtain a logger object for: " + ConfigOptions.logFile
-        )
-        raise Exception()
 
     try:
         LOG.error(ConfigOptions.errMsg)
     except Exception:
         ConfigOptions.errMsg = (
-            "Unable to write error message to: " + ConfigOptions.logFile
+            "Unable to write error message"
         )
         raise Exception()
     MPI.Finalize()
@@ -210,21 +161,19 @@ def err_out(ConfigOptions):
 
 
 def log_error(ConfigOptions, MpiConfig, msg: str = None):
-    """
-    Function to log an error message to the log file.
+    """Log an error message to the log file.
+
     :param ConfigOptions:
     :param MpiConfig:
     :param msg: Optional error message string, overrides current value for ConfigOptions.errMsg in-place before sending log call.
     :return:
     """
     if msg is not None:
+        if not isinstance(msg, str):
+            raise TypeError(
+                f"Expected type str or NoneType for msg, got type: {type(msg)}"
+            )
         ConfigOptions.errMsg = msg
-
-    if not LOG.hasHandlers():
-        ConfigOptions.errMsg = (
-            "Unable to obtain a logger object for: " + ConfigOptions.logFile
-        )
-        raise Exception()
 
     try:
         LOG.error("RANK: " + str(MpiConfig.rank) + " - " + ConfigOptions.errMsg)
@@ -233,8 +182,6 @@ def log_error(ConfigOptions, MpiConfig, msg: str = None):
             (
                 "Unable to write ERROR message on RANK: "
                 + str(MpiConfig.rank)
-                + " for log file: "
-                + ConfigOptions.logFile
             ),
             MpiConfig,
         )
@@ -242,21 +189,18 @@ def log_error(ConfigOptions, MpiConfig, msg: str = None):
 
 
 def log_critical(ConfigOptions, MpiConfig, msg: str = None):
-    """
-    Function for logging an error message without exiting without a
-    non-zero exit status.
+    """Log an error message without exiting with a non-zero exit status.
+
     :param ConfigOptions:
     :param msg: Optional error message string, overrides current value for ConfigOptions.errMsg in-place before sending log call.
     :return:
     """
     if msg is not None:
+        if not isinstance(msg, str):
+            raise TypeError(
+                f"Expected type str or NoneType for msg, got type: {type(msg)}"
+            )
         ConfigOptions.errMsg = msg
-
-    if not LOG.hasHandlers():
-        ConfigOptions.errMsg = (
-            "Unable to obtain a logger object for: " + ConfigOptions.logFile
-        )
-        raise Exception()
 
     try:
         LOG.critical("RANK: " + str(MpiConfig.rank) + " - " + ConfigOptions.errMsg)
@@ -265,8 +209,6 @@ def log_critical(ConfigOptions, MpiConfig, msg: str = None):
             (
                 "Unable to write CRITICAL message on RANK: "
                 + str(MpiConfig.rank)
-                + " for log file: "
-                + ConfigOptions.logFile
             ),
             MpiConfig,
         )
@@ -278,20 +220,18 @@ def log_critical(ConfigOptions, MpiConfig, msg: str = None):
 
 
 def log_warning(ConfigOptions, MpiConfig, msg: str = None):
-    """
-    Function to log warning messages to the log file.
+    """Log a warning message to the log file.
+
     :param ConfigOptions:
     :param msg: Optional error message string, overrides current value for ConfigOptions.statusMsg in-place before sending log call.
     :return:
     """
     if msg is not None:
+        if not isinstance(msg, str):
+            raise TypeError(
+                f"Expected type str or NoneType for msg, got type: {type(msg)}"
+            )
         ConfigOptions.statusMsg = msg
-
-    if not LOG.hasHandlers():
-        ConfigOptions.errMsg = (
-            "Unable to obtain a logger object for: " + ConfigOptions.logFile
-        )
-        raise Exception()
 
     try:
         LOG.warning("RANK: " + str(MpiConfig.rank) + " - " + ConfigOptions.statusMsg)
@@ -300,34 +240,27 @@ def log_warning(ConfigOptions, MpiConfig, msg: str = None):
             (
                 "Unable to write WARNING message on RANK: "
                 + str(MpiConfig.rank)
-                + " for log file: "
-                + ConfigOptions.logFile
             ),
             MpiConfig,
         )
 
 
 def log_msg(ConfigOptions, MpiConfig, debug: bool = False, msg: str = None):
-    """
-    Function to log INFO messages to a specified log file.
+    """Log INFO messages to a specified log file.
+
     :param ConfigOptions:
     :param msg: Optional error message string, overrides current value for ConfigOptions.statusMsg in-place before sending log call.
     :return:
     """
     if not isinstance(debug, bool):
         raise TypeError(f"Expected type bool for debug, got type: {type(debug)}")
+    
     if msg is not None:
         if not isinstance(msg, str):
             raise TypeError(
                 f"Expected type str or NoneType for msg, got type: {type(msg)}"
             )
         ConfigOptions.statusMsg = msg
-
-    if not LOG.hasHandlers():
-        ConfigOptions.errMsg = (
-            "log_msg: Unable to obtain a logger object for: " + ConfigOptions.logFile
-        )
-        raise Exception()
 
     try:
         if debug:
@@ -339,67 +272,9 @@ def log_msg(ConfigOptions, MpiConfig, debug: bool = False, msg: str = None):
             (
                 "Unable to write log_msg message on RANK: "
                 + str(MpiConfig.rank)
-                + " for log file: "
-                + ConfigOptions.logFile
             ),
             MpiConfig,
         )
-
-
-def close_log(ConfigOptions, MpiConfig):
-    """Close the log file.
-
-    Function for closing a log file.
-    :param ConfigOptions:
-    :return:
-    """
-    # Only close if we have an open handler
-    if getattr(ConfigOptions, "logHandle", None) is None:
-        return
-
-    if log_name == MODULE_NAME:
-        return
-
-    try:
-        logObj = logging.getLogger(log_name)
-    except Exception:
-        err_out_screen_para(
-            (
-                "Unable to obtain logger object on RANK: "
-                + str(MpiConfig.rank)
-                + " for log file: "
-                + ConfigOptions.logFile
-            ),
-            MpiConfig,
-        )
-
-    try:
-        logObj.removeHandler(ConfigOptions.logHandle)
-    except Exception:
-        err_out_screen_para(
-            (
-                "Unable to remove logging file handle on RANK: "
-                + str(MpiConfig.rank)
-                + " for log file: "
-                + ConfigOptions.logFile
-            ),
-            MpiConfig,
-        )
-
-    try:
-        ConfigOptions.logHandle.close()
-    except Exception:
-        err_out_screen_para(
-            (
-                "Unable to close logging file: "
-                + ConfigOptions.logFile
-                + " on RANK: "
-                + str(MpiConfig.rank)
-            ),
-            MpiConfig,
-        )
-
-    ConfigOptions.logHandle = None
 
 
 def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):

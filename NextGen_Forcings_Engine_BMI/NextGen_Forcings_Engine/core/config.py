@@ -1,10 +1,13 @@
 import configparser
 import json
 import logging
-import re
 import os
+import re
+import uuid
 from datetime import datetime, timedelta, timezone
 
+# Use the Error, Warning, and Trapping System Package for logging
+import ewts
 import numpy as np
 
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.err_handler import (
@@ -13,10 +16,10 @@ from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.err_handler import
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.time_handling import (
     calculate_lookback_window,
 )
-from nextgen_forcings_ewts import MODULE_NAME
 
-LOG = logging.getLogger(MODULE_NAME)
+from . import mpi_utils
 
+LOG = ewts.get_logger(ewts.FORCING_ID)
 FORCE_COUNT = 27
 
 
@@ -145,6 +148,40 @@ class ConfigOptions:
         self.geogrid = geogrid_arg
         self.geopackage = None
 
+        self.uid64 = None
+        self.broadcast_new_64bit_uid()
+
+        self._scratch_dir_has_been_uniquefied = False
+
+    def uniquefy_scratch_dir_as_child(self, uid: str) -> None:
+        """Modify the existing scratch dir by adding the UID string available to all ranks from the MpiConfig class.
+        This may only be called once. Subsequent calls will result in an error.
+        This must be called by all ranks, once."""
+        LOG.debug(f"Uniquefying scratch dir: adding suffix {uid} to {self.scratch_dir}")
+        if not isinstance(uid, str):
+            raise TypeError(f"Expected str, got {type(uid)} for type of uid: {uid}")
+        if self.scratch_dir is None:
+            raise ValueError("This cannot be ran while scratch_dir is None")
+        if self._scratch_dir_has_been_uniquefied is True:
+            raise ValueError(
+                f"scratch_dir path has already been uniquefied: {self.scratch_dir}"
+            )
+        self.scratch_dir = os.path.join(self.scratch_dir, uid)
+        self._scratch_dir_has_been_uniquefied = True
+        self.make_scratch_dir()
+
+    def make_scratch_dir(self) -> None:
+        """Make the scratch dir and its parents."""
+        os.makedirs(self.scratch_dir, exist_ok=True)
+        LOG.debug(f"Scratch dir: {self.scratch_dir}")
+
+    def broadcast_new_64bit_uid(self):
+        """Broadcast a random uint64 then save the hash of that to self.uid64, which effectively broadcasts the same unique string to all ranks.
+        Should be called once to avoid confusion."""
+        if self.uid64 is not None:
+            raise RuntimeError("self.uid64 has already been initialized.")
+        self.uid64 = mpi_utils.get_new_broadcasted_uid()
+
     def validate_config(self, cfg_bmi: dict) -> None:
         """Validate in options from the configuration file and check that proper options were provided."""
         # Ensure b_date_proc is set; if not, read from the configuration file
@@ -181,26 +218,32 @@ class ConfigOptions:
         # Ensure geogrid is set; if not, read from the configuration file
         if self.geogrid is None:
             try:
-                self.geogrid = cfg_bmi.get(
+                geogrid_base = cfg_bmi.get(
                     "GeogridIn", None
                 )  # Default to None if not found
-                if self.geogrid is None:
-                    err_out_screen(
-                        "Unable to locate GeogridIn in the configuration file."
-                    )
             except KeyError as e:
                 err_out_screen(
                     "Unable to locate GeogridIn in the configuration file.", e
                 )
+            if geogrid_base is None:
+                err_out_screen("Unable to locate GeogridIn in the configuration file.")
+                self.geogrid = None
+            else:
+                geogrid_parent = os.path.dirname(geogrid_base)
+                geogrid_filename = os.path.basename(geogrid_base)
+                if self.uid64 is None:
+                    raise ValueError("self.uid64 cannot be None, please initialize it.")
+                self.geogrid = os.path.join(
+                    geogrid_parent, f"{self.uid64}_{geogrid_filename}"
+                )
             # Create directory for esmf_mesh file
-            geogrid_dir = os.path.dirname(self.geogrid)
-            if not os.path.isdir(geogrid_dir):
+            if not os.path.isdir(geogrid_parent):
                 try:
-                    os.makedirs(geogrid_dir, exist_ok=True)
-                    LOG.debug(f"Created esmf mesh directory: {geogrid_dir}")
+                    os.makedirs(geogrid_parent, exist_ok=True)
+                    LOG.debug(f"Created esmf mesh directory: {geogrid_parent}")
                 except OSError as e:
                     err_out_screen(
-                        f"Unable to create esmf_mesh directory: {geogrid_dir}. Error: {e}"
+                        f"Unable to create esmf_mesh directory: {geogrid_parent}. Error: {e}"
                     )
 
         # Read in the base input forcing options as an array of values to map.
@@ -311,10 +354,11 @@ class ConfigOptions:
                     "NETCDF4",
                     "NWM",
                     "ZARR",
+                    "GRIB2_CFS",
                 ]:
                     err_out_screen(
                         f'Invalid forcing file type "{file_type}" specified. '
-                        "Only GRIB1, GRIB2, NETCDF, NWM, and ZARR are supported"
+                        "Only GRIB1, GRIB2, NETCDF, NWM, ZARR, and GRIB2_CFS are supported"
                     )
 
             # Read in the input directories for each forcing option.
@@ -479,8 +523,8 @@ class ConfigOptions:
             err_out_screen("Unable to locate ScratchDir in the configuration file.", e)
         except configparser.NoOptionError as e:
             err_out_screen("Unable to locate ScratchDir in the configuration file.", e)
-        os.makedirs(self.scratch_dir, exist_ok=True)
-        LOG.debug(f"Scratch dir: {self.scratch_dir}")
+
+        self.make_scratch_dir()
 
         # Read in compression option
         try:
@@ -1711,9 +1755,9 @@ class ConfigOptions:
             # Check to make sure supplemental precip options make sense. Also read in the RQI threshold
             # if any radar products where chosen.
             for suppOpt in self.supp_precip_forcings:
-                if suppOpt < 0 or suppOpt > 15:
+                if suppOpt < 0 or suppOpt > 16:
                     err_out_screen(
-                        "Please specify SuppForcing values between 1 and 15."
+                        "Please specify SuppForcing values between 1 and 16."
                     )
                 # Read in RQI threshold to apply to radar products.
                 if suppOpt in (1, 2, 7, 10, 11, 12):
@@ -2079,10 +2123,14 @@ class ConfigOptions:
     @property
     def nwm_domain(self) -> str:
         """Extract NWM domain from the geogrid filename, using regex pattern."""
+        if self.nwm_geogrid is None:
+            return None
         pattern = r"geo_em_([a-zA-Z-_]+)\.nc$"  # E.g. extract "Puerto_Rico" from /foo/bar/esmf_mesh/NWM/domain/geo_em_Puerto_Rico.nc
         groups = re.findall(pattern, self.nwm_geogrid)
         if len(groups) != 1:
-            raise ValueError(f"Could not determine NWM domain. {len(groups)} groups found (expected 1) in {self.nwm_geogrid} using regex pattern {pattern}")
+            raise ValueError(
+                f"Could not determine NWM domain. {len(groups)} groups found (expected 1) in {self.nwm_geogrid} using regex pattern {pattern}"
+            )
         domain = groups[0]
         if domain in ["PuertoRico", "Puerto_Rico", "PR"]:
             return "PR"
@@ -2092,7 +2140,9 @@ class ConfigOptions:
     @property
     def nwm_url(self):
         """Construct NWM Zarr URL based on domain."""
-        if self.nwm_domain == "CONUS":
+        if self.nwm_domain is None:
+            return None
+        elif self.nwm_domain == "CONUS":
             return "{source}/{domain}/zarr/forcing/{var}.zarr"
         elif self.nwm_domain in ["Hawaii", "PR", "Alaska"]:
             return "{source}/{domain}/zarr/forcing.zarr"

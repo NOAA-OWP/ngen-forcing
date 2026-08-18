@@ -1,24 +1,54 @@
+############################################################################
+# Change/Verify these values when adopting this Dockerfile into another org:
+#   GH_ORG, IMAGE_NAMESPACE,
+#   EWTS_ORG, EWTS_REF
+############################################################################
+
+# Ownership / branding overrides
+ARG GH_ORG=NGWPC
+ARG IMAGE_NAMESPACE=ngwpc
+
+# External repository sources (org and ref/branch overrides)
+ARG EWTS_ORG=${GH_ORG}
+ARG EWTS_REF=development
+############################################################################
+
+# Image selection
 ## TODO: replace with base image created under NGWPC-3223 ##
 ## see: https://jira.nextgenwaterprediction.com/browse/NGWPC-3223
-ARG BASE_IMAGE_NAME="rockylinux:8"
+ARG BMI_BASE_REPO=rockylinux
+ARG BMI_BASE_TAG=8
 
-FROM ${BASE_IMAGE_NAME}
+FROM ${BMI_BASE_REPO}:${BMI_BASE_TAG}
+
+# Re-expose args after FROM for the remaining build stage
+# Keeps whatever value was already set
+ARG GH_ORG
+ARG IMAGE_NAMESPACE
+ARG EWTS_ORG
+ARG EWTS_REF
 
 # OCI Metadata Arguments
-ARG BASE_IMAGE_NAME
+ARG BMI_BASE_REPO
+ARG BMI_BASE_TAG
+ARG BMI_BASE_NAME="${BMI_BASE_REPO}:${BMI_BASE_TAG}"
+ARG BMI_BASE_DIGEST="unknown"
+ARG BMI_BASE_REVISION="unknown"
 ARG IMAGE_SOURCE="unknown"
 ARG IMAGE_VENDOR="unknown"
 ARG IMAGE_VERSION="unknown"
 ARG IMAGE_REVISION="unknown"
-ARG IMAGE_CREATED="unknown"
 
 # OCI Standard Labels
-LABEL org.opencontainers.image.base.name="${BASE_IMAGE_NAME}" \
+LABEL org.opencontainers.image.base.name="${BMI_BASE_NAME}" \
+    org.opencontainers.image.base.digest="${BMI_BASE_DIGEST}" \
+    io.${IMAGE_NAMESPACE}.image.base.revision="${BMI_BASE_REVISION}" \
     org.opencontainers.image.source="${IMAGE_SOURCE}" \
     org.opencontainers.image.vendor="${IMAGE_VENDOR}" \
     org.opencontainers.image.version="${IMAGE_VERSION}" \
     org.opencontainers.image.revision="${IMAGE_REVISION}" \
-    org.opencontainers.image.created="${IMAGE_CREATED}"
+    org.opencontainers.image.title="NGEN BMI Forcing" \
+    org.opencontainers.image.description="Docker image for the NGEN BMI Forcings application"
 
 # ensure local python is preferred over distribution python
 ENV PATH="/usr/local/bin:$PATH"
@@ -165,6 +195,51 @@ ENV OMPI_MCA_btl_base_warn_component_unused=0
 # Reset SHELL so we're not locked into the gcc-10 build environment
 SHELL ["/bin/bash", "-c"]
 
+# ── EWTS (Error, Warning and Trapping System)
+# ngen-bmi-forcing only needs the EWTS Python package (not the C/C++/Fortran
+# libraries or ngen bridge that the full ngen image requires).
+#
+# Build args – override at build time to pin a branch, tag, or full commit SHA:
+#   docker build --build-arg EWTS_REF=v1.2.3 ...
+#   docker build --build-arg EWTS_REF=abc123def456 ...
+#
+# Clone nwm-ewts, install the Python package, capture git metadata for
+# provenance, then remove the source tree.
+# Try shallow clone by branch/tag name first; fall back to full clone + checkout
+# for bare commit SHAs (which git clone -b doesn't support).
+#
+# NOTE: Unlike the ngen Dockerfile, clone + pip install + cleanup are kept in a
+# single RUN so the source tree never persists in a layer.  In ngen the split is
+# safe because cmake installs the wheel to /opt/ewts before the source is removed;
+# here there is no cmake step, so the source must remain until pip finishes.
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache \
+    set -eux && \
+    (git clone --depth 1 -b "${EWTS_REF}" \
+        "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts \
+     || (git clone "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts && \
+         cd /tmp/nwm-ewts && git checkout "${EWTS_REF}")) && \
+    cd /tmp/nwm-ewts && \
+    # ── Capture EWTS git provenance ──
+    # Saved as a JSON sidecar so the git-info step below can merge EWTS
+    # metadata alongside ngen-bmi-forcing.
+    jq -n \
+      --arg commit_hash "$(git rev-parse HEAD)" \
+      --arg branch "$(git branch -r --contains HEAD 2>/dev/null | grep -v '\->' | sed 's|origin/||' | head -n1 | xargs || echo "${EWTS_REF}")" \
+      --arg tags "$(git tag --points-at HEAD 2>/dev/null | tr '\n' ' ')" \
+      --arg author "$(git log -1 --pretty=format:'%an')" \
+      --arg commit_date "$(date -u -d @$(git log -1 --pretty=format:'%ct') +'%Y-%m-%d %H:%M:%S UTC')" \
+      --arg message "$(git log -1 --pretty=format:'%s' | tr '\n' ';')" \
+      --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+      '{"nwm-ewts": {commit_hash: $commit_hash, branch: $branch, tags: $tags, author: $author, commit_date: $commit_date, message: $message, build_date: $build_date}}' \
+      > /ngen-app/nwm-ewts_git_info.json && \
+    # ── Install the EWTS Python package into the venv ──
+    # This is what makes "import ewts" work for ngen-bmi-forcing.
+    # For example, bmi_model.py does:  import ewts; LOG = ewts.get_logger(ewts.FORCING_ID)
+    pip install /tmp/nwm-ewts/runtime/python/ewts && \
+    # ── Cleanup ──
+    cd / && \
+    rm -rf /tmp/nwm-ewts
+
 COPY . /ngen-app/ngen-forcing/
 
 # Install ngen-forcing as a Python package
@@ -194,7 +269,13 @@ RUN set -eux; \
       --arg message "$(git log -1 --pretty=format:'%s' | tr '\n' ';')" \
       --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
       "{\"ngen-bmi-forcing\": {commit_hash: \$commit_hash, branch: \$branch, tags: \$tags, author: \$author, commit_date: \$commit_date, message: \$message, build_date: \$build_date}}" \
-      > $GIT_INFO_PATH
+      > $GIT_INFO_PATH; \
+    # Merge EWTS git provenance if it exists
+    if [ -f /ngen-app/nwm-ewts_git_info.json ]; then \
+      jq -s 'add' $GIT_INFO_PATH /ngen-app/nwm-ewts_git_info.json > ${GIT_INFO_PATH}.tmp; \
+      mv ${GIT_INFO_PATH}.tmp $GIT_INFO_PATH; \
+      rm -f /ngen-app/nwm-ewts_git_info.json; \
+    fi
 
 WORKDIR /
 

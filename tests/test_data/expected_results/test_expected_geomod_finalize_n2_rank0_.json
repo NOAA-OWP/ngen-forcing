@@ -1,0 +1,118 @@
+{
+  "centerCoords": null,
+  "cosa_grid": null,
+  "crs_atts": null,
+  "dx_meters": null,
+  "dy_meters": null,
+  "element_ids": [
+    11466,
+    11467,
+    11468,
+    11469
+  ],
+  "element_ids_global": [
+    11466,
+    11467,
+    11468,
+    11469,
+    11470,
+    11475,
+    11476
+  ],
+  "esmf_grid": {
+    "_area": [
+      null,
+      null
+    ],
+    "_coord_sys": null,
+    "_coords": [
+      [
+        "hash_-2029877471422530764",
+        "hash_-2626201295507711994"
+      ],
+      [
+        [
+          -72.04918711744217,
+          -72.0498876679477,
+          -72.05118870198277,
+          -72.04754380872834
+        ],
+        [
+          41.824530105139985,
+          41.79153684369973,
+          41.739617787523294,
+          41.68903878715741
+        ]
+      ]
+    ],
+    "_finalized": false,
+    "_mask": [
+      null,
+      null
+    ],
+    "_meta": {},
+    "_parametric_dim": 2,
+    "_rank": 1,
+    "_size": [
+      496,
+      4
+    ],
+    "_size_owned": [
+      496,
+      4
+    ],
+    "_spatial_dim": null,
+    "_struct": {}
+  },
+  "esmf_lat": null,
+  "esmf_lon": null,
+  "height": null,
+  "height_elem": null,
+  "inds": null,
+  "lat_bounds": "hash_4066407811557226096",
+  "latitude_grid": [
+    41.824530105139985,
+    41.79153684369973,
+    41.739617787523294,
+    41.68903878715741
+  ],
+  "latitude_grid_elem": null,
+  "lon_bounds": "hash_-4728106294047550556",
+  "longitude_grid": [
+    -72.04918711744217,
+    -72.0498876679477,
+    -72.05118870198277,
+    -72.04754380872834
+  ],
+  "longitude_grid_elem": null,
+  "mesh_inds": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "mesh_inds_elem": null,
+  "nodeCoords": null,
+  "nx_global": 7,
+  "nx_global_elem": null,
+  "nx_local": 4,
+  "nx_local_elem": null,
+  "ny_global": 7,
+  "ny_global_elem": null,
+  "ny_local": 4,
+  "ny_local_elem": null,
+  "sina_grid": null,
+  "slope": null,
+  "slope_elem": null,
+  "slp_azi": null,
+  "slp_azi_elem": null,
+  "spatial_global_atts": null,
+  "x_coord_atts": null,
+  "x_coords": null,
+  "x_lower_bound": null,
+  "x_upper_bound": null,
+  "y_coord_atts": null,
+  "y_coords": null,
+  "y_lower_bound": null,
+  "y_upper_bound": null
+}

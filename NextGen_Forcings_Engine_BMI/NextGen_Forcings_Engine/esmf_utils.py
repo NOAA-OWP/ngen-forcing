@@ -1,12 +1,14 @@
-from . import retry_utils
 import types
-from .core.parallel import MpiConfig
-from .core.config import ConfigOptions
+
+import esmpy as ESMF
 
 ### TODO fix circular import raised during `from .bmi_model import ESMF`.
 ### shapely must be imported before ESMF to avoid segfault with shapely 2+
 import shapely
-import esmpy as ESMF
+
+from . import retry_utils
+from .core.config import ConfigOptions
+from .core.parallel import MpiConfig
 
 
 @retry_utils.retry_w_mpi_context(
@@ -91,5 +93,7 @@ def esmf_regridobj_call_retry(
     **esmf_kwargs,
 ):
     """Call to provided regridObj (or regridObj_elem) object, wrapped by MPI-aware retry decorator.
-    These objects are attrs of class .core.forcingInputMod.input_forcings."""
+
+    These objects are attrs of class .core.forcingInputMod.input_forcings.
+    """
     return regridObj(*esmf_args, **esmf_kwargs)

@@ -32,7 +32,8 @@ dependencies = [
     "xarray[complete]==2025.12.0",
     "zarr",
     "rioxarray",
-    "python-dotenv"
+    "python-dotenv",
+    "obstore"
 ]
 
 dynamic = ["version"]
@@ -49,12 +50,14 @@ requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["NextGen_Forcings_Engine_BMI", "nextgen_forcings_ewts/src", "."]
+where = ["NextGen_Forcings_Engine_BMI","."]
 include = ["NextGen_Forcings_Engine*", 
     "Forcing_Extraction_Scripts*", 
-    "ESMF_Mesh_Domain_Configuration_Production*",
-    "nextgen_forcings_ewts*"]
+    "ESMF_Mesh_Domain_Configuration_Production*"]
 namespaces = false
+
+[tool.setuptools.package-data]
+"NextGen_Forcings_Engine_BMI" = ["BMI_NextGen_Configs/**/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "NextGen_Forcings_Engine.__version__" }

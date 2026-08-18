@@ -1,9 +1,9 @@
 import datetime
-import logging
 import os
 from contextlib import contextmanager
 from time import time
 
+import ewts
 import numpy as np
 import pandas as pd
 
@@ -18,19 +18,19 @@ from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
     ConfigOptions,
 )
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.geoMod import (
-    GeoMetaWrfHydro,
+    GeoMeta,
 )
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.ioMod import OutputObj
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import MpiConfig
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.historical_forcing import (
     AORCAlaskaProcessor,
     AORCConusProcessor,
+    NWMV3AlaskaProcessor,
     NWMV3ConusProcessor,
     NWMV3OConusProcessor,
 )
-from nextgen_forcings_ewts import MODULE_NAME
 
-LOG = logging.getLogger(MODULE_NAME)
+LOG = ewts.get_logger(ewts.FORCING_ID)
 
 
 @contextmanager
@@ -79,7 +79,7 @@ class NWMv3ForcingEngineModel:
         model: dict,
         future_time: float,
         config_options: ConfigOptions,
-        wrf_hydro_geo_meta: GeoMetaWrfHydro,
+        wrf_hydro_geo_meta: GeoMeta,
         input_forcing_mod: dict,
         supp_pcp_mod: dict,
         mpi_config: MpiConfig,
@@ -282,29 +282,6 @@ class NWMv3ForcingEngineModel:
             for force_key in config_options.input_forcings:
                 input_forcing_mod[force_key].skip = False
 
-            # Determine log timestamp
-            if config_options.ana_flag:
-                log_time = config_options.b_date_proc
-            else:
-                log_time = config_options.current_fcst_cycle
-
-            # Compose a path to a log file, which will contain information about this forecast cycle
-            log_filename = (
-                f"LOG_{config_options.nwmConfig}"
-                f"{'_' if config_options.nwmConfig != 'long_range' else f'_mem{config_options.cfsv2EnsMember}_'}"
-                f"{config_options.d_program_init.strftime('%Y%m%d%H%M')}_{log_time.strftime('%Y%m%d%H%M')}"
-                ".log"
-            )
-            config_options.logFile = os.path.join(
-                config_options.scratch_dir, log_filename
-            )
-
-            # Initialize logging
-            try:
-                err_handler.init_log(config_options, mpi_config)
-            except Exception:
-                err_handler.err_out_screen_para(config_options.errMsg, mpi_config)
-
             err_handler.check_program_status(config_options, mpi_config)
         return (
             config_options,
@@ -346,7 +323,7 @@ class NWMv3ForcingEngineModel:
         self,
         future_time: float,
         config_options: ConfigOptions,
-        wrf_hydro_geo_meta: GeoMetaWrfHydro,
+        wrf_hydro_geo_meta: GeoMeta,
         input_forcing_mod: dict,
         supp_pcp_mod: dict,
         mpi_config: MpiConfig,
@@ -484,9 +461,12 @@ class NWMv3ForcingEngineModel:
                                 elif config_options.nwm_domain in [
                                     "Hawaii",
                                     "PR",
-                                    "Alaska",
                                 ]:
                                     self.source_data_processor = NWMV3OConusProcessor(
+                                        config_options, mpi_config, wrf_hydro_geo_meta
+                                    )
+                                elif config_options.nwm_domain == "Alaska":
+                                    self.source_data_processor = NWMV3AlaskaProcessor(
                                         config_options, mpi_config, wrf_hydro_geo_meta
                                     )
                                 else:
@@ -660,7 +640,7 @@ class NWMv3ForcingEngineModel:
     def process_suplemental_precip(
         self,
         config_options: ConfigOptions,
-        wrf_hydro_geo_meta: GeoMetaWrfHydro,
+        wrf_hydro_geo_meta: GeoMeta,
         supp_pcp_mod: dict,
         mpi_config: MpiConfig,
         output_obj: OutputObj,
@@ -732,7 +712,7 @@ class NWMv3ForcingEngineModel:
     def write_output(
         self,
         config_options: ConfigOptions,
-        wrf_hydro_geo_meta: GeoMetaWrfHydro,
+        wrf_hydro_geo_meta: GeoMeta,
         mpi_config: MpiConfig,
         output_obj: OutputObj,
     ):
@@ -760,7 +740,7 @@ class NWMv3ForcingEngineModel:
         self,
         model: dict,
         config_options: ConfigOptions,
-        wrf_hydro_geo_meta: GeoMetaWrfHydro,
+        wrf_hydro_geo_meta: GeoMeta,
         output_obj: OutputObj,
     ):
         """Flatten the Forcings Engine output object and update the BMI dictionary."""

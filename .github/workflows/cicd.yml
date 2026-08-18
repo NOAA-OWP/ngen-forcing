@@ -2,27 +2,64 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ngwpc-candidate, ngwpc-release, master, nwm-master, development, release-candidate]
+    branches:
+      - ngwpc-candidate
+      - ngwpc-release
+      - master
+      - nwm-master
+      - development
+      - release-candidate
   pull_request:
-    branches: [ngwpc-candidate, ngwpc-release, main, nwm-master, development, release-candidate]
-  release:
-    types: [published]
+    branches:
+      - ngwpc-candidate
+      - ngwpc-release
+      - main
+      - nwm-master
+      - development
+      - release-candidate
   workflow_dispatch:
     inputs:
-      build_target:
-        description: 'Select which image(s) to build'
-        required: true
-        default: 'All'
-        type: choice
-        options:
-          - All
-          - BMI
-          - Coastal
-          - SFINCS
-      trigger_downstream:
-        description: 'PENDING APPROVAL: Trigger downstream repositories pipeline after successful run (only applicable for All/BMI builds)'
-        required: true
+      BMI_BASE_TAG:
+        description: 'BMI_BASE_TAG'
+        required: false
+        type: string
+      GHCR_ORG:
+        description: 'GHCR_ORG'
+        required: false
+        type: string
+      EWTS_ORG:
+        description: 'EWTS_ORG'
+        required: false
+        type: string
+      EWTS_REF:
+        description: 'EWTS_REF'
+        required: false
+        type: string
+      TRIGGER_DOWNSTREAM:
+        description: 'Trigger downstream repos'
+        required: false
+        default: false
         type: boolean
+      NGEN_REF:
+        description: 'NGEN_REF'
+        required: false
+        type: string
+      NWM_CAL_MGR_REF:
+        description: 'NWM_CAL_MGR_REF'
+        required: false
+        type: string
+      NWM_FCST_MGR_REF:
+        description: 'NWM_FCST_MGR_REF'
+        required: false
+        type: string
+      MSW_MGR_ORG:
+        description: 'MSW_MGR_ORG'
+        required: false
+        type: string
+      MSW_MGR_REF:
+        description: 'MSW_MGR_REF'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -31,6 +68,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
+  BMI_BASE_REPO: rockylinux
 
 jobs:
   # set variables for use in other jobs
@@ -38,16 +76,15 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       org: ${{ steps.vars.outputs.org }}
-      image_base: ${{ steps.vars.outputs.image_base }}
-      image_bmi: ${{ steps.vars.outputs.image_bmi }}
-      image_coastal: ${{ steps.vars.outputs.image_coastal }}
-      image_sfincs: ${{ steps.vars.outputs.image_sfincs }}
-      pr_tag: ${{ steps.vars.outputs.pr_tag }}
+      bmi_image: ${{ steps.vars.outputs.bmi_image }}
+      bmi_base_name: ${{ steps.vars.outputs.bmi_base_name }}
+      bmi_base_tag: ${{ steps.vars.outputs.bmi_base_tag }}
+      bmi_base_digest: ${{ steps.vars.outputs.bmi_base_digest }}
+      bmi_base_revision: ${{ steps.vars.outputs.bmi_base_revision }}
       commit_sha: ${{ steps.vars.outputs.commit_sha }}
       commit_sha_short: ${{ steps.vars.outputs.commit_sha_short }}
       test_image_tag: ${{ steps.vars.outputs.test_image_tag }}
       alias_tag: ${{ steps.vars.outputs.alias_tag }}
-      build_date: ${{ steps.vars.outputs.build_date }}
       clean_ref: ${{ steps.vars.outputs.clean_ref }}
     steps:
       - name: Compute image vars
@@ -56,69 +93,88 @@ jobs:
         run: |
           set -euo pipefail
 
-          # one datetime for all time variables
-          NOW=$(date -u +'%Y-%m-%d %H:%M:%S')
-
-          # for OCI labels
-          BUILD_DATE=$(date -u -d "$NOW" +'%Y-%m-%dT%H:%M:%SZ')
-
-          # for Docker image tags
-          TIMESTAMP=$(date -u -d "$NOW" +'%Y%m%d%H%M%SZ')
-
-          # logic to get the real branch name even on pull requests
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            REAL_REF="${{ github.head_ref }}"
-          else
-            REAL_REF="${{ github.ref_name }}"
-          fi
-
-          # clean ref name and short commit sha
-          CLEAN_REF=$(echo "$REAL_REF" | tr '[:upper:]' '[:lower:]' | sed 's/\//-/g')
-          SHORT_SHA="${GITHUB_SHA:0:12}"
-
           # set variables to use with Docker images
           ORG="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           REPO="$(basename "${GITHUB_REPOSITORY}")"
           IMAGE_BASE="${REGISTRY}/${ORG}"
 
+          # one datetime for all time variables
+          NOW=$(date -u +'%Y-%m-%d %H:%M:%S')
+
+          # for Docker image tags
+          TIMESTAMP=$(date -u -d "$NOW" +'%Y%m%d%H%M%SZ')
+
+          # logic to get the real branch name and commit SHA on pull requests
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            REAL_REF="${{ github.head_ref }}"
+            REAL_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            REAL_REF="${{ github.ref_name }}"
+            REAL_SHA="${GITHUB_SHA}"
+          fi
+
+          # clean ref name and short commit sha
+          CLEAN_REF=$(echo "$REAL_REF" | tr '[:upper:]' '[:lower:]' | sed 's/\//-/g')
+          SHORT_SHA="${REAL_SHA:0:7}"
+
+          # skopeo is needed to inspect the base image
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+
+          # base image metadata for BMI Dockerfile labels
+          BMI_BASE_TAG_INPUT="${{ github.event.inputs.BMI_BASE_TAG || '' }}"
+          if [ -n "$BMI_BASE_TAG_INPUT" ]; then
+            BMI_BASE_TAG="$BMI_BASE_TAG_INPUT"
+          else
+            BMI_BASE_TAG="8"
+          fi
+          BMI_BASE_NAME="${BMI_BASE_REPO}:${BMI_BASE_TAG}"
+          BMI_BASE_INSPECT=$(skopeo inspect "docker://${BMI_BASE_NAME}")
+          BMI_BASE_DIGEST=$(echo "$BMI_BASE_INSPECT" | jq -r '.Digest // "unknown"')
+          BMI_BASE_REVISION=$(echo "$BMI_BASE_INSPECT" | jq -r '.Labels["org.opencontainers.image.revision"] // .Labels["io.ngwpc.image.base.revision"] // "unknown"')
+
           # logic for the tags:
-          # test_image_tag: used for the initial build and test
+          # test_image_tag (commit short sha): used for the initial build and test
           # alias_tag: used for final tagging on successful tests
-          # for pull requests, use pr-<pr-number>-build
-          # for workflow_dispatch and pushes, use <timestamp>-<clean-ref-name>
 
           # test tag is always commit short sha
           TEST_TAG="${SHORT_SHA}"
 
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # for pull requests, use pr-<pr number>-build
             ALIAS="pr-${{ github.event.pull_request.number }}-build"
-          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] || [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            ALIAS="${TIMESTAMP}-${CLEAN_REF}"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            # for workflow dispatches on tags, use the git tag
+            ALIAS="${CLEAN_REF}"
           else
-            ALIAS="${SHORT_SHA}" # fallback
+            # for pushes or workflow dispatches to branches, use <timestamp-branchname>
+            ALIAS="${TIMESTAMP}-${CLEAN_REF}"
           fi
 
           # save outputs
           echo "org=${ORG}" >> "$GITHUB_OUTPUT"
-          echo "image_base=${IMAGE_BASE}" >> "$GITHUB_OUTPUT"
-          echo "image_bmi=${IMAGE_BASE}/ngen-bmi-forcing" >> "$GITHUB_OUTPUT"
-          echo "image_coastal=${IMAGE_BASE}/ngen-coastal" >> "$GITHUB_OUTPUT"
-          echo "image_sfincs=${IMAGE_BASE}/ngen-sfincs-forcing" >> "$GITHUB_OUTPUT"
-          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          echo "bmi_image=${IMAGE_BASE}/ngen-bmi-forcing" >> "$GITHUB_OUTPUT"
+          echo "bmi_base_name=${BMI_BASE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "bmi_base_tag=${BMI_BASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "bmi_base_digest=${BMI_BASE_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "bmi_base_revision=${BMI_BASE_REVISION}" >> "$GITHUB_OUTPUT"
           echo "test_image_tag=${TEST_TAG}" >> "$GITHUB_OUTPUT"
           echo "alias_tag=${ALIAS}" >> "$GITHUB_OUTPUT"
-          echo "commit_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${REAL_SHA}" >> "$GITHUB_OUTPUT"
           echo "commit_sha_short=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "clean_ref=${CLEAN_REF}" >> "$GITHUB_OUTPUT"
 
   # CodeQL scan
   codeql-scan:
+    name: codeql-scan
     if: |
       (github.event_name == 'pull_request') ||
       (github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    needs: [setup]
+    needs: setup
     permissions:
       actions: read
       contents: read
@@ -146,28 +202,24 @@ jobs:
     if: |
       (github.event_name == 'pull_request') ||
       (github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch' &&
-       (inputs.build_target == 'All' || inputs.build_target == 'BMI'))
+      (github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    needs: [setup]
+    needs: setup
     outputs:
       bmi_digest: ${{ steps.build_bmi_image.outputs.digest }}
     steps:
       - uses: actions/checkout@v6
-
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
+        uses: docker/setup-buildx-action@v4
       - name: Log in to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build & push BMI Forcing
         id: build_bmi_image # set ID to capture output from this step to use outputs like digest, imageid, and metadata
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           load: false
           platforms: linux/amd64
@@ -177,15 +229,18 @@ jobs:
           file: Dockerfile.bmi-forcings
           # file: Dockerfile.test
           push: true
-          tags: ${{ needs.setup.outputs.image_bmi }}:${{ needs.setup.outputs.test_image_tag }}
+          tags: ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }}
           build-args: |
+            BMI_BASE_TAG=${{ needs.setup.outputs.bmi_base_tag }}
+            BMI_BASE_DIGEST=${{ needs.setup.outputs.bmi_base_digest }}
+            BMI_BASE_REVISION=${{ needs.setup.outputs.bmi_base_revision }}
+            EWTS_ORG=${{ inputs.EWTS_ORG || github.repository_owner }}
+            EWTS_REF=${{ inputs.EWTS_REF || 'development' }}
             IMAGE_SOURCE=https://github.com/${{ github.repository }}
             IMAGE_VENDOR=${{ github.repository_owner }}
             IMAGE_VERSION=${{ needs.setup.outputs.clean_ref }}
-            IMAGE_REVISION=${{ github.sha }}
-            IMAGE_CREATED=${{ needs.setup.outputs.build_date }}
+            IMAGE_REVISION=${{ needs.setup.outputs.commit_sha }}
             CI_COMMIT_REF_NAME=${{ needs.setup.outputs.clean_ref }}
-
       - name: Free disk space
         run: |
           # clear pre-installed tools
@@ -203,18 +258,15 @@ jobs:
 
           # check space
           df -h
-
       - name: Unit Test BMI
         run: |
-          docker run --rm ${{ needs.setup.outputs.image_bmi }}:${{ needs.setup.outputs.test_image_tag }} \
+          docker run --rm ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }} \
           echo "Running BMI Forcing Unit Tests..."
-
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.2
+        uses: aquasecurity/setup-trivy@v0.2.6
         with:
           cache: true
-          version: v0.68.2
-
+          version: v0.69.3
       - name: Trivy scan (BMI Forcing)
         env:
           TMPDIR: /mnt/trivy-temp
@@ -229,8 +281,7 @@ jobs:
             --scanners vuln \
             --ignore-unfixed \
             --timeout 45m \
-            ${{ needs.setup.outputs.image_bmi }}:${{ needs.setup.outputs.test_image_tag }}
-
+            ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }}
       - name: Promote Tags
         if: success()
         shell: bash
@@ -243,7 +294,7 @@ jobs:
             sudo apt-get install -y --no-install-recommends skopeo
           fi
 
-          IMAGE_BASE="${{ needs.setup.outputs.image_bmi }}"
+          IMAGE_BASE="${{ needs.setup.outputs.bmi_image }}"
           TEST_TAG="${{ needs.setup.outputs.test_image_tag }}"
           ALIAS_TAG="${{ needs.setup.outputs.alias_tag }}"
 
@@ -254,8 +305,8 @@ jobs:
             --all \
             "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:${ALIAS_TAG}"
 
-          # additionally tag with 'latest' if on development branch push
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" = "development" ]; then
+          # tag with 'latest' if on development branch
+          if [ "$GITHUB_REF_NAME" = "development" ]; then
             skopeo copy \
               --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
               --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
@@ -263,365 +314,49 @@ jobs:
               "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest"
           fi
 
-  # build ngen-coastal image
-  pipeline-coastal:
-    name: pipeline-coastal
+  # trigger downstream repo ngen
+  # always passes TRIGGER_DOWNSTREAM=true to ngen so the chain propagates to nwm-cal-mgr and nwm-fcst-mgr
+  trigger-ngen:
+    name: trigger-ngen
     if: |
-      (github.event_name == 'pull_request') ||
-      (github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch' &&
-       (inputs.build_target == 'All' || inputs.build_target == 'Coastal'))
+      success() && (
+        (github.event_name == 'push' && github.ref_name == 'development') ||
+        (github.event_name == 'workflow_dispatch' && inputs.TRIGGER_DOWNSTREAM)
+      )
     runs-on: ubuntu-latest
-    needs: [setup]
-    outputs:
-      coastal_digest: ${{ steps.build_coastal.outputs.digest }}
+    needs:
+      - setup
+      - pipeline-bmi
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to registry
-        uses: docker/login-action@v3
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & push Coastal
-        id: build_coastal # to capture Docker image digest
-        uses: docker/build-push-action@v6
-        with:
-          load: false
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          context: .
-          file: Dockerfile.ngencoastal
-          push: true
-          tags: ${{ needs.setup.outputs.image_coastal }}:${{ needs.setup.outputs.test_image_tag }}
-          build-args: |
-            IMAGE_SOURCE=https://github.com/${{ github.repository }}
-            IMAGE_VENDOR=${{ github.repository_owner }}
-            IMAGE_VERSION=${{ needs.setup.outputs.clean_ref }}
-            IMAGE_REVISION=${{ github.sha }}
-            IMAGE_CREATED=${{ needs.setup.outputs.build_date }}
-            CI_COMMIT_REF_NAME=${{ needs.setup.outputs.clean_ref }}
-
-      - name: Free disk space
-        run: |
-          # clear pre-installed tools
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-
-          # clear Docker build cache only
-          # This removes intermediate layers but keeps the final coastal image
-          docker builder prune -af
-
-          # remove dangling images only
-          docker image prune -f
-
-          # check space
-          df -h
-
-      - name: Unit Test Coastal
-        run: |
-          docker run --rm ${{ needs.setup.outputs.image_coastal }}:${{ needs.setup.outputs.test_image_tag }} \
-          echo "Running Coastal Unit Tests..."
-
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.2
-        with:
-          cache: true
-          version: v0.68.2
-
-      - name: Trivy scan (Coastal)
+          client-id: ${{ secrets.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Trigger ngen CI/CD
         env:
-          TMPDIR: /mnt/trivy-temp
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          NGEN_REF: ${{ inputs.NGEN_REF || 'development' }}
+          NWM_CAL_MGR_REF: ${{ inputs.NWM_CAL_MGR_REF || 'development' }}
+          NWM_FCST_MGR_REF: ${{ inputs.NWM_FCST_MGR_REF || 'development' }}
+          EWTS_ORG: ${{ inputs.EWTS_ORG || github.repository_owner }}
+          EWTS_REF: ${{ inputs.EWTS_REF || 'development' }}
+          MSW_MGR_ORG: ${{ inputs.MSW_MGR_ORG || github.repository_owner }}
+          MSW_MGR_REF: ${{ inputs.MSW_MGR_REF || 'development' }}
+          GHCR_ORG: ${{ inputs.GHCR_ORG || needs.setup.outputs.org }}
+          NGEN_FORCING_IMAGE_TAG: ${{ needs.setup.outputs.alias_tag }}
         run: |
-          sudo mkdir -p $TMPDIR
-          sudo chown -R $USER:$USER $TMPDIR
-
-          trivy image \
-            --format sarif \
-            --output trivy-results-coastal.sarif \
-            --severity CRITICAL,HIGH \
-            --scanners vuln \
-            --ignore-unfixed \
-            --timeout 45m \
-            ${{ needs.setup.outputs.image_coastal }}:${{ needs.setup.outputs.test_image_tag }}
-
-      - name: promote tags (alias and latest)
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # ensure skopeo is available for promotion
-          if ! command -v skopeo >/dev/null 2>&1; then
-            sudo apt-get update -y
-            sudo apt-get install -y --no-install-recommends skopeo
-          fi
-
-          IMAGE_BASE="${{ needs.setup.outputs.image_coastal }}"
-          TEST_TAG="${{ needs.setup.outputs.test_image_tag }}"
-          ALIAS_TAG="${{ needs.setup.outputs.alias_tag }}"
-
-          # apply the primary alias (pr tag or timestamp-branch)
-          skopeo copy \
-            --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            --all \
-            "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:${ALIAS_TAG}"
-
-          # additionally tag with 'latest' if on development branch push
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" = "development" ]; then
-            skopeo copy \
-              --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-              --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-              --all \
-              "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest"
-          fi
-
-  # build ngen-sfincs-forcing image
-  pipeline-sfincs:
-    name: pipeline-sfincs
-    if: |
-      (github.event_name == 'pull_request') ||
-      (github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch' &&
-       (inputs.build_target == 'All' || inputs.build_target == 'SFINCS'))
-    runs-on: ubuntu-latest
-    needs: [setup]
-    outputs:
-      sfincs_digest: ${{ steps.build_sfincs.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & push SFINCS
-        id: build_sfincs # to capture Docker image digest
-        uses: docker/build-push-action@v6
-        with:
-          load: false
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          context: .
-          file: Dockerfile.sfincs
-          push: true
-          tags: ${{ needs.setup.outputs.image_sfincs }}:${{ needs.setup.outputs.test_image_tag }}
-          build-args: |
-            SFINCS_CPU_IMAGE_TAG=${{ env.SFINCS_CPU_IMAGE_TAG  || 'latest' }}
-            IMAGE_SOURCE=https://github.com/${{ github.repository }}
-            IMAGE_VENDOR=${{ github.repository_owner }}
-            IMAGE_VERSION=${{ needs.setup.outputs.clean_ref }}
-            IMAGE_REVISION=${{ github.sha }}
-            IMAGE_CREATED=${{ needs.setup.outputs.build_date }}
-
-      - name: Free disk space
-        run: |
-          # clear pre-installed tools
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-
-          # clear Docker build cache only
-          # This removes intermediate layers but keeps the final sfincs image
-          docker builder prune -af
-
-          # remove dangling images only
-          docker image prune -f
-
-          # check space
-          df -h
-
-      - name: Unit Test SFINCS
-        run: |
-          docker run --rm ${{ needs.setup.outputs.image_sfincs }}:${{ needs.setup.outputs.test_image_tag }} \
-          echo "Running SFINCS Unit Tests..."
-
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.2
-        with:
-          cache: true
-          version: v0.68.2
-
-      - name: Trivy scan (SFINCS)
-        env:
-          TMPDIR: /mnt/trivy-temp
-        run: |
-          sudo mkdir -p $TMPDIR
-          sudo chown -R $USER:$USER $TMPDIR
-
-          trivy image \
-            --format sarif \
-            --output trivy-results-sfincs.sarif \
-            --severity CRITICAL,HIGH \
-            --scanners vuln \
-            --ignore-unfixed \
-            --timeout 45m \
-            ${{ needs.setup.outputs.image_sfincs }}:${{ needs.setup.outputs.test_image_tag }}
-
-      - name: promote tags (alias and latest)
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # ensure skopeo is available for promotion
-          if ! command -v skopeo >/dev/null 2>&1; then
-            sudo apt-get update -y
-            sudo apt-get install -y --no-install-recommends skopeo
-          fi
-
-          IMAGE_BASE="${{ needs.setup.outputs.image_sfincs }}"
-          TEST_TAG="${{ needs.setup.outputs.test_image_tag }}"
-          ALIAS_TAG="${{ needs.setup.outputs.alias_tag }}"
-
-          # apply the primary alias (pr tag or timestamp-branch)
-          skopeo copy \
-            --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            --all \
-            "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:${ALIAS_TAG}"
-
-          # additionally tag with 'latest' if on development branch push
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" = "development" ]; then
-            skopeo copy \
-              --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-              --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-              --all \
-              "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest"
-          fi
-
-  # tag image with release tag
-  release:
-    name: release
-    if: github.event_name == 'release' && github.event.action == 'published'
-    runs-on: ubuntu-latest
-    needs: setup
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: BMI Forcing
-            IMAGE_BASE: ${{ needs.setup.outputs.image_bmi }}
-          - label: Coastal
-            IMAGE_BASE: ${{ needs.setup.outputs.image_coastal }}
-          - label: SFINCS Forcing
-            IMAGE_BASE: ${{ needs.setup.outputs.image_sfincs }}
-
-    steps:
-      - name: Get commit sha for the tag
-        id: rev
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          TAG="${{ github.event.release.tag_name }}"
-          REPO="${{ github.repository }}"
-
-          REF_JSON="$(gh api "repos/${REPO}/git/refs/tags/${TAG}")"
-          OBJ_SHA="$(jq -r '.object.sha' <<<"$REF_JSON")"
-          OBJ_TYPE="$(jq -r '.object.type' <<<"$REF_JSON")"
-
-          if [ "$OBJ_TYPE" = "tag" ]; then
-            TAG_OBJ="$(gh api "repos/${REPO}/git/tags/${OBJ_SHA}")"
-            COMMIT_SHA="$(jq -r '.object.sha' <<<"$TAG_OBJ")"
-          else
-            COMMIT_SHA="$OBJ_SHA"
-          fi
-
-          SHORT_SHA="${COMMIT_SHA:0:12}"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-
-      - name: Tag image with release tag
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          IMAGE_BASE="${{ matrix.IMAGE_BASE }}"
-          SHORT_SHA="${{ steps.rev.outputs.short_sha }}"
-          RELEASE_TAG="${{ github.event.release.tag_name }}"
-
-          # ensure skopeo is available
-          if ! command -v skopeo >/dev/null 2>&1; then
-            sudo apt-get update -y
-            sudo apt-get install -y --no-install-recommends skopeo
-          fi
-
-          skopeo copy \
-            --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            --all \
-            "docker://${IMAGE_BASE}:${SHORT_SHA}" "docker://${IMAGE_BASE}:${RELEASE_TAG}"
-
-  # trigger repos downstream of ngen-bmi-forcing to build on new base image
-  # notify-downstream:
-  #   name: notify-downstream
-  #   if: |
-  #     (github.event_name == 'workflow_dispatch' && inputs.trigger_downstream &&
-  #      (inputs.build_target == 'All' || inputs.build_target == 'BMI')) ||
-  #     (github.event_name == 'push')
-  #   runs-on: ubuntu-latest
-  #   needs: [setup, pipeline-bmi] # wait only for BMI
-  #   env:
-  #     # list of downstream repo names to notify
-  #     DOWNSTREAM_REPOS: '["ngen"]'
-  #   steps:
-  #     - name: Trigger Dispatch
-  #       uses: actions/github-script@v8
-  #       with:
-  #         github-token: ${{ secrets.NWM_CICD_PAT }}
-  #         script: |
-  #           // set variables
-  #           const repos = JSON.parse(process.env.DOWNSTREAM_REPOS);
-  #           const owner = context.repo.owner;
-  #           const repo = context.repo.repo;
-  #           const dockerImageTag = "${{ needs.setup.outputs.alias_tag }}";
-
-  #           // construct payload
-  #           const payload = {
-  #             event_type: 'base_image_published',
-  #             client_payload: {
-  #               owner: owner,
-  #               repository: repo,
-  #               docker_image: '${{ needs.setup.outputs.image_bmi }}',
-  #               docker_tag: dockerImageTag,
-  #               digest: '${{ needs.pipeline-bmi.outputs.bmi_digest }}',
-  #               source_sha: '${{ needs.setup.outputs.commit_sha }}',
-  #             }
-  #           };
-
-  #           // iterate downstream repos and dispatch
-  #           for (const downstreamRepoName of repos) {
-  #             console.log(`Dispatching to ${owner}/${downstreamRepoName} with tag '${dockerImageTag}'...`);
-  #             try {
-  #               await github.rest.repos.createDispatchEvent({
-  #                 owner: owner,
-  #                 repo: downstreamRepoName,
-  #                 event_type: payload.event_type,
-  #                 client_payload: payload.client_payload
-  #               });
-  #               console.log(`✅ Successfully triggered ${downstreamRepoName}`);
-  #             } catch (error) {
-  #               console.error(`❌ Failed to trigger ${downstreamRepoName}:`, error.message);
-  #               core.setFailed(`Failed to dispatch to ${downstreamRepoName}`);
-  #             }
-  #           }
+          gh workflow run ngwpc-cicd.yml \
+            --repo ${{ github.repository_owner }}/ngen \
+            --ref "$NGEN_REF" \
+            -f TRIGGER_DOWNSTREAM=true \
+            -f NWM_CAL_MGR_REF="$NWM_CAL_MGR_REF" \
+            -f NWM_FCST_MGR_REF="$NWM_FCST_MGR_REF" \
+            -f EWTS_ORG="$EWTS_ORG" \
+            -f EWTS_REF="$EWTS_REF" \
+            -f MSW_MGR_ORG="$MSW_MGR_ORG" \
+            -f MSW_MGR_REF="$MSW_MGR_REF" \
+            -f GHCR_ORG="$GHCR_ORG" \
+            -f NGEN_FORCING_IMAGE_TAG="$NGEN_FORCING_IMAGE_TAG"

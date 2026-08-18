@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import argparse
 import pathlib
-import scipy
 import os
 import uuid
 
@@ -13,14 +12,14 @@ np.set_printoptions(precision=128)
 
 """
 Script to perform a conversion between the NextGen Hydrofabric geopackage and an ESMF Unstructured Grid Format,
-with the option of including hydrofabric model attribute data from a parquet file that allows the NextGen
+including hydrofabric model attribute data from the hydrofabric geopackage that allows the NextGen
 hydrofabric domain configuration to utilize downscaling methods in the NextGen Forcings Engine
 
-Example Usage:  python NextGen_hyfab_to_ESMF_Mesh.py ./nextgen_01.gpkg -parquet ./vpu1.parquet ./NextGen_VPU01_Mesh.nc
+Example Usage:  python NextGen_hyfab_to_ESMF_Mesh.py ./nextgen_01.gpkg ./NextGen_VPU01_Mesh.nc
 """
 
 
-def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Path, parquet: pathlib.Path | None = None):
+def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Path):
     """
     Convert NextGen Hydrofabric geopackage into ESMF Mesh format
 
@@ -41,7 +40,7 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
 
     # Eventually, we'll add code to slice catchment ids
     # but for now just use feature ids
-    element_ids = np.array(np.array([elem.split('-')[1] for elem in np.array(hyfab.divide_id.values, dtype=str)], dtype=float), dtype=int)
+    element_ids = np.array(hyfab.div_id.values, dtype=int)
     hyfab_coords = np.empty((len(element_ids), 2), dtype=float)
     hyfab_coords[:, 0] = element_ids
     hyfab_coords[:, 1] = element_ids
@@ -53,32 +52,6 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     hyfab_cart = hyfab_cart.sort_values(by=['element_id'])
     hyfab = hyfab.reset_index()
     hyfab_cart = hyfab_cart.reset_index()
-
-    # Flag to see if user specified the hydrofabric parquet file for either VPU, subset, of CONUS
-    if parquet is not None:
-
-        # Open hydrofabric v2 parquet file containing the forcing
-        # metadata that highlights catchment characteristics that
-        # are needed to implement NCAR bias calibration and
-        # downscaling methods within the forcings engine
-        forcing_metadata = pd.read_parquet(parquet)
-        forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean', 'aspect_c_mean', 'X', 'Y']]
-        forcing_metadata = forcing_metadata.sort_values('divide_id')
-        forcing_metadata = forcing_metadata.reset_index()
-
-        element_ids_parquet = np.array(np.array([elem.split('-')[1] for elem in np.array(forcing_metadata.divide_id.values, dtype=str)], dtype=float), dtype=int)
-        parquet_coords = np.empty((len(element_ids_parquet), 2), dtype=float)
-        parquet_coords[:, 0] = element_ids_parquet
-        parquet_coords[:, 1] = element_ids_parquet
-
-        dist, idx = scipy.spatial.KDTree(parquet_coords).query(hyfab_coords)
-
-        hyfab['elevation'] = forcing_metadata.elevation_mean.values[idx]
-        hyfab['slope'] = forcing_metadata.slope_mean.values[idx]
-        hyfab['slope_azmuith'] = forcing_metadata.aspect_c_mean.values[idx]
-
-        # remove metadata file to clear space
-        del (forcing_metadata)
 
     # Get element count
     element_count = len(hyfab.element_id)
@@ -101,10 +74,9 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     element_num_nodes = np.empty(element_count, dtype=np.int32)
     element_x_coord = np.empty(element_count, dtype=np.double)
     element_y_coord = np.empty(element_count, dtype=np.double)
-    if parquet is not None:
-        element_elevation = np.empty(element_count, dtype=np.double)
-        element_slope = np.empty(element_count, dtype=np.double)
-        element_slope_azmuith = np.empty(element_count, dtype=np.double)
+    element_elevation = np.empty(element_count, dtype=np.double)
+    element_slope = np.empty(element_count, dtype=np.double)
+    element_slope_azmuith = np.empty(element_count, dtype=np.double)
 
     # Get the total number of nodes
     # throughout the entire hydrofabric domain
@@ -157,10 +129,9 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
         element_x_coord[i] = hyfab.geometry[i].centroid.coords.xy[0][0]
         element_y_coord[i] = hyfab.geometry[i].centroid.coords.xy[1][0]
 
-        if parquet is not None:
-            element_elevation[i] = hyfab.elevation[i]
-            element_slope[i] = hyfab.slope[i]
-            element_slope_azmuith[i] = hyfab.slope_azmuith[i]
+        element_elevation[i] = hyfab.elevation_mean[i]
+        element_slope[i] = hyfab.slope1km_mean[i]
+        element_slope_azmuith[i] = hyfab.aspect_circmean[i]  # NHF aspect is currently in radians, may need to be converted to degrees
 
         if (ccw):
             node_x_coord[node_start:node_start + num_nodes] = np.array(node_x, dtype=np.double)
@@ -246,21 +217,18 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     nc.gridType = "unstructured"
     nc.version = "0.9"
 
-
-    # Flag to whether include hydrofabric metadata if parquet file was specified
-    if parquet is not None:
-        hgt_elem_var = nc.createVariable("Element_Elevation", "f8", ("elementCount"))
-        hgt_elem_var.long_name = "Catchment height above sea level"
-        hgt_elem_var.units = "meters"
-        slope_elem_var = nc.createVariable("Element_Slope", "f8", ("elementCount"))
-        slope_elem_var.long_name = "Catchment slope"
-        slope_elem_var.units = "meters"
-        slope_azi_elem_var = nc.createVariable("Element_Slope_Azmuith", "f8", ("elementCount"))
-        slope_azi_elem_var.long_name = "Catchment slope azmuith angle"
-        slope_azi_elem_var.units = "Degrees"
-        hgt_elem_var[:] = element_elevation
-        slope_elem_var[:] = element_slope
-        slope_azi_elem_var[:] = element_slope_azmuith
+    hgt_elem_var = nc.createVariable("Element_Elevation", "f8", ("elementCount"))
+    hgt_elem_var.long_name = "Catchment height above sea level"
+    hgt_elem_var.units = "meters"
+    slope_elem_var = nc.createVariable("Element_Slope", "f8", ("elementCount"))
+    slope_elem_var.long_name = "Catchment slope"
+    slope_elem_var.units = "meters"
+    slope_azi_elem_var = nc.createVariable("Element_Slope_Azmuith", "f8", ("elementCount"))
+    slope_azi_elem_var.long_name = "Catchment slope azmuith angle"
+    slope_azi_elem_var.units = "Degrees"
+    hgt_elem_var[:] = element_elevation
+    slope_elem_var[:] = element_slope
+    slope_azi_elem_var[:] = element_slope_azmuith
 
     node_coords_var[:, 0] = node_x_coord_final
     node_coords_var[:, 1] = node_y_coord_final
@@ -289,7 +257,6 @@ def get_options():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('hyfab_gpkg', type=pathlib.Path, help="Hydrofabric geopackage file pathway")
-    parser.add_argument('-parquet', type=pathlib.Path, nargs='?', default=None, help="Hydrofabric parquet file pathway containing the model-attributes of the VPU or subset. This is only required if a user wants to utilize downscaling methods within the NextGen Forcings Engine")
     parser.add_argument("esmf_mesh_output", type=pathlib.Path, help="File pathway to save ESMF netcdf mesh file for hydrofabric")
 
     return parser.parse_args()
@@ -300,7 +267,6 @@ def main():
     convert_hyfab_to_esmf(
         hyfab_gpkg=args.hyfab_gpkg,
         esmf_mesh_output=args.esmf_mesh_output,
-        parquet=args.parquet
     )
 
 

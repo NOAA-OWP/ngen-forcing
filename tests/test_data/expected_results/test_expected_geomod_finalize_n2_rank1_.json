@@ -1,0 +1,112 @@
+{
+  "centerCoords": null,
+  "cosa_grid": null,
+  "crs_atts": null,
+  "dx_meters": null,
+  "dy_meters": null,
+  "element_ids": [
+    11470,
+    11475,
+    11476
+  ],
+  "element_ids_global": [
+    11466,
+    11467,
+    11468,
+    11469,
+    11470,
+    11475,
+    11476
+  ],
+  "esmf_grid": {
+    "_area": [
+      null,
+      null
+    ],
+    "_coord_sys": null,
+    "_coords": [
+      [
+        "hash_7251470926797134324",
+        "hash_-8431632255294118507"
+      ],
+      [
+        [
+          -72.0554434265969,
+          -72.03341338948294,
+          -72.07444419922648
+        ],
+        [
+          41.66453348086255,
+          41.721705460500516,
+          41.77940007526497
+        ]
+      ]
+    ],
+    "_finalized": false,
+    "_mask": [
+      null,
+      null
+    ],
+    "_meta": {},
+    "_parametric_dim": 2,
+    "_rank": 1,
+    "_size": [
+      327,
+      3
+    ],
+    "_size_owned": [
+      157,
+      3
+    ],
+    "_spatial_dim": null,
+    "_struct": {}
+  },
+  "esmf_lat": null,
+  "esmf_lon": null,
+  "height": null,
+  "height_elem": null,
+  "inds": null,
+  "lat_bounds": null,
+  "latitude_grid": [
+    41.66453348086255,
+    41.721705460500516,
+    41.77940007526497
+  ],
+  "latitude_grid_elem": null,
+  "lon_bounds": null,
+  "longitude_grid": [
+    -72.0554434265969,
+    -72.03341338948294,
+    -72.07444419922648
+  ],
+  "longitude_grid_elem": null,
+  "mesh_inds": [
+    4,
+    5,
+    6
+  ],
+  "mesh_inds_elem": null,
+  "nodeCoords": null,
+  "nx_global": 7,
+  "nx_global_elem": null,
+  "nx_local": 3,
+  "nx_local_elem": null,
+  "ny_global": 7,
+  "ny_global_elem": null,
+  "ny_local": 3,
+  "ny_local_elem": null,
+  "sina_grid": null,
+  "slope": null,
+  "slope_elem": null,
+  "slp_azi": null,
+  "slp_azi_elem": null,
+  "spatial_global_atts": null,
+  "x_coord_atts": null,
+  "x_coords": null,
+  "x_lower_bound": null,
+  "x_upper_bound": null,
+  "y_coord_atts": null,
+  "y_coords": null,
+  "y_lower_bound": null,
+  "y_upper_bound": null
+}

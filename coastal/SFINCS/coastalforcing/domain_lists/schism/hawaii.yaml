@@ -1,7 +1,0 @@
-# This file is intended to be an example of how one could list domains available to run
-domain:
-  - name: hawaii
-    path: ..\..\..\coastalmodels\schism\hawaii\ # path to base model files
-    region: hawaii   # General region or basin group
-    epsg: 6634
-    notes: Example SCHISM domain 

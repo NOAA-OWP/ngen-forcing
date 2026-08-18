@@ -1,23 +1,32 @@
-# Dockerfile.test
-ARG BASE_IMAGE_NAME="alpine:latest"
+# Dockerfile for a lightweight test image
+# to verify the NGEN Forcing pipeline is working correctly
 
-FROM ${BASE_IMAGE_NAME}
+ARG BMI_BASE_REPO=alpine
+ARG BMI_BASE_TAG=latest
+
+FROM ${BMI_BASE_REPO}:${BMI_BASE_TAG}
 
 # OCI Metadata Arguments
-ARG BASE_IMAGE_NAME
+ARG BMI_BASE_REPO
+ARG BMI_BASE_TAG
+ARG BMI_BASE_NAME="${BMI_BASE_REPO}:${BMI_BASE_TAG}"
+ARG BMI_BASE_DIGEST="unknown"
+ARG BMI_BASE_REVISION="unknown"
 ARG IMAGE_SOURCE="unknown"
 ARG IMAGE_VENDOR="unknown"
 ARG IMAGE_VERSION="unknown"
 ARG IMAGE_REVISION="unknown"
-ARG IMAGE_CREATED="unknown"
 
 # OCI Standard Labels
-LABEL org.opencontainers.image.base.name="${BASE_IMAGE_NAME}" \
+LABEL org.opencontainers.image.base.name="${BMI_BASE_NAME}" \
+    org.opencontainers.image.base.digest="${BMI_BASE_DIGEST}" \
+    io.ngwpc.image.base.revision="${BMI_BASE_REVISION}" \
     org.opencontainers.image.source="${IMAGE_SOURCE}" \
     org.opencontainers.image.vendor="${IMAGE_VENDOR}" \
     org.opencontainers.image.version="${IMAGE_VERSION}" \
     org.opencontainers.image.revision="${IMAGE_REVISION}" \
-    org.opencontainers.image.created="${IMAGE_CREATED}"
+    org.opencontainers.image.title="NGEN Forcing Test Image" \
+    org.opencontainers.image.description="Lightweight test image for verifying NGEN Forcing pipeline"
 
 # Create a dummy file just to prove we did something
 RUN echo "This is a lightweight test build for pipeline verification." > /build_info.txt

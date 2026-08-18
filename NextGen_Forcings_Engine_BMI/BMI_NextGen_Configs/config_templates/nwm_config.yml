@@ -60,4 +60,4 @@ RqiMethod: 0
 RqiThreshold: 0.9
 cfsEnsNumber: 1
 custom_input_fcst_freq: []
-NWM_Geogrid: '{root_dir}/esmf_mesh/NWM/domain/geo_em_{global_domain}.nc'
+NWM_Geogrid: '{forcing_static_dir}/esmf_mesh/NWM/domain/geo_em_{global_domain}.nc'
