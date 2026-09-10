@@ -7,6 +7,7 @@ import uuid
 from collections import OrderedDict
 
 import numpy as np
+from pyproj import CRS
 
 JSON_NOT_SERIALIZABLE_SENTINEL = "ERR_NOT_JSON_SERIALIZABLE"
 JSON_NOT_SERIALIZABLE_FORMAT = JSON_NOT_SERIALIZABLE_SENTINEL + ":TYPE:{typ}"
@@ -190,10 +191,21 @@ def assert_equal_with_tol(
                             rtol=1e-10,
                         )
                     except (TypeError, ValueError):
-                        close = (
-                            v_expect[key_with_vals_not_matching]
-                            == v_actual[key_with_vals_not_matching]
-                        )
+                        sub_e = v_expect[key_with_vals_not_matching]
+                        sub_a = v_actual[key_with_vals_not_matching]
+                        if isinstance(sub_e, (dict, OrderedDict)) and isinstance(sub_a, (dict, OrderedDict)):
+                            try:
+                                assert_equal_with_tol(
+                                    expect=sub_e,
+                                    actual=sub_a,
+                                    absolute_tolerance=absolute_tolerance,
+                                    relative_tolerance=relative_tolerance,
+                                )
+                                close = True
+                            except ExpectVsActualError:
+                                close = False
+                        else:
+                            close = sub_e == sub_a
                     if not close:
                         failing.append(
                             (
@@ -228,3 +240,13 @@ def rand_str(length: int) -> str:
             f"length requested was {length}, but this function only supports length 1 through 32"
         )
     return str(uuid.uuid4()).replace("-", "")[:length]
+
+
+def crs_assert_projected_horizontal_meters(crs: CRS) -> None:
+    """Assert that the CRS is projected and has horizontal units of meters."""
+    if not crs.is_projected:
+        raise ValueError(f"CRS is not projected: {crs}")
+    if crs.axis_info[0].unit_conversion_factor != 1:
+        raise ValueError(
+            f"Expected crs.axis_info[0].unit_conversion_factor == 1, but got: {crs.axis_info[0].unit_conversion_factor}"
+        )

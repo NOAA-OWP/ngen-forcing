@@ -1,6 +1,7 @@
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core import (
     regrid,
     time_handling,
+    timeInterpMod,
 )
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.timeInterpMod import (
     nearest_neighbor,
@@ -9,6 +10,22 @@ from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.timeInterpMod impo
 )
 
 BMI_MODEL = {
+    "NWMv3_Forcing_Engine_BMI_model_Base": [
+        "_model",
+        "_comm",
+        "cfg_bmi",
+        "_job_meta",
+        "_mpi_meta",
+        "_geo_meta",
+        "_grids",
+        "_grid_map",
+        "_output_var_names",
+        "_var_name_units_map",
+        "_input_forcing_mod",
+        "_supp_pcp_mod",
+        "_output_obj",
+        "_total_start",
+    ],
     "att_map": {
         "model_name": "NWMv3.0 Forcings Engine BMI Python",
         "version": "1.0",
@@ -74,6 +91,7 @@ BMI_MODEL = {
         "RAINRATE_NODE": ["Surface Precipitation Rate", "mm/s"],
     },
 }
+
 FORCING_EXTRACTION = {
     # Set mapping between InputForcings codes and forcing extraction scripts
     "forcing_src": {
@@ -115,6 +133,7 @@ FORCING_EXTRACTION = {
     },
     "extraction_script_path": "/ngen-app/ngen-forcing/Forcing_Extraction_Scripts",
 }
+
 GEOMOD = {
     "GeoMeta": [
         "nodeCoords",
@@ -1005,20 +1024,377 @@ FORCINGINPUTMOD = {
         "precipBiasCorrectOpt",
     ],
 }
+
+SUPPPRECIPMOD = {
+    "SupplementalPrecip": {
+        "supp_precip_dirs",
+        "supp_precip_mandatory",
+        "product_name",
+        "supp_precip_file_types",
+        "nx_global",
+        "ny_global",
+        "nx_local",
+        "ny_local",
+        "x_lower_bound",
+        "x_upper_bound",
+        "y_lower_bound",
+        "y_upper_bound",
+        "regrid_opt_supp_pcp",
+        "suppTemporalInterp",
+        "esmf_lats",
+        "esmf_lons",
+        "esmf_grid_in",
+        "regridObj",
+        "esmf_field_in",
+        "esmf_field_out",
+        "esmf_field_out_elem",
+        "esmf_field_out_poly",
+        "regridded_precip1",
+        "regridded_precip2",
+        "regridded_rqi1",
+        "regridded_rqi2",
+        "regridded_mask",
+        "final_supp_precip",
+        "regridded_precip1_elem",
+        "regridded_precip2_elem",
+        "regridded_rqi1_elem",
+        "regridded_rqi2_elem",
+        "regridded_mask_elem",
+        "final_supp_precip_elem",
+        "file_in1",
+        "file_in2",
+        "rqiMethod",
+        "rqiThresh",
+        "rqi_file_in1",
+        "rqi_file_in2",
+        "pcp_hour1",
+        "pcp_hour2",
+        "pcp_date1",
+        "pcp_date2",
+        "fcst_hour1",
+        "fcst_hour2",
+        "input_frequency",
+        "netcdf_var_names",
+        "rqi_netcdf_var_names",
+        "grib_levels",
+        "grib_vars",
+        "tmpFile",
+        "supp_input_offsets",
+        "global_x_lower",
+        "global_y_lower",
+        "global_x_upper",
+        "global_y_upper",
+    },
+    # Subclass init loops iterate these; empty because the base set above covers all needed attrs.
+    # To add subclass-specific attrs, add their names here and they will be set to None on init.
+    # NOTE: keyValue is intentionally excluded — it is set from a constructor parameter, not
+    # from config_options, so including it here would reset it to None after initialization.
+    "SupplementalPrecipGridded": set(),
+    "SupplementalPrecipHydrofabric": set(),
+    "SupplementalPrecipUnstructured": set(),
+    "PRODUCT_NAMES": {
+        1: "MRMS_1HR_Radar_Only",
+        2: "MRMS_1HR_Gage_Corrected",
+        3: "WRF_ARW_Hawaii_2p5km_PCP",
+        4: "WRF_ARW_PuertoRico_2p5km_PCP",
+        5: "CONUS_MRMS_1HR_MultiSensor",
+        6: "Hawaii_MRMS_1HR_MultiSensor",
+        7: "MRMS_LiquidWaterFraction",
+        8: "NBM_CORE_CONUS_APCP",
+        9: "NBM_CORE_ALASKA_APCP",
+        10: "AK_MRMS",
+        11: "AK_Stage_IV_Precip-MRMS",
+        12: "CONUS_Stage_IV_Precip-MRMS",
+        13: "MRMS PrecipFlag",
+        14: "Custom_Freq_Supp_Pcp",
+        15: "NBM_CORE_PR_APCP",
+        16: "NBM_CORE_HAWAII_APCP",
+    },
+    "FILE_EXT": {
+        "GRIB1": ".grb",
+        "GRIB2": ".grib2",
+        "NETCDF": ".nc",
+    },
+    "GRIB_VARS": {
+        1: None,
+        2: None,
+        3: None,
+        4: None,
+        5: None,
+        6: None,
+        7: None,
+        8: None,
+        9: None,
+        10: None,
+        11: None,
+        12: None,
+        13: None,
+        14: None,
+        15: None,
+        16: None,
+    },
+    "GRIB_LEVELS": {
+        1: ["BLAH"],
+        2: ["BLAH"],
+        3: ["BLAH"],
+        4: ["BLAH"],
+        5: ["BLAH"],
+        6: ["BLAH"],
+        7: ["BLAH"],
+        8: ["BLAH"],
+        9: ["BLAH"],
+        10: ["BLAH"],
+        11: ["BLAH"],
+        12: ["BLAH"],
+        13: ["BLAH"],
+        14: ["BLAH"],
+        15: ["BLAH"],
+        16: ["BLAH"],
+    },
+    "NET_CDF_VARS_NAMES": {
+        1: ["RadarOnlyQPE01H_0mabovemeansealevel"],
+        2: ["MultiSensorQPE01H_0mabovemeansealevel"],
+        3: ["APCP_surface"],
+        4: ["APCP_surface"],
+        5: ["MultiSensorQPE01H_0mabovemeansealevel"],
+        6: ["MultiSensorQPE01H_0mabovemeansealevel"],
+        7: ["sbcv2_lwf"],
+        8: ["APCP_surface"],
+        9: ["APCP_surface"],
+        10: ["MultiSensorQPE01H_0mabovemeansealevel"],
+        11: [],  # Set dynamically since we have have Stage IV and MRMS
+        12: [],  # Set dynamically since we have have Stage IV and MRMS
+        13: ["PrecipFlag_0mabovemeansealevel"],
+        14: ["PrecipFlag_0mabovemeansealevel"],
+        15: ["APCP_surface"],
+        16: ["APCP_surface"],
+    },
+    "RQI_NETCDF_VAR_NAMES": {
+        1: ["RadarQualityIndex_0mabovemeansealevel"],
+        2: ["RadarQualityIndex_0mabovemeansealevel"],
+        3: None,
+        4: None,
+        5: None,
+        6: None,
+        7: None,
+        8: None,
+        9: None,
+        10: None,
+        11: None,
+        12: None,
+        13: None,
+        14: None,
+        15: None,
+        16: None,
+    },
+    "OUTPUT_VAR_IDX": {
+        1: 3,  # RAINRATE
+        2: 3,
+        3: 3,
+        4: 3,
+        5: 3,
+        6: 3,
+        7: 8,  # LQFRAC
+        8: 3,
+        9: 3,
+        10: 3,
+        11: 3,
+        12: 3,
+        13: 8,
+        14: 3,
+        15: 3,
+        16: 3,
+    },
+    "FIND_NEIGHBOR_FILES_MAP": {
+        1: time_handling.find_hourly_mrms_radar_neighbors,
+        2: time_handling.find_hourly_mrms_radar_neighbors,
+        3: time_handling.find_hourly_wrf_arw_neighbors,
+        4: time_handling.find_hourly_wrf_arw_neighbors,
+        5: time_handling.find_hourly_mrms_radar_neighbors,
+        6: time_handling.find_hourly_mrms_radar_neighbors,
+        7: time_handling.find_sbcv2_lwf_neighbors,
+        8: time_handling.find_hourly_nbm_neighbors,
+        9: time_handling.find_hourly_nbm_neighbors,
+        10: time_handling.find_hourly_mrms_radar_neighbors,
+        11: time_handling.find_ak_ext_ana_precip_neighbors,
+        12: time_handling.find_conus_ext_ana_precip_neighbors,
+        13: time_handling.find_hourly_mrms_precip_flag,
+        14: time_handling.find_custom_freq_neighbors,
+        15: time_handling.find_hourly_nbm_neighbors,
+        16: time_handling.find_hourly_nbm_neighbors,
+    },
+    "REGRID_MAP": {
+        1: regrid.regrid_mrms_hourly,
+        2: regrid.regrid_mrms_hourly,
+        3: regrid.regrid_hourly_wrf_arw_hi_res_pcp,
+        4: regrid.regrid_hourly_wrf_arw_hi_res_pcp,
+        5: regrid.regrid_mrms_hourly,
+        6: regrid.regrid_mrms_hourly,
+        7: regrid.regrid_sbcv2_liquid_water_fraction,
+        8: regrid.regrid_hourly_nbm,
+        9: regrid.regrid_hourly_nbm,
+        10: regrid.regrid_mrms_hourly,
+        11: regrid.regrid_ak_ext_ana_pcp,
+        12: regrid.regrid_conus_ext_ana_pcp,
+        13: regrid.regrid_mrms_precip_flag,
+        14: regrid.regrid_mrms_hourly,
+        15: regrid.regrid_hourly_nbm,
+        16: regrid.regrid_hourly_nbm,
+    },
+    "TEMPORAL_INTERPOLATE_INPUTS_MAP": {
+        0: timeInterpMod.no_interpolation_supp_pcp,
+        1: timeInterpMod.nearest_neighbor_supp_pcp,
+        2: timeInterpMod.weighted_average_supp_pcp,
+    },
+}
+
+MODEL = {
+    # Used by method `model.NWMv3ForcingEngineModel.update_bmi_output_dict`
+    "update_dict_base_vars": [
+        "U2D",
+        "V2D",
+        "LWDOWN",
+        "RAINRATE",
+        "T2D",
+        "Q2D",
+        "PSFC",
+        "SWDOWN",
+    ],
+    "update_dict_var_include_lqfraq": "LQFRAC",
+}
+
 TEST_UTILS = {
     "OLD_NEW_VAR_MAP": {
-        "q2dBiasCorrectOpt": "q2BiasCorrectOpt",
-        "paramDir": "dScaleParamDirs",
-        "border": "ignored_border_widths",
-        "regridOpt": "regrid_opt",
-        "userFcstHorizon": "fcst_input_horizons",
-        "inDir": "input_force_dirs",
-        "swDowscaleOpt": "swDownscaleOpt",
-        "t2dBiasCorrectOpt": "t2BiasCorrectOpt",
-        "userCycleOffset": "fcst_input_offsets",
-        "windBiasCorrectOpt": "windBiasCorrect",
-        "timeInterpOpt": "forceTemoralInterp",
-        "enforce": "input_force_mandatory",
-        "file_type": "input_force_types",
+        "forcingInputMod": {
+            "q2dBiasCorrectOpt": "q2BiasCorrectOpt",
+            "paramDir": "dScaleParamDirs",
+            "border": "ignored_border_widths",
+            "regridOpt": "regrid_opt",
+            "userFcstHorizon": "fcst_input_horizons",
+            "inDir": "input_force_dirs",
+            "swDowscaleOpt": "swDownscaleOpt",
+            "t2dBiasCorrectOpt": "t2BiasCorrectOpt",
+            "userCycleOffset": "fcst_input_offsets",
+            "windBiasCorrectOpt": "windBiasCorrect",
+            "timeInterpOpt": "forceTemoralInterp",
+            "enforce": "input_force_mandatory",
+            "file_type": "input_force_types",
+        },
+        "SupplementalPrecip": {
+            "regridOpt": "regrid_opt_supp_pcp",
+            "enforce": "supp_precip_mandatory",
+            "timeInterpOpt": "suppTemporalInterp",
+            "inDir": "supp_precip_dirs",
+            "file_type": "supp_precip_file_types",
+            "userCycleOffset": "supp_input_offsets",
+        },
     }
+}
+
+CONFIGOPTIONS = {
+    "ConfigOptions": [
+        "bmi_time",
+        "current_time",
+        "supp_precip_dirs",
+        "supp_precip_param_dir",
+        "supp_precip_mandatory",
+        "e_date_proc",
+        "first_fcst_cycle",
+        "current_fcst_cycle",
+        "current_output_step",
+        "prev_output_date",
+        "current_output_date",
+        "future_time",
+        "nFcsts",
+        "process_window",
+        "grid_meta",
+        "ExactExtract",
+        "errMsg",
+        "statusMsg",
+        "logFile",
+        "logHandle",
+        "paramFlagArray",
+        "nwmVersion",
+        "nwmConfig",
+        "forcing_output",
+        "aws",
+        "aws_obj",
+        "aws_time",
+        "nwm_geogrid",
+        "geopackage",
+        "uid64",
+    ],
+    "var_rename_map": {"config_path": "cfg_bmi"},
+    "extract_input_variable_attrs_map": {
+        "OutputFrequency": "output_freq",
+        "SubOutputHour": "sub_output_hour",
+        "SubOutFreq": "sub_output_freq",
+        "ScratchDir": "scratch_dir",
+        "compressOutput": "useCompression",  # 0
+        "AnAFlag": "ana_flag",
+        "LookBack": "look_back",
+        "ForecastFrequency": "fcst_freq",
+        "ForecastShift": "fcst_shift",
+        "GRID_TYPE": "grid_type",
+        "SuppPcpDirectories": "supp_precip_dirs",
+        "SuppPcpMandatory": "supp_precip_mandatory",
+        "RegridOptSuppPcp": "regrid_opt_supp_pcp",
+        "SuppPcpTemporalInterpolation": "suppTemporalInterp",
+        "SuppPcpInputOffsets": "supp_input_offsets",
+        "SuppPcpParamDir": "supp_precip_param_dir",
+        "SuppPcpForcingTypes": "supp_precip_file_types",
+    },
+    "extract_input_variable_attrs_map_precip_only": {
+        "customSuppPcpFreq": "customSuppPcpFreq",
+    },
+    "extract_input_variable_attrs_map_not_precip_only": {
+        "ForecastInputHorizons": "fcst_input_horizons",  # np
+        "ForecastInputOffsets": "fcst_input_offsets",  # np
+        "IgnoredBorderWidths": "ignored_border_widths",  # np
+        "RegridOpt": "regrid_opt",  # np
+        "ForcingTemporalInterpolation": "forceTemoralInterp",  # np
+        "TemperatureDownscaling": "t2dDownscaleOpt",  # np
+        "PressureDownscaling": "psfcDownscaleOpt",  # np
+        "ShortwaveDownscaling": "swDownscaleOpt",  # np
+        "HumidityDownscaling": "q2dDownscaleOpt",  # np
+        "PrecipDownscaling": "precipDownscaleOpt",  # np -complicated partial np
+        "TemperatureBiasCorrection": "t2BiasCorrectOpt",  # np #no
+        "PressureBiasCorrection": "psfcBiasCorrectOpt",  # np  #yes
+        "HumidityBiasCorrection": "q2BiasCorrectOpt",  # np #yes
+        "WindBiasCorrection": "windBiasCorrect",  # np #yes
+        "SwBiasCorrection": "swBiasCorrectOpt",  # np #yes
+        "LwBiasCorrection": "lwBiasCorrectOpt",  # np #yes
+        "PrecipBiasCorrection": "precipBiasCorrectOpt",  # np #yes
+        "InputForcingTypes": "input_force_types",  # np
+        "InputForcingDirectories": "input_force_dirs",  # np
+        "InputMandatory": "input_force_mandatory",  # np
+        "custom_input_fcst_freq": "customFcstFreq",  # np
+        "DownscalingParamDirs": "dScaleParamDirs",  # np
+    },
+    "downscaling_attrs_map": {
+        "SINALPHA": "sinalpha_var",
+        "COSALPHA": "cosalpha_var",
+        "SLOPE": "slope_var",
+        "SLOPE_AZIMUTH": "slope_azimuth_var",
+        "HGTVAR": "hgt_var",
+    },
+    "downscaling_unstructred_attrs_map": {
+        "SLOPE_ELEM": "slope_var_elem",
+        "SLOPE_AZIMUTH_ELEM": "slope_azimuth_var_elem",
+        "HGTVAR_ELEM": "hgt_elem_var",
+    },
+    "extract_input_variable_set_default_attrs_map": {
+        "includeLQFrac": "include_lqfrac",
+        "floatOutput": "useFloats",
+        "Output": "forcing_output",
+        "SuppPcpMaxHours": "supp_pcp_max_hours",
+        "RegridWeightsDir": "weightsDir",  # np
+    },
+    "try_config_get_except_attr_map": {
+        "RefcstBDateProc": "b_date_proc",
+        "Geopackage": "geopackage",
+        "GeogridIn": "geogrid",
+        "SpatialMetaIn": "spatial_meta",
+    },
+    "file_types": ["GRIB1", "GRIB2", "NETCDF", "NETCDF4", "NWM", "ZARR", "GRIB2_CFS"],
 }

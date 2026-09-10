@@ -1,4 +1,5 @@
 {
+  "bmi_cfg_file": "ERR_NOT_JSON_SERIALIZABLE:TYPE:<class 'pathlib.PosixPath'>",
   "bmi_model_values__CAT-ID": [
     1285829030285639,
     1285830316458152,
@@ -117,7 +118,12 @@
     "initial_time": 0,
     "time_step_seconds": 3600
   },
+  "dimensionality": 1,
   "geo_meta": {
+    "approx_centroid_global_xy": [
+      -72.05503025291092,
+      41.7594933573475
+    ],
     "centerCoords": null,
     "config_options": {
       "ExactExtract": null,
@@ -131,10 +137,29 @@
       "aws_obj": null,
       "aws_time": null,
       "b_date_proc": "2013-07-01T00:00:00",
+      "bias_correction_properties": {
+        "Precipitation": [
+          0
+        ],
+        "long-wave radiation": [
+          0
+        ],
+        "short-wave radiation": [
+          0
+        ],
+        "specific humidity": [
+          0
+        ],
+        "surface pressure": [
+          0
+        ],
+        "wind forcings": [
+          0
+        ]
+      },
       "bmi_time": null,
       "bmi_time_index": 0,
       "cfsv2EnsMember": null,
-      "config_path": null,
       "cosalpha_var": null,
       "current_fcst_cycle": null,
       "current_output_date": null,
@@ -160,17 +185,26 @@
         0
       ],
       "fcst_shift": 0,
+      "file_types": [
+        "GRIB1",
+        "GRIB2",
+        "NETCDF",
+        "NETCDF4",
+        "NWM",
+        "ZARR",
+        "GRIB2_CFS"
+      ],
       "first_fcst_cycle": null,
       "forceTemoralInterp": [
         0
       ],
+      "force_count": 27,
       "forcing_output": 0,
       "future_time": null,
       "geopackage": "/workspaces/nwm-rte/src/ngen-forcing/tests/test_data/gpkg/gauge_01123000.gpkg",
       "globalNdv": -9999.0,
       "grid_meta": null,
       "grid_type": "hydrofabric",
-      "hgt_elem_var": null,
       "hgt_var": null,
       "ignored_border_widths": [
         0
@@ -212,6 +246,10 @@
       "nwm_url": null,
       "output_freq": 60,
       "paramFlagArray": null,
+      "param_flag": [
+        0
+      ],
+      "perform_downscaling": false,
       "precipBiasCorrectOpt": [
         0
       ],
@@ -240,24 +278,29 @@
       ],
       "regrid_opt_supp_pcp": null,
       "rqiMethod": null,
-      "rqiThresh": 1.0,
+      "rqiThresh": null,
       "runCfsNldasBiasCorrect": false,
       "sinalpha_var": null,
       "slope_azimuth_var": null,
-      "slope_azimuth_var_elem": null,
       "slope_var": null,
-      "slope_var_elem": null,
       "spatial_meta": null,
       "statusMsg": "func esmf_mesh_retry finished after 1 attempts.",
       "sub_output_freq": null,
       "sub_output_hour": null,
       "suppTemporalInterp": null,
+      "supp_input_offsets": null,
       "supp_pcp_max_hours": null,
+      "supp_precip_count": 16,
       "supp_precip_dirs": null,
       "supp_precip_file_types": [],
       "supp_precip_forcings": [],
       "supp_precip_mandatory": null,
       "supp_precip_param_dir": null,
+      "supplemental_precip_file_type_options": [
+        "GRIB1",
+        "GRIB2",
+        "NETCDF"
+      ],
       "swBiasCorrectOpt": [
         0
       ],
@@ -270,9 +313,14 @@
       "t2dDownscaleOpt": [
         0
       ],
+      "try_config_get_except_attr_map": {
+        "Geopackage": "geopackage",
+        "SpatialMetaIn": "spatial_meta"
+      },
       "useCompression": 0,
       "useFloats": 0,
       "use_data_at_current_time": true,
+      "user_provided_geogrid_flag": false,
       "weightsDir": null,
       "windBiasCorrect": [
         0
@@ -336,7 +384,7 @@
       "_coords": [
         [
           "hash_7545881362083397004_len_218",
-          "hash_6855503821947747755_len_218"
+          "hash_-1022784215004640784_len_218"
         ],
         [
           [
@@ -505,165 +553,6 @@
     "mesh_inds_elem": null,
     "mpi_config": {
       "comm": "ERR_NOT_JSON_SERIALIZABLE:TYPE:<class 'mpi4py.MPI.Intracomm'>",
-      "config_options": {
-        "ExactExtract": null,
-        "actual_output_steps": 71,
-        "ana_flag": 0,
-        "aorc_alaska_source": "s3://ngwpc-data/AORC/Alaska",
-        "aorc_alaska_url": "{source}/{year}/{year}{month:02d}/AK_AORC-OWP_{date}.nc4",
-        "aorc_conus_source": "s3://noaa-nws-aorc-v1-1-1km",
-        "aorc_conus_year_url": "{source}/{year}.zarr",
-        "aws": true,
-        "aws_obj": null,
-        "aws_time": null,
-        "b_date_proc": "2013-07-01T00:00:00",
-        "bmi_time": null,
-        "bmi_time_index": 0,
-        "cfsv2EnsMember": null,
-        "config_path": null,
-        "cosalpha_var": null,
-        "current_fcst_cycle": null,
-        "current_output_date": null,
-        "current_output_step": null,
-        "current_time": null,
-        "customFcstFreq": [],
-        "customSuppPcpFreq": null,
-        "cycle_length_minutes": 4260,
-        "dScaleParamDirs": [
-          "/ngen-app/data"
-        ],
-        "e_date_proc": null,
-        "elemconn_var": "elementConn",
-        "elemcoords_var": "centerCoords",
-        "element_id_var": "element_id",
-        "errFlag": 0,
-        "errMsg": null,
-        "fcst_freq": 60,
-        "fcst_input_horizons": [
-          4260
-        ],
-        "fcst_input_offsets": [
-          0
-        ],
-        "fcst_shift": 0,
-        "first_fcst_cycle": null,
-        "forceTemoralInterp": [
-          0
-        ],
-        "forcing_output": 0,
-        "future_time": null,
-        "geopackage": "/workspaces/nwm-rte/src/ngen-forcing/tests/test_data/gpkg/gauge_01123000.gpkg",
-        "globalNdv": -9999.0,
-        "grid_meta": null,
-        "grid_type": "hydrofabric",
-        "hgt_elem_var": null,
-        "hgt_var": null,
-        "ignored_border_widths": [
-          0
-        ],
-        "include_lqfrac": 1,
-        "input_force_dirs": [
-          "s3://null"
-        ],
-        "input_force_mandatory": [
-          0
-        ],
-        "input_force_types": [
-          "GRIB2"
-        ],
-        "input_forcings": [
-          12
-        ],
-        "lat_var": null,
-        "logFile": null,
-        "logHandle": null,
-        "lon_var": null,
-        "look_back": -9999,
-        "lwBiasCorrectOpt": [
-          0
-        ],
-        "nFcsts": 1,
-        "nodecoords_var": "nodeCoords",
-        "num_output_steps": 71,
-        "num_supp_output_steps": null,
-        "number_custom_inputs": 0,
-        "number_inputs": 1,
-        "number_supp_pcp": 0,
-        "numelemconn_var": "numElementConn",
-        "nwmConfig": "AORC",
-        "nwmVersion": 4.0,
-        "nwm_domain": null,
-        "nwm_geogrid": null,
-        "nwm_source": "s3://noaa-nwm-retrospective-3-0-pds",
-        "nwm_url": null,
-        "output_freq": 60,
-        "paramFlagArray": null,
-        "precipBiasCorrectOpt": [
-          0
-        ],
-        "precipDownscaleOpt": [
-          0
-        ],
-        "precip_only_flag": false,
-        "prev_output_date": null,
-        "process_window": null,
-        "psfcBiasCorrectOpt": [
-          0
-        ],
-        "psfcDownscaleOpt": [
-          0
-        ],
-        "q2BiasCorrectOpt": [
-          0
-        ],
-        "q2dDownscaleOpt": [
-          0
-        ],
-        "realtime_flag": false,
-        "refcst_flag": true,
-        "regrid_opt": [
-          1
-        ],
-        "regrid_opt_supp_pcp": null,
-        "rqiMethod": null,
-        "rqiThresh": 1.0,
-        "runCfsNldasBiasCorrect": false,
-        "sinalpha_var": null,
-        "slope_azimuth_var": null,
-        "slope_azimuth_var_elem": null,
-        "slope_var": null,
-        "slope_var_elem": null,
-        "spatial_meta": null,
-        "statusMsg": "func esmf_mesh_retry finished after 1 attempts.",
-        "sub_output_freq": null,
-        "sub_output_hour": null,
-        "suppTemporalInterp": null,
-        "supp_pcp_max_hours": null,
-        "supp_precip_dirs": null,
-        "supp_precip_file_types": [],
-        "supp_precip_forcings": [],
-        "supp_precip_mandatory": null,
-        "supp_precip_param_dir": null,
-        "swBiasCorrectOpt": [
-          0
-        ],
-        "swDownscaleOpt": [
-          0
-        ],
-        "t2BiasCorrectOpt": [
-          0
-        ],
-        "t2dDownscaleOpt": [
-          0
-        ],
-        "useCompression": 0,
-        "useFloats": 0,
-        "use_data_at_current_time": true,
-        "weightsDir": null,
-        "windBiasCorrect": [
-          0
-        ]
-      },
       "rank": 1,
       "size": 2
     },
@@ -732,5 +621,6 @@
       -1
     ]
   },
+  "output_path": null,
   "var_array_lengths": 1
 }

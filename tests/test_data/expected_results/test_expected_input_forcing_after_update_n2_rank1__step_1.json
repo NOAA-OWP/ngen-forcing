@@ -48,7 +48,7 @@
       "_has_corners": false,
       "_lower_bounds": [
         [
-          15,
+          19,
           0
         ],
         null,
@@ -62,8 +62,8 @@
         null
       ],
       "_max_index": [
-        29,
-        14
+        37,
+        28
       ],
       "_meta": {},
       "_ndims": 2,
@@ -75,8 +75,8 @@
       "_rank": 2,
       "_size": [
         [
-          14,
-          14
+          18,
+          28
         ],
         null,
         null,
@@ -92,8 +92,8 @@
       "_type": 6,
       "_upper_bounds": [
         [
-          29,
-          14
+          37,
+          28
         ],
         null,
         null,
@@ -101,7 +101,7 @@
       ]
     },
     "_lower_bounds": [
-      15,
+      19,
       0
     ],
     "_meta": {},
@@ -112,8 +112,8 @@
     "_struct": {},
     "_type": 6,
     "_upper_bounds": [
-      29,
-      14
+      37,
+      28
     ],
     "_xd": 0
   },
@@ -216,7 +216,7 @@
     "_has_corners": false,
     "_lower_bounds": [
       [
-        15,
+        19,
         0
       ],
       null,
@@ -230,8 +230,8 @@
       null
     ],
     "_max_index": [
-      29,
-      14
+      37,
+      28
     ],
     "_meta": {},
     "_ndims": 2,
@@ -243,8 +243,8 @@
     "_rank": 2,
     "_size": [
       [
-        14,
-        14
+        18,
+        28
       ],
       null,
       null,
@@ -260,8 +260,8 @@
     "_type": 6,
     "_upper_bounds": [
       [
-        29,
-        14
+        37,
+        28
       ],
       null,
       null,
@@ -407,11 +407,11 @@
   ],
   "nwmPRISM_denGrid": null,
   "nwmPRISM_numGrid": null,
-  "nx_global": 14,
-  "nx_local": 14,
+  "nx_global": 28,
+  "nx_local": 28,
   "nx_local_corner": null,
-  "ny_global": 29,
-  "ny_local": 14,
+  "ny_global": 37,
+  "ny_local": 18,
   "ny_local_corner": null,
   "outFreq": null,
   "precipBiasCorrectOpt": 0,
@@ -574,10 +574,10 @@
   "windBiasCorrect": 0,
   "x_lower_bound": 0,
   "x_lower_bound_corner": null,
-  "x_upper_bound": 14,
+  "x_upper_bound": 28,
   "x_upper_bound_corner": null,
-  "y_lower_bound": 15,
+  "y_lower_bound": 19,
   "y_lower_bound_corner": null,
-  "y_upper_bound": 29,
+  "y_upper_bound": 37,
   "y_upper_bound_corner": null
 }

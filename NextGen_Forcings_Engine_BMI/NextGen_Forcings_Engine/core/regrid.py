@@ -45,19 +45,20 @@ if TYPE_CHECKING:
     from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
         ConfigOptions,
     )
-    from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.geoMod import (
-        GeoMeta,
-    )
-    from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.suppPrecipMod import (
-        supplemental_precip,
-    )
     from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.forcingInputMod import (
         InputForcings,
+    )
+    from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.geoMod import (
+        GeoMeta,
     )
     from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import (
         MpiConfig,
     )
+    from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.suppPrecipMod import (
+        supplemental_precip,
+    )
 import logging
+
 from ..esmf_utils import (
     esmf_field_retry,
     esmf_grid_retry,
@@ -213,11 +214,11 @@ def regrid_ak_ext_ana(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                 input_forcings.nx_global = ds.dimensions["x"].size
 
             input_forcings.ny_global = mpi_config.broadcast_parameter(
-                input_forcings.ny_global, config_options, param_type=int
+                input_forcings.ny_global
             )
             err_handler.check_program_status(config_options, mpi_config)
             input_forcings.nx_global = mpi_config.broadcast_parameter(
-                input_forcings.nx_global, config_options, param_type=int
+                input_forcings.nx_global
             )
             err_handler.check_program_status(config_options, mpi_config)
 
@@ -349,6 +350,8 @@ def regrid_ak_ext_ana(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                 input_forcings.regridded_forcings2_elem = np.empty(
                     [9, wrf_hydro_geo_meta.ny_local_elem], np.float32
                 )
+            # TODO likely a bug, should this be "hydrofabric"?
+            # Issue might be overridden for hydrofabric case in function `check_regrid_status`.
             elif config_options.grid_type == "unstructured":
                 input_forcings.regridded_forcings1 = np.empty(
                     [9, wrf_hydro_geo_meta.ny_local], np.float32
@@ -445,6 +448,9 @@ def regrid_ak_ext_ana(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                     ] = input_forcings.regridded_forcings2_elem[
                         input_forcings.input_map_output[force_count], :
                     ]
+            # TODO likely a bug, "hydrofabric" slicing should access 1 dimension, not 2.
+            # See `regridded_forcings2 =` for hydrofabric case in function `check_regrid_status`.
+            # Is AK Extended AnA runnable like this?
             elif config_options.grid_type == "hydrofabric":
                 try:
                     input_forcings.regridded_forcings2[
@@ -3985,7 +3991,7 @@ def regrid_nwm(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
             )
 
         input_forcings.height = None
-        if mpi_config.rank == 0:
+        if mpi_config.rank == 0 and config_options.perform_downscaling:
             pt.log_debug(
                 f"Unable to locate HGT_surface in: {input_forcings.file_in2}. Downscaling will not be available."
             )
@@ -4282,7 +4288,7 @@ def regrid_nwm_aws(input_forcings, config_options, wrf_hydro_geo_meta, mpi_confi
             )
 
         input_forcings.height = None
-        if mpi_config.rank == 0:
+        if mpi_config.rank == 0 and config_options.perform_downscaling:
             pt.log_info(
                 f"Unable to locate HGT_surface in: {input_forcings.file_in2}. Downscaling will not be available."
             )
@@ -4849,7 +4855,7 @@ def regrid_custom_hourly_netcdf(
 
                 else:
                     input_forcings.height = None
-                    if mpi_config.rank == 0:
+                    if mpi_config.rank == 0 and config_options.perform_downscaling:
                         pt.log_info(
                             f"Unable to locate HGT_surface in: {input_forcings.file_in2}. Downscaling will not be available."
                         )
@@ -9683,7 +9689,10 @@ def regrid_sbcv2_liquid_water_fraction(
 
 
 def regrid_hourly_nbm(
-    forcings_or_precip:supplemental_precip|InputForcings, config_options:ConfigOptions, wrf_hydro_geo_meta:GeoMeta, mpi_config:MpiConfig
+    forcings_or_precip: supplemental_precip | InputForcings,
+    config_options: ConfigOptions,
+    wrf_hydro_geo_meta: GeoMeta,
+    mpi_config: MpiConfig,
 ):
     """Regrid hourly NBM precipitation.
 
@@ -9739,7 +9748,7 @@ def regrid_hourly_nbm(
         cmd = f'$WGRIB2 -match "({"|".join(fields)})" -not "prob" -not "ens" {forcings_or_precip.file_in1} -netcdf {nbm_tmp_nc}'
     else:
         # Perform a GRIB dump to NetCDF for the precip data.
-        time_str=f"{forcings_or_precip.fcst_hour1}-{forcings_or_precip.fcst_hour2} hour acc fcst"
+        time_str = f"{forcings_or_precip.fcst_hour1}-{forcings_or_precip.fcst_hour2} hour acc fcst"
         fieldnbm_match1 = f'":APCP:surface:{time_str}:"'
         fieldnbm_match2 = (
             f'"{forcings_or_precip.fcst_hour1}-{forcings_or_precip.fcst_hour2}"'
@@ -10499,7 +10508,7 @@ def regrid_ndfd(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
                 )
 
             # look to see if current time is in file:
-            skip_file = np.ubyte(0)
+            skip_file = False
             if mpi_config.rank == 0:
                 times = [datetime.utcfromtimestamp(t) for t in id_tmp["time"][:]]
                 if ndfd_var != "qpf":
@@ -10523,16 +10532,14 @@ def regrid_ndfd(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
                     # TODO: qpf special handling
                     if forecast_time > times[-1] - timedelta(hours=6):
                         pt.log_debug("Forecast time beyond NDFD precip range, skipping")
-                        skip_file = 1
+                        skip_file = True
                     else:
                         time_index = int(hour // 6)
                         pt.log_debug(
                             f"Forecast hour {forecast_time} will use precip from {times[time_index] - timedelta(hours=6)} to {times[time_index]}"
                         )
 
-            skip_file = mpi_config.broadcast_parameter(
-                skip_file, config_options, param_type=np.ubyte
-            )
+            skip_file = mpi_config.broadcast_parameter(skip_file)
             err_handler.check_program_status(config_options, mpi_config)
 
             if skip_file:
@@ -11359,10 +11366,14 @@ def check_regrid_status(
             )
         elif config_options.grid_type == "hydrofabric":
             input_forcings.regridded_forcings1 = np.full(
-                [force_count, wrf_hydro_geo_meta.ny_local], np.nan,dtype=np.float32 #NOTE changed to np.full to be deterministic for unit tests.
+                [force_count, wrf_hydro_geo_meta.ny_local],
+                np.nan,
+                dtype=np.float32,  # NOTE changed to np.full to be deterministic for unit tests.
             )
             input_forcings.regridded_forcings2 = np.full(
-                [force_count, wrf_hydro_geo_meta.ny_local], np.nan,dtype=np.float32 #NOTE changed to np.full to be deterministic for unit tests.
+                [force_count, wrf_hydro_geo_meta.ny_local],
+                np.nan,
+                dtype=np.float32,  # NOTE changed to np.full to be deterministic for unit tests.
             )
 
     if mpi_config.rank == 0:
@@ -11399,9 +11410,7 @@ def check_regrid_status(
     # mpi_config.comm.barrier()
 
     # Broadcast the flag to the other processors.
-    calc_regrid_flag = mpi_config.broadcast_parameter(
-        calc_regrid_flag, config_options, param_type=bool
-    )
+    calc_regrid_flag = mpi_config.broadcast_parameter(calc_regrid_flag)
     err_handler.check_program_status(config_options, mpi_config)
 
     return calc_regrid_flag
@@ -11611,9 +11620,7 @@ def check_supp_pcp_regrid_status(
     # mpi_config.comm.barrier()
 
     # Broadcast the flag to the other processors.
-    calc_regrid_flag = mpi_config.broadcast_parameter(
-        calc_regrid_flag, config_options, param_type=bool
-    )
+    calc_regrid_flag = mpi_config.broadcast_parameter(calc_regrid_flag)
 
     mpi_config.comm.barrier()
     return calc_regrid_flag
@@ -11861,13 +11868,9 @@ def calculate_weights(
     err_handler.check_program_status(config_options, mpi_config)
 
     # Broadcast the forcing nx/ny values
-    input_forcings.ny_global = mpi_config.broadcast_parameter(
-        input_forcings.ny_global, config_options, param_type=int
-    )
+    input_forcings.ny_global = mpi_config.broadcast_parameter(input_forcings.ny_global)
     err_handler.check_program_status(config_options, mpi_config)
-    input_forcings.nx_global = mpi_config.broadcast_parameter(
-        input_forcings.nx_global, config_options, param_type=int
-    )
+    input_forcings.nx_global = mpi_config.broadcast_parameter(input_forcings.nx_global)
     err_handler.check_program_status(config_options, mpi_config)
 
     try:
@@ -12245,10 +12248,10 @@ def calculate_supp_pcp_weights(
 
     # Broadcast the forcing nx/ny values
     supplemental_precip.ny_global = mpi_config.broadcast_parameter(
-        supplemental_precip.ny_global, config_options, param_type=int
+        supplemental_precip.ny_global
     )
     supplemental_precip.nx_global = mpi_config.broadcast_parameter(
-        supplemental_precip.nx_global, config_options, param_type=int
+        supplemental_precip.nx_global
     )
     # mpi_config.comm.barrier()
 

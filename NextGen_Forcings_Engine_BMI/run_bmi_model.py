@@ -343,17 +343,11 @@ def run_bmi(
         config = parse_config(yaml.safe_load(fp))
 
     print("Creating an instance of the BMI model object")
-    model = BMIMODEL[config.get("GRID_TYPE")]()
-
-    # IMPORTANT: We are not calling initialize() directly here.
-    # Instead, we call initialize_with_params(), which handles
-    # the initialization process and internally calls initialize().
-    model.initialize_with_params(
-        cfg_path,
-        b_date=b_date,
-        geogrid=geogrid,
-        output_path=str(output_path) if output_path else None,
+    model = BMIMODEL[config.get("GRID_TYPE")](
+        b_date, geogrid, output_path=str(output_path) if output_path else None
     )
+    model.initialize(cfg_path)
+
     ngen_datetimes, start_time, end_time = get_date_times(start_time, end_time)
     num_iterations = len(ngen_datetimes)
     print_init(model, num_iterations)

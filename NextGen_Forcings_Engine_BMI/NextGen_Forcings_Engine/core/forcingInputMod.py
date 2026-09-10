@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         MpiConfig,
     )
 import logging
+
 LOG = logging.getLogger("FORCING")
 
 
@@ -65,7 +66,7 @@ class InputForcings:
 
         # set list of attibutes from consts.py to None.
         # These are indexed from the consts dictionary using the class name
-        for attr in FORCINGINPUTMOD[self.__class__.__base__.__name__]:
+        for attr in FORCINGINPUTMOD[__class__.__name__]:
             setattr(self, attr, None)
 
         self._initialize_config_options()
@@ -93,7 +94,8 @@ class InputForcings:
 
         Check if the attibute allready exists before setting.
         """
-        for key, val in list(vars(self.config_options).items()):
+        for key in dir(self.config_options):
+            val = getattr(self.config_options, key)
             if (
                 isinstance(val, list)
                 and len(val) > 0
@@ -311,7 +313,7 @@ class InputForcingsGridded(InputForcings):
 
         """
         super().__init__(idx, config_options, geo_meta, mpi_config, custom_count)
-        for attr in FORCINGINPUTMOD[self.__class__.__name__]:
+        for attr in FORCINGINPUTMOD[__class__.__name__]:
             setattr(self, attr, None)
 
     @property
@@ -441,7 +443,7 @@ class InputForcingsHydrofabric(InputForcings):
 
         """
         super().__init__(idx, config_options, geo_meta, mpi_config, custom_count)
-        for attr in FORCINGINPUTMOD[self.__class__.__name__]:
+        for attr in FORCINGINPUTMOD[__class__.__name__]:
             setattr(self, attr, None)
 
     @property
@@ -549,7 +551,7 @@ class InputForcingsUnstructured(InputForcings):
 
         """
         super().__init__(idx, config_options, geo_meta, mpi_config, custom_count)
-        for attr in FORCINGINPUTMOD[self.__class__.__name__]:
+        for attr in FORCINGINPUTMOD[__class__.__name__]:
             setattr(self, attr, None)
 
     @property

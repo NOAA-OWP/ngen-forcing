@@ -27,7 +27,9 @@ TEST_CONFIGS = [
         ),
         grid_type=consts.GRID_TYPE,
         test_file_name_prefix=TEST_FILE_NAME_PREFIX,
-        extra_attrs=[ClassAttrFetcher("bmi_model_values", "CAT-ID"),]
+        extra_attrs=[
+            ClassAttrFetcher("bmi_model_values", "CAT-ID"),
+        ],
     ),
 ]
 

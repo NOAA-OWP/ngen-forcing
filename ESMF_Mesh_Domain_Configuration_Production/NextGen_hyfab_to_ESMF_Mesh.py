@@ -1,11 +1,12 @@
+import argparse
+import os
+import pathlib
+import uuid
+
 import geopandas as gpd
 import netCDF4
 import numpy as np
 import pandas as pd
-import argparse
-import pathlib
-import os
-import uuid
 
 gpd.options.display_precision = 16
 np.set_printoptions(precision=128)
@@ -33,7 +34,7 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     # for orientation properties since there are issues
     # with geopandas for converting crs and translating
     # orientation of polygon from original dataset
-    hyfab_cart = gpd.read_file(hyfab_gpkg, layer='divides')
+    hyfab_cart = gpd.read_file(hyfab_gpkg, layer="divides")
     hyfab_cart = hyfab_cart.sort_values(by=["div_id"]).reset_index(drop=True)
     hyfab = hyfab_cart.to_crs("WGS84")
 
@@ -51,23 +52,25 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     hyfab_coords[:, 1] = false_ids
 
     # Sort data by feature id and reset index
-    hyfab['element_id'] = false_ids
-    hyfab_cart['element_id'] = false_ids
+    hyfab["element_id"] = false_ids
+    hyfab_cart["element_id"] = false_ids
 
     # Get element count
     element_count = len(hyfab.element_id)
 
     # find the number of nodes in first element
     # based on geometry type
-    if (hyfab.geometry[0].geom_type == "Polygon"):
+    if hyfab.geometry[0].geom_type == "Polygon":
         dup_df = pd.DataFrame([])
-        dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[0].exterior.coords.xy
-        dup_df = dup_df.drop_duplicates(subset=['node_x', 'node_y'], keep='first')
+        dup_df["node_x"], dup_df["node_y"] = hyfab.geometry[0].exterior.coords.xy
+        dup_df = dup_df.drop_duplicates(subset=["node_x", "node_y"], keep="first")
         elem_max_nodes = len(dup_df)
     else:
         dup_df = pd.DataFrame([])
-        dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[0].geoms._get_geom_item(0).exterior.xy
-        dup_df = dup_df.drop_duplicates(subset=['node_x', 'node_y'], keep='first')
+        dup_df["node_x"], dup_df["node_y"] = (
+            hyfab.geometry[0].geoms._get_geom_item(0).exterior.xy
+        )
+        dup_df = dup_df.drop_duplicates(subset=["node_x", "node_y"], keep="first")
         elem_max_nodes = len(dup_df)
 
     # Allocate element arrays for center point calculations
@@ -84,15 +87,17 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     # based on geometry type
     total_num_nodes = 0
     for i in range(element_count):
-        if (hyfab.geometry[i].geom_type == "Polygon"):
+        if hyfab.geometry[i].geom_type == "Polygon":
             dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].exterior.coords.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x', 'node_y'], keep='first')
+            dup_df["node_x"], dup_df["node_y"] = hyfab.geometry[i].exterior.coords.xy
+            dup_df = dup_df.drop_duplicates(subset=["node_x", "node_y"], keep="first")
             total_num_nodes += len(dup_df)
         else:
             dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].geoms._get_geom_item(0).exterior.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x', 'node_y'], keep='first')
+            dup_df["node_x"], dup_df["node_y"] = (
+                hyfab.geometry[i].geoms._get_geom_item(0).exterior.xy
+            )
+            dup_df = dup_df.drop_duplicates(subset=["node_x", "node_y"], keep="first")
             total_num_nodes += len(dup_df)
 
     # assign current node id and allocate node arrays to extract
@@ -107,24 +112,26 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     # flip node coordinates based on orientation of polygons
     # from the original cartesian coordinate system
     for i in range(element_count):
-        if (hyfab.geometry[i].geom_type == "Polygon"):
+        if hyfab.geometry[i].geom_type == "Polygon":
             dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].exterior.coords.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x', 'node_y'], keep='first')
+            dup_df["node_x"], dup_df["node_y"] = hyfab.geometry[i].exterior.coords.xy
+            dup_df = dup_df.drop_duplicates(subset=["node_x", "node_y"], keep="first")
             node_x = dup_df.node_x.values
             node_y = dup_df.node_y.values
             ccw = hyfab_cart.geometry[i].exterior.is_ccw
         else:
             dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].geoms._get_geom_item(0).exterior.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x', 'node_y'], keep='first')
+            dup_df["node_x"], dup_df["node_y"] = (
+                hyfab.geometry[i].geoms._get_geom_item(0).exterior.xy
+            )
+            dup_df = dup_df.drop_duplicates(subset=["node_x", "node_y"], keep="first")
             node_x = dup_df.node_x.values
             node_y = dup_df.node_y.values
             ccw = hyfab_cart.geometry[i].geoms._get_geom_item(0).exterior.is_ccw
 
         num_nodes = len(node_x)
         element_num_nodes[i] = num_nodes
-        if (num_nodes > elem_max_nodes):
+        if num_nodes > elem_max_nodes:
             elem_max_nodes = num_nodes
 
         element_x_coord[i] = hyfab.geometry[i].centroid.coords.xy[0][0]
@@ -132,24 +139,33 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
 
         element_elevation[i] = hyfab.elevation_mean[i]
         element_slope[i] = hyfab.slope1km_mean[i]
-        element_slope_azmuith[i] = hyfab.aspect_circmean[i]  # NHF aspect is currently in radians, may need to be converted to degrees
+        # NHF aspect is currently in radians, may need to be converted to degrees
+        element_slope_azmuith[i] = hyfab.aspect_circmean[i]
 
-        if (ccw):
-            node_x_coord[node_start:node_start + num_nodes] = np.array(node_x, dtype=np.double)
-            node_y_coord[node_start:node_start + num_nodes] = np.array(node_y, dtype=np.double)
+        if ccw:
+            node_x_coord[node_start : node_start + num_nodes] = np.array(
+                node_x, dtype=np.double
+            )
+            node_y_coord[node_start : node_start + num_nodes] = np.array(
+                node_y, dtype=np.double
+            )
         else:
-            node_x_coord[node_start:node_start + num_nodes] = np.array(np.concatenate([[node_x[0]], np.flip(node_x[1:])]), dtype=np.double)
-            node_y_coord[node_start:node_start + num_nodes] = np.array(np.concatenate([[node_y[0]], np.flip(node_y[1:])]), dtype=np.double)
+            node_x_coord[node_start : node_start + num_nodes] = np.array(
+                np.concatenate([[node_x[0]], np.flip(node_x[1:])]), dtype=np.double
+            )
+            node_y_coord[node_start : node_start + num_nodes] = np.array(
+                np.concatenate([[node_y[0]], np.flip(node_y[1:])]), dtype=np.double
+            )
         node_start += num_nodes
 
     # Assign node data to pandas dataframe
     # and calculate the duplicate nodes throughout
     # the hydrofabric geometry network
     node_connectivity = pd.DataFrame([])
-    node_connectivity['node_x'] = node_x_coord
-    node_connectivity['node_y'] = node_y_coord
+    node_connectivity["node_x"] = node_x_coord
+    node_connectivity["node_y"] = node_y_coord
 
-    duplicates = node_connectivity[node_connectivity.duplicated(keep='first')]
+    duplicates = node_connectivity[node_connectivity.duplicated(keep="first")]
 
     # Create array to assign duplicate nodes as
     # zeroes, while creating unique ids for only
@@ -158,25 +174,27 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     node_id_connectivity = np.empty(len(node_id), dtype=np.int32)
     node_count = 1
     for i in range(len(node_id)):
-        if (i in duplicates_index):
+        if i in duplicates_index:
             node_id_connectivity[i] = 0
         else:
             node_id_connectivity[i] = node_count
             node_count += 1
 
     # Assign new node id network to dataframe
-    node_connectivity['node_id'] = node_id_connectivity
+    node_connectivity["node_id"] = node_id_connectivity
 
     # calculate the node id network to include its duplicate ids
     # for each instance of the node coordinates
-    ESMF_node_id_connectivity = node_connectivity.groupby(['node_x', 'node_y']).node_id.transform('max')
+    ESMF_node_id_connectivity = node_connectivity.groupby(
+        ["node_x", "node_y"]
+    ).node_id.transform("max")
 
-    node_connectivity['node_id_connectivity'] = ESMF_node_id_connectivity.values
+    node_connectivity["node_id_connectivity"] = ESMF_node_id_connectivity.values
 
     node_connectivity_final = node_connectivity.node_id_connectivity.values
 
     # Extract only the unique node id network and respective coordinates
-    node_connectivity = node_connectivity.drop_duplicates('node_id_connectivity')
+    node_connectivity = node_connectivity.drop_duplicates("node_id_connectivity")
     node_count = len(node_connectivity)
     node_x_coord_final = node_connectivity.node_x.values
     node_y_coord_final = node_connectivity.node_y.values
@@ -189,7 +207,9 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     end_index = 0
     for i in range(element_count):
         end_index += element_num_nodes[i]
-        elementConn[i, 0:element_num_nodes[i]] = node_connectivity_final[start_index:end_index]
+        elementConn[i, 0 : element_num_nodes[i]] = node_connectivity_final[
+            start_index:end_index
+        ]
         start_index = end_index
 
     out_dir = os.path.dirname(esmf_mesh_output)
@@ -203,9 +223,11 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     nc = netCDF4.Dataset(temp_path, "w", format="NETCDF4")
     node_count_dim = nc.createDimension("nodeCount", node_count)
     elem_count_dim = nc.createDimension("elementCount", element_count)
-    elem_conn_count_dim = nc.createDimension("connectionCount", len(node_connectivity_final))
+    elem_conn_count_dim = nc.createDimension(
+        "connectionCount", len(node_connectivity_final)
+    )
     node_count_dim = nc.createDimension("coordDim", 2)
-    node_coords_var = nc.createVariable("nodeCoords", 'f8', ("nodeCount", "coordDim"))
+    node_coords_var = nc.createVariable("nodeCoords", "f8", ("nodeCount", "coordDim"))
     node_coords_var.units = "degrees"
     elem_id = nc.createVariable("element_id", "i4", "elementCount")
     elem_id.long_name = "False 32-bit catchment IDs use for ESMF mesh generation"
@@ -213,7 +235,9 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     elem_conn_var.long_name = "Node Indices that define the element connectivity"
     num_elem_conn_var = nc.createVariable("numElementConn", "i", "elementCount")
     num_elem_conn_var.long_name = "Number of nodes per element"
-    center_coords_var = nc.createVariable("centerCoords", 'f8', ("elementCount", "coordDim"))
+    center_coords_var = nc.createVariable(
+        "centerCoords", "f8", ("elementCount", "coordDim")
+    )
     center_coords_var.units = "degrees"
     nc.gridType = "unstructured"
     nc.version = "0.9"
@@ -224,7 +248,9 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     slope_elem_var = nc.createVariable("Element_Slope", "f8", ("elementCount"))
     slope_elem_var.long_name = "Catchment slope"
     slope_elem_var.units = "meters"
-    slope_azi_elem_var = nc.createVariable("Element_Slope_Azmuith", "f8", ("elementCount"))
+    slope_azi_elem_var = nc.createVariable(
+        "Element_Slope_Azmuith", "f8", ("elementCount")
+    )
     slope_azi_elem_var.long_name = "Catchment slope azmuith angle"
     slope_azi_elem_var.units = "Degrees"
     hgt_elem_var[:] = element_elevation
@@ -258,8 +284,14 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
 def get_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('hyfab_gpkg', type=pathlib.Path, help="Hydrofabric geopackage file pathway")
-    parser.add_argument("esmf_mesh_output", type=pathlib.Path, help="File pathway to save ESMF netcdf mesh file for hydrofabric")
+    parser.add_argument(
+        "hyfab_gpkg", type=pathlib.Path, help="Hydrofabric geopackage file pathway"
+    )
+    parser.add_argument(
+        "esmf_mesh_output",
+        type=pathlib.Path,
+        help="File pathway to save ESMF netcdf mesh file for hydrofabric",
+    )
 
     return parser.parse_args()
 

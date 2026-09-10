@@ -150,9 +150,7 @@ def ak_ext_ana_disaggregate(
 
             date_iter += timedelta(hours=1)
 
-    found_target_hh = mpi_config.broadcast_parameter(
-        found_target_hh, config_options, param_type=bool
-    )
+    found_target_hh = mpi_config.broadcast_parameter(found_target_hh)
     err_handler.check_program_status(config_options, mpi_config)
     if not found_target_hh:
         if mpi_config.rank == 0:
@@ -167,9 +165,7 @@ def ak_ext_ana_disaggregate(
             supplemental_precip.regridded_precip2[:] = config_options.globalNdv
         return
 
-    read_hours = mpi_config.broadcast_parameter(
-        read_hours, config_options, param_type=int
-    )
+    read_hours = mpi_config.broadcast_parameter(read_hours)
     err_handler.check_program_status(config_options, mpi_config)
     if read_hours != 6:
         if mpi_config.rank == 0:

@@ -120,7 +120,7 @@ class GeoMeta:
         """Initialize GeoMeta class variables."""
         self.config_options = config_options
         self.mpi_config = mpi_config
-        for attr in GEOMOD[self.__class__.__base__.__name__]:
+        for attr in GEOMOD[__class__.__name__]:
             setattr(self, attr, None)
 
     @cached_property
@@ -250,6 +250,14 @@ class GeoMeta:
                     y_coords[:, :] = np.flipud(y_coords[:, :])
             return y_coords
 
+    @property
+    def approx_centroid_global_xy(self) -> tuple[float, float]:
+        """The approximate centroid in global coordinates (a tuple of 2 floats: (x, y))"""
+        x_mean = np.mean([c[0] for c in self.elementcoords_global])
+        y_mean = np.mean([c[1] for c in self.elementcoords_global])
+        LOG.debug(f"Approximate centroid: ({x_mean}, {y_mean})")
+        return (x_mean, y_mean)
+
 
 class GriddedGeoMeta(GeoMeta):
     """Class for handling information about the gridded domains for forcing."""
@@ -264,7 +272,7 @@ class GriddedGeoMeta(GeoMeta):
         :return:
         """
         super().__init__(config_options, mpi_config)
-        for attr in GEOMOD[self.__class__.__name__]:
+        for attr in GEOMOD[__class__.__name__]:
             setattr(self, attr, None)
 
     @broadcast
@@ -821,7 +829,7 @@ class HydrofabricGeoMeta(GeoMeta):
         :return:
         """
         super().__init__(config_options, mpi_config)
-        for attr in GEOMOD[self.__class__.__name__]:
+        for attr in GEOMOD[__class__.__name__]:
             setattr(self, attr, None)
 
     @cached_property
@@ -976,7 +984,7 @@ class UnstructuredGeoMeta(GeoMeta):
         :return:
         """
         super().__init__(config_options, mpi_config)
-        for attr in GEOMOD[self.__class__.__name__]:
+        for attr in GEOMOD[__class__.__name__]:
             setattr(self, attr, None)
 
     @broadcast

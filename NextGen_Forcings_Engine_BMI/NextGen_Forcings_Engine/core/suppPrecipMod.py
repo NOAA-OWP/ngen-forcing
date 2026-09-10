@@ -1,110 +1,136 @@
 """High-level module file that will handle supplemental analysis/observed precipitation grids that will replace precipitation in the final output files."""
 
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 
-from . import regrid, time_handling, timeInterpMod
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.consts import (
+    SUPPPRECIPMOD,
+)
+
+if TYPE_CHECKING:
+    from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
+        ConfigOptions,
+    )
+    from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.geoMod import (
+        GeoMeta,
+    )
+    from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import (
+        MpiConfig,
+    )
+
+LOG = logging.getLogger("FORCING")
 
 
-class supplemental_precip:
-    """Supplemental precipitation abstract class.
+class SupplementalPrecip:
+    """Supplemental precipitation class.
 
-    This is an abstract class that will define all the parameters
-    of a single supplemental precipitation product.
+    This class defines all the parameters of a single supplemental precipitation product.
+
+    Three-tier attr initialization:
+    1. Attrs set during init (keyValue, geo_meta, etc.) come from constructor params — must NOT be in SUPPPRECIPMOD.
+    2. Attrs in SUPPPRECIPMOD[base class name] are then set to None as an "unset" sentinel.
+    3. _initialize_config_options then sets list-valued attrs from config_options;
+       remaining attrs lazy-initialize via property getters on first access.
+
+    NOTE: Lists are treated specially in config_options. When an attribute value in config_options
+    is a list, the idx of this instance is used to extract the corresponding element from that list.
+    This allows each SupplementalPrecip instance to reference its own value within a shared list structure.
     """
 
-    def __init__(self):
+    def __init__(self, idx: int, config_options: ConfigOptions, geo_meta: GeoMeta):
         """Initializie all attributes and objects to None."""
-        self.keyValue = None
-        self.inDir = None
-        self.enforce = None
-        self.product_name = None
-        self.file_type = None
-        self.nx_global = None
-        self.ny_global = None
-        self.nx_local = None
-        self.ny_local = None
-        self.x_lower_bound = None
-        self.x_upper_bound = None
-        self.y_lower_bound = None
-        self.y_upper_bound = None
-        self.regridOpt = None
-        self.timeInterpOpt = None
-        self.esmf_lats = None
-        self.esmf_lons = None
-        self.esmf_grid_in = None
         self.regridComplete = False
-        self.regridObj = None
-        self.esmf_field_in = None
-        self.esmf_field_out = None
-        self.esmf_field_out_elem = None
-        self.esmf_field_out_poly = None
-        self.regridded_precip1 = None
-        self.regridded_precip2 = None
-        self.regridded_rqi1 = None
-        self.regridded_rqi2 = None
-        self.regridded_mask = None
-        self.final_supp_precip = None
-        self.regridded_precip1_elem = None
-        self.regridded_precip2_elem = None
-        self.regridded_rqi1_elem = None
-        self.regridded_rqi2_elem = None
-        self.regridded_mask_elem = None
-        self.final_supp_precip_elem = None
-        self.file_in1 = None
-        self.file_in2 = None
-        self.rqiMethod = None
-        self.rqiThresh = None
-        self.rqi_file_in1 = None
-        self.rqi_file_in2 = None
-        self.pcp_hour1 = None
-        self.pcp_hour2 = None
-        self.pcp_date1 = None
-        self.pcp_date2 = None
-        self.fcst_hour1 = None
-        self.fcst_hour2 = None
-        self.input_frequency = None
-        self.netcdf_var_names = None
-        self.rqi_netcdf_var_names = None
-        self.grib_levels = None
-        self.grib_vars = None
-        self.tmpFile = None
-        self.userCycleOffset = None
-        self.global_x_lower = None
-        self.global_y_lower = None
-        self.global_x_upper = None
-        self.global_y_upper = None
         self.has_cache = False
+        self._keyValue = config_options.supp_precip_forcings[idx]
+        self.idx = idx
+        self.config_options = config_options
+        self.geo_meta = geo_meta
 
-    def define_product(self):
-        """Define the product name based on the mapping forcing key value.
+        for attr in SUPPPRECIPMOD[__class__.__name__]:
+            setattr(self, attr, None)
 
-        Function to define the product name based on the mapping
-        forcing key value.
-        :return:
+        self._initialize_config_options()
+
+    @property
+    def keyValue(self) -> int:
+        """Get the forcing key value."""
+        if self._keyValue is None:
+            raise RuntimeError("keyValue has not yet been set")
+        return self._keyValue
+
+    @keyValue.setter
+    def keyValue(self, val: int) -> int:
+        """Set the forcing key value."""
+        self._keyValue = val
+
+    def _initialize_config_options(self) -> None:
+        """Initialize configuration options from the config_options attribute.
+
+        For each attribute in SUPPPRECIPMOD["SupplementalPrecip"], check if the
+        same-named attribute exists in config_options as a list and set it on self.
         """
-        product_names = {
-            1: "MRMS_1HR_Radar_Only",
-            2: "MRMS_1HR_Gage_Corrected",
-            3: "WRF_ARW_Hawaii_2p5km_PCP",
-            4: "WRF_ARW_PuertoRico_2p5km_PCP",
-            5: "CONUS_MRMS_1HR_MultiSensor",
-            6: "Hawaii_MRMS_1HR_MultiSensor",
-            7: "MRMS_LiquidWaterFraction",
-            8: "NBM_CORE_CONUS_APCP",
-            9: "NBM_CORE_ALASKA_APCP",
-            10: "AK_MRMS",
-            11: "AK_Stage_IV_Precip-MRMS",
-            12: "CONUS_Stage_IV_Precip-MRMS",
-            13: "MRMS PrecipFlag",
-            14: "Custom_Freq_Supp_Pcp",
-            15: "NBM_CORE_PR_APCP",
-            16: "NBM_CORE_HAWAII_APCP",
-            # 17: "Alaska_MRMS_1HR_Radar_Only",
-            # 18: "Hawaii_MRMS_1HR_Radar_Only",
-            # 19: "Puerto_Rico_MRMS_1HR_Radar_Only",
-            # 20: "Puerto_Rico_MRMS_1HR_Gage_Corrected",
-        }
-        self.product_name = product_names[self.keyValue]
+        for attr in SUPPPRECIPMOD[__class__.__name__]:
+            if hasattr(self.config_options, attr):
+                val = getattr(self.config_options, attr)
+                if isinstance(val, list) and len(val) > 0:
+                    setattr(self, attr, val[self.idx])
+
+    @property
+    def rqiMethod(self) -> int | float:
+        """Get the RQI method for this supplemental precipitation product."""
+        if self._rqiMethod is None:
+            # config_options stores each product's values as a list (one entry per supp precip product).
+            # A non-list value means RQI is not configured (default rqiMethod to 0).
+            val = self.config_options.rqiMethod
+            if isinstance(val, list):
+                self._rqiMethod = val[self.idx]
+            elif val is None:
+                self._rqiMethod = 0
+            else:
+                raise TypeError(
+                    f"Unexpected type for config_options.rqiMethod: {type(val)}"
+                )
+        return self._rqiMethod
+
+    @rqiMethod.setter
+    def rqiMethod(self, val: int | float) -> None:
+        """Setter for grib_vars."""
+        self._rqiMethod = val
+
+    @property
+    def rqiThresh(self) -> int | float:
+        """Get the RQI threshold for this supplemental precipitation product."""
+        if self._rqiThresh is None:
+            # config_options stores each product's values as a list (one entry per supp precip product).
+            # A non-list value means RQI is not configured (default rqiMethod to 1.0).
+            val = self.config_options.rqiThresh
+            if isinstance(val, list):
+                self._rqiThresh = val[self.idx]
+            elif val is None or isinstance(val, (int, float)):
+                # config.py initializes rqiThresh=1.0 as the no-RQI default.
+                # When RQI is configured, a scalar gets expanded to a list before reaching here.
+                self._rqiThresh = float(val) if val is not None else 1.0
+            else:
+                raise TypeError(
+                    f"Unexpected type for config_options.rqiThresh: {type(val)}"
+                )
+        return self._rqiThresh
+
+    @rqiThresh.setter
+    def rqiThresh(self, val: int | float) -> None:
+        """Setter for rqiThresh."""
+        self._rqiThresh = val
+
+    @property
+    def product_name(self) -> str:
+        """Get the product name for this supplemental precipitation product."""
+        if self._product_name is None:
+            self._product_name = SUPPPRECIPMOD["PRODUCT_NAMES"][self.keyValue]
+        return self._product_name
 
         ## DEFINED IN CONFIG
         # product_types = {
@@ -115,134 +141,111 @@ class supplemental_precip:
         #     5: "GRIB2"
         # }
         # self.file_type = product_types[self.keyValue]
-        if self.file_type == "GRIB1":
-            self.file_ext = ".grb"
-        elif self.file_type == "GRIB2":
-            self.file_ext = ".grib2"
-        elif self.file_type == "NETCDF":
-            self.file_ext = ".nc"
 
-        grib_vars_in = {
-            1: None,
-            2: None,
-            3: None,
-            4: None,
-            5: None,
-            6: None,
-            7: None,
-            8: None,
-            9: None,
-            10: None,
-            11: None,
-            12: None,
-            13: None,
-            14: None,
-            15: None,
-            16: None,
-            # 17: None,
-            # 18: None,
-            # 19: None,
-            # 20: None,
-        }
-        self.grib_vars = grib_vars_in[self.keyValue]
+    @product_name.setter
+    def product_name(self, val: str) -> None:
+        """Setter for product_name."""
+        self._product_name = val
 
-        grib_levels_in = {
-            1: ["BLAH"],
-            2: ["BLAH"],
-            3: ["BLAH"],
-            4: ["BLAH"],
-            5: ["BLAH"],
-            6: ["BLAH"],
-            7: ["BLAH"],
-            8: ["BLAH"],
-            9: ["BLAH"],
-            10: ["BLAH"],
-            11: ["BLAH"],
-            12: ["BLAH"],
-            13: ["BLAH"],
-            14: ["BLAH"],
-            15: ["BLAH"],
-            16: ["BLAH"],
-            # 17: ["BLAH"],
-            # 18: ["BLAH"],
-            # 19: ["BLAH"],
-            # 20: ["BLAH"],
-        }
-        self.grib_levels = grib_levels_in[self.keyValue]
+    @property
+    def file_type(self) -> str:
+        """Get the file type; aliases supp_precip_file_types set by _initialize_config_options."""
+        return self.supp_precip_file_types
 
-        netcdf_variables = {
-            1: ["RadarOnlyQPE01H_0mabovemeansealevel"],
-            2: ["MultiSensorQPE01H_0mabovemeansealevel"],
-            3: ["APCP_surface"],
-            4: ["APCP_surface"],
-            5: ["MultiSensorQPE01H_0mabovemeansealevel"],
-            6: ["MultiSensorQPE01H_0mabovemeansealevel"],
-            7: ["sbcv2_lwf"],
-            8: ["APCP_surface"],
-            9: ["APCP_surface"],
-            10: ["MultiSensorQPE01H_0mabovemeansealevel"],
-            11: [],  # Set dynamically since we have have Stage IV and MRMS
-            12: [],  # Set dynamically since we have have Stage IV and MRMS
-            13: ["PrecipFlag_0mabovemeansealevel"],
-            14: ["PrecipFlag_0mabovemeansealevel"],
-            15: ["APCP_surface"],
-            16: ["APCP_surface"],
-            # 17: ["RadarOnlyQPE01H_0mabovemeansealevel"],
-            # 18: ["RadarOnlyQPE01H_0mabovemeansealevel"],
-            # 19: ["RadarOnlyQPE01H_0mabovemeansealevel"],
-            # 20: ["MultiSensorQPE01H_0mabovemeansealevel"],
-        }
-        self.netcdf_var_names = netcdf_variables[self.keyValue]
+    @file_type.setter
+    def file_type(self, val: str) -> None:
+        """Setter for file_type; writes through to supp_precip_file_types."""
+        self.supp_precip_file_types = val
 
-        netcdf_rqi_variables = {
-            1: ["RadarQualityIndex_0mabovemeansealevel"],
-            2: ["RadarQualityIndex_0mabovemeansealevel"],
-            3: None,
-            4: None,
-            5: None,
-            6: None,
-            7: None,
-            8: None,
-            9: None,
-            10: None,
-            11: None,
-            12: None,
-            13: None,
-            14: None,
-            15: None,
-            16: None,
-            # 17: None,
-            # 18: None,
-            # 19: None,
-            # 20: None,
-        }
-        self.rqi_netcdf_var_names = netcdf_rqi_variables[self.keyValue]
+    # TODO: remove these aliases once time_handling.py and regrid.py are refactored to use new attribute names
+    @property
+    def inDir(self):
+        return self.supp_precip_dirs
 
-        output_variables = {
-            1: 3,  # RAINRATE
-            2: 3,
-            3: 3,
-            4: 3,
-            5: 3,
-            6: 3,
-            7: 8,  # LQFRAC
-            8: 3,
-            9: 3,
-            10: 3,
-            11: 3,
-            12: 3,
-            13: 8,
-            14: 3,
-            15: 3,
-            16: 3,
-            # 17: 3,
-            # 18: 3,
-            # 19: 3,
-            # 20: 3,
-        }
-        self.output_var_idx = output_variables[self.keyValue]
+    @property
+    def regridOpt(self):
+        return self.regrid_opt_supp_pcp
 
-    def calc_neighbor_files(self, ConfigOptions, dCurrent, MpiConfig):
+    @property
+    def enforce(self):
+        return self.supp_precip_mandatory
+
+    @property
+    def timeInterpOpt(self):
+        return self.suppTemporalInterp
+
+    @property
+    def userCycleOffset(self):
+        return self.supp_input_offsets
+
+    @property
+    def file_ext(self) -> str:
+        """Get the file extension for this supplemental precipitation product."""
+        return SUPPPRECIPMOD["FILE_EXT"][self.file_type]
+
+    @property
+    def grib_vars(self) -> list[str]:
+        """Get the GRIB variable names for this supplemental precipitation product."""
+        if self._grib_vars is None:
+            self._grib_vars = SUPPPRECIPMOD["GRIB_VARS"][self.keyValue]
+        return self._grib_vars
+
+    @grib_vars.setter
+    def grib_vars(self, val: list[str]) -> None:
+        """Setter for grib_vars."""
+        self._grib_vars = val
+
+    @property
+    def grib_levels(self) -> list[str]:
+        """Get the GRIB levels for this supplemental precipitation product."""
+        if self._grib_levels is None:
+            self._grib_levels = SUPPPRECIPMOD["GRIB_LEVELS"][self.keyValue]
+        return self._grib_levels
+
+    @grib_levels.setter
+    def grib_levels(self, val: list[str]) -> None:
+        """Setter for grib_levels."""
+        self._grib_levels = val
+
+    @property
+    def netcdf_var_names(self) -> list[str]:
+        """Get the NetCDF variable names for this supplemental precipitation product."""
+        if self._netcdf_var_names is None:
+            self._netcdf_var_names = SUPPPRECIPMOD["NET_CDF_VARS_NAMES"][self.keyValue]
+        return self._netcdf_var_names
+
+    @netcdf_var_names.setter
+    def netcdf_var_names(self, val: list[str]) -> None:
+        """Setter for netcdf_var_names."""
+        self._netcdf_var_names = val
+
+    @property
+    def rqi_netcdf_var_names(self) -> list[str] | None:
+        """Get the RQI NetCDF variable names for this supplemental precipitation product."""
+        if self._rqi_netcdf_var_names is None:
+            self._rqi_netcdf_var_names = SUPPPRECIPMOD["RQI_NETCDF_VAR_NAMES"][
+                self.keyValue
+            ]
+        return self._rqi_netcdf_var_names
+
+    @rqi_netcdf_var_names.setter
+    def rqi_netcdf_var_names(self, val: list[str] | None) -> None:
+        """Setter for rqi_netcdf_var_names."""
+        self._rqi_netcdf_var_names = val
+
+    @property
+    def output_var_idx(self) -> int:
+        """Get the output variable index for this supplemental precipitation product."""
+        return SUPPPRECIPMOD["OUTPUT_VAR_IDX"][self.keyValue]
+
+    @property
+    def find_neighbor_files(self) -> dict:
+        """Get the function to find neighbor supplemental precipitation files for this supplemental precipitation product."""
+        return SUPPPRECIPMOD["FIND_NEIGHBOR_FILES_MAP"]
+
+    def calc_neighbor_files(
+        self, config_options: ConfigOptions, dcurrent, mpi_config: MpiConfig
+    ) -> None:
         """Calculate neighbor supplemental precipitation files.
 
         Function that will calculate the last/next expected
@@ -252,42 +255,18 @@ class supplemental_precip:
         :param dCurrent:
         :return:
         """
-        # First calculate the current input cycle date this
-        # WRF-Hydro output timestep corresponds to.
-        find_neighbor_files = {
-            1: time_handling.find_hourly_mrms_radar_neighbors,
-            2: time_handling.find_hourly_mrms_radar_neighbors,
-            3: time_handling.find_hourly_wrf_arw_neighbors,
-            4: time_handling.find_hourly_wrf_arw_neighbors,
-            5: time_handling.find_hourly_mrms_radar_neighbors,
-            6: time_handling.find_hourly_mrms_radar_neighbors,
-            7: time_handling.find_sbcv2_lwf_neighbors,
-            8: time_handling.find_hourly_nbm_neighbors,
-            9: time_handling.find_hourly_nbm_neighbors,
-            10: time_handling.find_hourly_mrms_radar_neighbors,
-            11: time_handling.find_ak_ext_ana_precip_neighbors,
-            12: time_handling.find_conus_ext_ana_precip_neighbors,
-            13: time_handling.find_hourly_mrms_precip_flag,
-            14: time_handling.find_custom_freq_neighbors,
-            15: time_handling.find_hourly_nbm_neighbors,
-            16: time_handling.find_hourly_nbm_neighbors,
-            # 17: time_handling.find_hourly_mrms_radar_neighbors,
-            # 18: time_handling.find_hourly_mrms_radar_neighbors,
-            # 19: time_handling.find_hourly_mrms_radar_neighbors,
-            # 20: time_handling.find_hourly_mrms_radar_neighbors,
-        }
+        self.find_neighbor_files[self.keyValue](
+            self, config_options, dcurrent, mpi_config
+        )
 
-        find_neighbor_files[self.keyValue](self, ConfigOptions, dCurrent, MpiConfig)
-        # try:
-        #    find_neighbor_files[self.keyValue](self,ConfigOptions,dCurrent,MpiConfig)
-        # except TypeError:
-        #    ConfigOptions.errMsg = "Unable to execute find_neighbor_files for " \
-        #                           "supplemental precipitation: " + self.product_name
-        #    raise
-        # except:
-        #    raise
+    @property
+    def regrid_map(self) -> dict:
+        """Get the function to regrid input forcings to the supplemental precipitation grids for this supplemental precipitation product."""
+        return SUPPPRECIPMOD["REGRID_MAP"]
 
-    def regrid_inputs(self, ConfigOptions, wrfHyroGeoMeta, MpiConfig):
+    def regrid_inputs(
+        self, config_options: ConfigOptions, geo_meta: GeoMeta, mpi_config: MpiConfig
+    ) -> None:
         """Polymorphic function that will regrid input forcings to the supplemental precipitation grids for this particular timestep.
 
         Polymorphic function that will regrid input forcings to the
@@ -300,37 +279,16 @@ class supplemental_precip:
         """
         # Establish a mapping dictionary that will point the
         # code to the functions to that will regrid the data.
-        regrid_inputs = {
-            1: regrid.regrid_mrms_hourly,
-            2: regrid.regrid_mrms_hourly,
-            3: regrid.regrid_hourly_wrf_arw_hi_res_pcp,
-            4: regrid.regrid_hourly_wrf_arw_hi_res_pcp,
-            5: regrid.regrid_mrms_hourly,
-            6: regrid.regrid_mrms_hourly,
-            7: regrid.regrid_sbcv2_liquid_water_fraction,
-            8: regrid.regrid_hourly_nbm,
-            9: regrid.regrid_hourly_nbm,
-            10: regrid.regrid_mrms_hourly,
-            11: regrid.regrid_ak_ext_ana_pcp,
-            12: regrid.regrid_conus_ext_ana_pcp,
-            13: regrid.regrid_mrms_precip_flag,
-            14: regrid.regrid_mrms_hourly,
-            15: regrid.regrid_hourly_nbm,
-            16: regrid.regrid_hourly_nbm,
-            # 17: regrid.regrid_mrms_hourly,
-            # 18: regrid.regrid_mrms_hourly,
-            # 19: regrid.regrid_mrms_hourly,
-            # 20: regrid.regrid_mrms_hourly,
-        }
-        regrid_inputs[self.keyValue](self, ConfigOptions, wrfHyroGeoMeta, MpiConfig)
-        # try:
-        #    regrid_inputs[self.keyValue](self,ConfigOptions,MpiConfig)
-        # except:
-        #    ConfigOptions.errMsg = "Unable to execute regrid_inputs for " + \
-        #        "input forcing: " + self.product_name
-        #    raise
+        self.regrid_map[self.keyValue](self, config_options, geo_meta, mpi_config)
 
-    def temporal_interpolate_inputs(self, ConfigOptions, MpiConfig):
+    @property
+    def temporal_interpolate_inputs_map(self) -> dict:
+        """Get the function to temporal interpolate input forcings to the supplemental precipitation grids for this supplemental precipitation product."""
+        return SUPPPRECIPMOD["TEMPORAL_INTERPOLATE_INPUTS_MAP"]
+
+    def temporal_interpolate_inputs(
+        self, config_options: ConfigOptions, mpi_config: MpiConfig
+    ):
         """Polymorphic function that will run temporal interpolation of the supplemental precipitation grids that have been regridded.
 
         Polymorphic function that will run temporal interpolation of
@@ -342,94 +300,190 @@ class supplemental_precip:
         :param MpiConfig:
         :return:
         """
-        temporal_interpolate_inputs = {
-            0: timeInterpMod.no_interpolation_supp_pcp,
-            1: timeInterpMod.nearest_neighbor_supp_pcp,
-            2: timeInterpMod.weighted_average_supp_pcp,
-        }
-        temporal_interpolate_inputs[self.timeInterpOpt](self, ConfigOptions, MpiConfig)
-        # temporal_interpolate_inputs[self.keyValue](self,ConfigOptions,MpiConfig)
-        # try:
-        #    temporal_interpolate_inputs[self.timeInterpOpt](self,ConfigOptions,MpiConfig)
-        # except:
-        #    ConfigOptions.errMsg = "Unable to execute temporal_interpolate_inputs " + \
-        #        " for input forcing: " + self.product_name
-        #    raise
+        self.temporal_interpolate_inputs_map[self.timeInterpOpt](
+            self, config_options, mpi_config
+        )
 
 
-def initDict(ConfigOptions, GeoMetaWrfHydro):
+class SupplementalPrecipGridded(SupplementalPrecip):
+    """Supplemental precipitation class for gridded products."""
+
+    def __init__(
+        self,
+        idx: int = None,
+        config_options: ConfigOptions = None,
+        geo_meta: GeoMeta = None,
+    ) -> None:
+        """Initialize SupplementalPrecipGridded.  Any subclass-specific attr names are sourced from SUPPPRECIPMOD[classname] in consts.py."""
+        super().__init__(idx, config_options, geo_meta)
+        for attr in SUPPPRECIPMOD[__class__.__name__]:
+            setattr(self, attr, None)
+
+    @property
+    def final_supp_precip(self) -> np.ndarray | Any:
+        """Get the final supplemental precipitation grid after regridding and temporal interpolation."""
+        if self._final_supp_precip is None:
+            self._final_supp_precip = np.full(
+                [self.geo_meta.ny_local, self.geo_meta.nx_local],
+                np.nan,
+                dtype=np.float64,
+            )
+        return self._final_supp_precip
+
+    @final_supp_precip.setter
+    def final_supp_precip(self, value: Any) -> Any:
+        """Setter for final_supp_precip."""
+        self._final_supp_precip = value
+
+    @property
+    def regridded_mask(self) -> np.ndarray | Any:
+        """Get the regridded mask after regridding input forcings to the supplemental precipitation grids."""
+        if self._regridded_mask is None:
+            self._regridded_mask = np.full(
+                [self.geo_meta.ny_local, self.geo_meta.nx_local], np.nan, np.float32
+            )
+        return self._regridded_mask
+
+    @regridded_mask.setter
+    def regridded_mask(self, value: Any) -> Any:
+        """Setter for regridded_mask."""
+        self._regridded_mask = value
+
+
+class SupplementalPrecipHydrofabric(SupplementalPrecip):
+    """Supplemental precipitation class for hydrofabric grids."""
+
+    def __init__(
+        self,
+        idx: int = None,
+        config_options: ConfigOptions = None,
+        geo_meta: GeoMeta = None,
+    ) -> None:
+        """Initialize SupplementalPrecipHydrofabric.  Any subclass-specific attr names are sourced from SUPPPRECIPMOD[classname] in consts.py."""
+        super().__init__(idx, config_options, geo_meta)
+        for attr in SUPPPRECIPMOD[__class__.__name__]:
+            setattr(self, attr, None)
+
+    @property
+    def final_supp_precip(self) -> np.ndarray | Any:
+        """Get the final supplemental precipitation grid after regridding and temporal interpolation."""
+        if self._final_supp_precip is None:
+            self._final_supp_precip = np.full(
+                [self.geo_meta.ny_local], np.nan, dtype=np.float64
+            )
+        return self._final_supp_precip
+
+    @final_supp_precip.setter
+    def final_supp_precip(self, value: Any) -> Any:
+        """Setter for final_supp_precip."""
+        self._final_supp_precip = value
+
+    @property
+    def regridded_mask(self) -> np.ndarray | Any:
+        """Get the regridded mask after regridding input forcings to the supplemental precipitation grids."""
+        if self._regridded_mask is None:
+            self._regridded_mask = np.full(
+                [self.geo_meta.ny_local], np.nan, dtype=np.float32
+            )
+        return self._regridded_mask
+
+    @regridded_mask.setter
+    def regridded_mask(self, value: Any) -> Any:
+        """Setter for regridded_mask."""
+        self._regridded_mask = value
+
+
+class SupplementalPrecipUnstructured(SupplementalPrecip):
+    """Supplemental precipitation class for unstructured grids."""
+
+    def __init__(
+        self,
+        idx: int = None,
+        config_options: ConfigOptions = None,
+        geo_meta: GeoMeta = None,
+    ) -> None:
+        """Initialize SupplementalPrecipUnstructured.  Any subclass-specific attr names are sourced from SUPPPRECIPMOD[classname] in consts.py."""
+        super().__init__(idx, config_options, geo_meta)
+        for attr in SUPPPRECIPMOD[__class__.__name__]:
+            setattr(self, attr, None)
+
+    @property
+    def final_supp_precip(self) -> np.ndarray | Any:
+        """Get the final supplemental precipitation grid after regridding and temporal interpolation."""
+        if self._final_supp_precip is None:
+            self._final_supp_precip = np.full(
+                [self.geo_meta.ny_local], np.nan, dtype=np.float64
+            )
+        return self._final_supp_precip
+
+    @final_supp_precip.setter
+    def final_supp_precip(self, value: Any) -> Any:
+        """Setter for final_supp_precip."""
+        self._final_supp_precip = value
+
+    @property
+    def regridded_mask(self) -> np.ndarray | Any:
+        """Get the regridded mask after regridding input forcings to the supplemental precipitation grids."""
+        if self._regridded_mask is None:
+            self._regridded_mask = np.full(
+                [self.geo_meta.ny_local], np.nan, dtype=np.float32
+            )
+        return self._regridded_mask
+
+    @regridded_mask.setter
+    def regridded_mask(self, value: Any) -> Any:
+        """Setter for regridded_mask."""
+        self._regridded_mask = value
+
+    @property
+    def final_supp_precip_elem(self) -> np.ndarray | Any:
+        """Get the final supplemental precipitation grid after regridding and temporal interpolation for unstructured grids."""
+        if self._final_supp_precip_elem is None:
+            self._final_supp_precip_elem = np.full(
+                [self.geo_meta.ny_local_elem], np.nan, dtype=np.float64
+            )
+        return self._final_supp_precip_elem
+
+    @final_supp_precip_elem.setter
+    def final_supp_precip_elem(self, value: Any) -> Any:
+        """Setter for final_supp_precip_elem."""
+        self._final_supp_precip_elem = value
+
+    @property
+    def regridded_mask_elem(self) -> np.ndarray | Any:
+        """Get the regridded mask after regridding input forcings to the supplemental precipitation grids for unstructured grids."""
+        if self._regridded_mask_elem is None:
+            self._regridded_mask_elem = np.full(
+                [self.geo_meta.ny_local_elem], np.nan, dtype=np.float32
+            )
+        return self._regridded_mask_elem
+
+    @regridded_mask_elem.setter
+    def regridded_mask_elem(self, value: Any) -> Any:
+        """Setter for regridded_mask_elem."""
+        self._regridded_mask_elem = value
+
+
+SUPPPRECIP = {
+    "gridded": SupplementalPrecipGridded,
+    "unstructured": SupplementalPrecipUnstructured,
+    "hydrofabric": SupplementalPrecipHydrofabric,
+}
+
+
+def init_dict(config_options: ConfigOptions, geo_meta: GeoMeta) -> dict:
     """Initialize the supplemental precipitation input dictionary.
 
     Initial function to create an supplemental dictionary, which
     will contain an abstract class for each supplemental precip product.
     This gets called one time by the parent calling program.
     :param ConfigOptions:
-    :return: InputDict - A dictionary defining our inputs.
+    :return: input_dict - A dictionary defining our inputs.
     """
-    # Initialize an empty dictionary
-    InputDict = {}
-
-    for supp_pcp_tmp in range(0, ConfigOptions.number_supp_pcp):
-        supp_pcp_key = ConfigOptions.supp_precip_forcings[supp_pcp_tmp]
-        InputDict[supp_pcp_key] = supplemental_precip()
-        InputDict[supp_pcp_key].keyValue = supp_pcp_key
-        InputDict[supp_pcp_key].regridOpt = ConfigOptions.regrid_opt_supp_pcp[
-            supp_pcp_tmp
-        ]
-        InputDict[supp_pcp_key].enforce = ConfigOptions.supp_precip_mandatory[
-            supp_pcp_tmp
-        ]
-        InputDict[supp_pcp_key].timeInterpOpt = ConfigOptions.suppTemporalInterp[
-            supp_pcp_tmp
-        ]
-
-        InputDict[supp_pcp_key].inDir = ConfigOptions.supp_precip_dirs[supp_pcp_tmp]
-        InputDict[supp_pcp_key].file_type = ConfigOptions.supp_precip_file_types[
-            supp_pcp_tmp
-        ]
-        InputDict[supp_pcp_key].define_product()
-
-        if ConfigOptions.grid_type == "gridded":
-            # Initialize the local final grid of values
-            InputDict[supp_pcp_key].final_supp_precip = np.empty(
-                [GeoMetaWrfHydro.ny_local, GeoMetaWrfHydro.nx_local], np.float64
-            )
-            InputDict[supp_pcp_key].regridded_mask = np.empty(
-                [GeoMetaWrfHydro.ny_local, GeoMetaWrfHydro.nx_local], np.float32
-            )
-        elif ConfigOptions.grid_type == "unstructured":
-            # Initialize the local final grid of values
-            InputDict[supp_pcp_key].final_supp_precip = np.empty(
-                [GeoMetaWrfHydro.ny_local], np.float64
-            )
-            InputDict[supp_pcp_key].regridded_mask = np.empty(
-                [GeoMetaWrfHydro.ny_local], np.float32
-            )
-            InputDict[supp_pcp_key].final_supp_precip_elem = np.empty(
-                [GeoMetaWrfHydro.ny_local_elem], np.float64
-            )
-            InputDict[supp_pcp_key].regridded_mask_elem = np.empty(
-                [GeoMetaWrfHydro.ny_local_elem], np.float32
-            )
-        elif ConfigOptions.grid_type == "hydrofabric":
-            # Initialize the local final grid of values
-            # NOTE changed from np.empty to np.full for determinism of test data.
-            InputDict[supp_pcp_key].final_supp_precip = np.full(
-                [GeoMetaWrfHydro.ny_local], np.nan, dtype=np.float64
-            )
-            InputDict[supp_pcp_key].regridded_mask = np.full(
-                [GeoMetaWrfHydro.ny_local], np.nan, dtype=np.float32
-            )
-
-        InputDict[supp_pcp_key].userCycleOffset = ConfigOptions.supp_input_offsets[
-            supp_pcp_tmp
-        ]
-
-        if ConfigOptions.rqiMethod is not None:
-            InputDict[supp_pcp_key].rqiMethod = ConfigOptions.rqiMethod[supp_pcp_tmp]
-            InputDict[supp_pcp_key].rqiThresh = ConfigOptions.rqiThresh[supp_pcp_tmp]
-        else:
-            InputDict[supp_pcp_key].rqiMethod = 0
-            InputDict[supp_pcp_key].rqiThresh = 1.0
-
-    return InputDict
+    input_dict = {}
+    for idx in range(0, config_options.number_supp_pcp):
+        supp_pcp_key = config_options.supp_precip_forcings[idx]
+        input_dict[supp_pcp_key] = SUPPPRECIP[config_options.grid_type](
+            idx, config_options, geo_meta
+        )
+    return input_dict

@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import typing
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -11,17 +12,6 @@ from datetime import datetime
 import test_config_classes  # noqa: F401 # Used by test implementations, more convenient to have it in here rather than using more importlib
 import test_consts  # noqa: F401 # Used by test implementations, more convenient to have it in here rather than using more importlib
 import xarray as xr
-from test_config_classes import (
-    TestConfig_AnA,
-    TestConfig_Base,
-    TestConfig_BmiModel,
-    TestConfig_ConfigOptions,
-    TestConfig_GeoMod,
-    TestConfig_InputForcing,
-    TestConfig_Regrid,
-    TestConfig_SuppPrecip,
-)
-
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.bmi_model import (
     BMIMODEL,
     NWMv3_Forcing_Engine_BMI_model_Base,
@@ -43,8 +33,66 @@ from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.general_utils import (
     assert_equal_with_tol,
     serialize_to_json,
 )
+from test_config_classes import (
+    TestConfig_AnA,
+    TestConfig_Base,
+    TestConfig_BmiModel,
+    TestConfig_ConfigOptions,
+    TestConfig_GeoMod,
+    TestConfig_InputForcing,
+    TestConfig_Regrid,
+    TestConfig_SuppPrecip,
+)
 
 OS_VAR__CREATE_TEST_EXPECT_DATA = "FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA"
+
+_HASH_STRING_RE = re.compile(r"^hash_-?\d+_len_(\d+)$")
+
+
+def _normalize_hash_str(s: str) -> str:
+    """Replace hash_{n}_len_{x} with hash_ANY_len_{x}, keeping only the length so that the hash value
+    can be optionally ignored, only asserting that the length matches. The intent of this is to handle
+    cases of large structures of coordinate values that end up getting hashed."""
+    m = _HASH_STRING_RE.match(s)
+    return f"hash_ANY_len_{m.group(1)}" if m else s
+
+
+_HASH_NORMALIZED_KEYS = frozenset({"_coords", "lat_bounds", "lon_bounds"})
+
+
+def _normalize_coords_hashes(data: typing.Any) -> typing.Any:
+    """Recursively normalize hash strings in known location keys so only the length is compared."""
+    if isinstance(data, dict):
+        return {
+            k: (
+                _apply_hash_normalization(v)
+                if k in _HASH_NORMALIZED_KEYS
+                else _normalize_coords_hashes(v)
+            )
+            for k, v in data.items()
+        }
+    if isinstance(data, list):
+        return [_normalize_coords_hashes(item) for item in data]
+    return data
+
+
+def _apply_hash_normalization(value: typing.Any) -> typing.Any:
+    """Normalize hash strings in a value (may be a string or nested lists of strings).
+    For _coords specifically, arrays of coordinates are dropped since
+    those values are already verified via other keys."""
+    if isinstance(value, str):
+        return _normalize_hash_str(value)
+    if isinstance(value, list):
+        # Detect _coords structure: [list-of-hash-strings, coord-arrays]. Drop the coordinate arrays from the check.
+        if (
+            len(value) == 2
+            and isinstance(value[0], list)
+            and value[0]
+            and all(isinstance(s, str) and _HASH_STRING_RE.match(s) for s in value[0])
+        ):
+            return [[_normalize_hash_str(s) for s in value[0]], None]
+        return [_apply_hash_normalization(item) for item in value]
+    return value
 
 
 def remove_key(input_data: dict, keys_to_exclude: tuple = ()) -> dict:
@@ -236,7 +284,7 @@ class BMIForcingFixture:
     def __init__(self, cfg: TestConfig_Base) -> None:
         """Initialize BMIForcingFixture."""
         self.bmi_model: NWMv3_Forcing_Engine_BMI_model_Base = BMIMODEL[cfg.grid_type]()
-        self.bmi_model.initialize_with_params(config_file=cfg.config_file)
+        self.bmi_model.initialize(cfg.config_file)
 
         self.bmi_model_values = self.bmi_model._values
         self.mpi_config: MpiConfig = self.bmi_model._mpi_meta
@@ -247,6 +295,7 @@ class BMIForcingFixture:
 
         self.keys_to_check = cfg.keys_to_check
         self.keys_to_exclude = cfg.keys_to_exclude
+        self.keys_no_hash = cfg.keys_no_hash
         self.map_old_to_new_var_names = cfg.map_old_to_new_var_names
         self.test_file_name_prefix = cfg.test_file_name_prefix
 
@@ -275,6 +324,50 @@ class BMIForcingFixture:
                 )
                 data_dict[key] = value[: len(input_map_output)]
 
+    def _apply_transformations(
+        self,
+        data: dict,
+        keys_to_exclude: tuple,
+        keys_no_hash: tuple = (),
+        apply_map: bool = True,
+    ) -> dict:
+        """Apply transformations to live BMI data to produce its final JSON representation.
+
+        Used only by deserial_actual() to transform raw BMI state. Expected result files are already
+        in their final form (transformed + extra_attrs added), so they are read directly without re-transformation.
+
+        The processing order is:
+        1. Re-order the keys
+        2. Save raw values for keys_no_hash before hashing
+        3. Convert long lists to hashes (except keys_no_hash which are excluded)
+        4. Restore raw values for keys_no_hash
+        5. Remove excluded keys
+        6. Map old variable names to new (if apply_map=True and self.map_old_to_new_var_names)
+
+        Args:
+            data: The deserialized data dictionary
+            keys_to_exclude: Tuple of keys to exclude from result
+            keys_no_hash: Tuple of keys that should NOT be hashed (preserved as raw values)
+            apply_map: Whether to apply variable name mapping (converting earlier pre-refactor namespace to later namespace)
+
+        Returns:
+            Transformed dictionary
+        """
+        # Order and reverse so private attributes are last
+        result = OrderedDict(reversed(list(data.items())))
+        # Save raw values for keys that should not be hashed
+        raw_vals_no_hash = {k: result[k] for k in keys_no_hash if k in result}
+        # Convert long lists to hash strings (this may hash keys_no_hash too)
+        result = convert_long_lists(result, 10)
+        # Restore raw (unhashed) values for keys_no_hash
+        result.update(raw_vals_no_hash)
+        # Remove excluded keys
+        result = remove_key(dict(result), keys_to_exclude)
+        # Map old variable names to new if enabled
+        if apply_map and self.map_old_to_new_var_names:
+            result = self.map_old_to_new_variable_names(result)
+        return result
+
 
 class BMIForcingFixture_Class(BMIForcingFixture):
     """Test fixture for Class-based tests."""
@@ -292,41 +385,32 @@ class BMIForcingFixture_Class(BMIForcingFixture):
         self.actual_sub_dir = "test_data/actual_results"
         self.test_dir = os.path.dirname(os.path.abspath(__file__))
         self.extra_attrs: tuple[ClassAttrFetcher] = cfg.extra_attrs
-        self.keys_no_hash: tuple[str] = cfg.keys_no_hash
         self.keys_to_exclude_at_init: tuple[str] = cfg.keys_to_exclude_at_init
 
     def deserial_actual(
         self, suffix: str, current_output_step: str = "", write_to_file: bool = True
     ) -> dict:
         """Get the actual metadata results as a deserialized dictionary, including any extra_attrs."""
-        deserial_actual = json.loads(
+        data = json.loads(
             serialize_to_json(
                 copy_and_stringify_functions(self.test_class_as_dict), sort_keys=True
             )
         )
-        # order and reverse so private attributes are last
-        deserial_actual = OrderedDict(reversed(list(deserial_actual.items())))
-        # Save raw values for keys that should not be hashed
-        raw_vals = {
-            k: deserial_actual[k] for k in self.keys_no_hash if k in deserial_actual
-        }
-        deserial_actual = convert_long_lists(deserial_actual, 10)
-        deserial_actual.update(raw_vals)
-        deserial_actual = remove_key(dict(deserial_actual), self.keys_to_exclude)
+        data = self._apply_transformations(
+            data, self.keys_to_exclude, keys_no_hash=self.keys_no_hash, apply_map=True
+        )
         # Add any extra attributes to the results
         for ea in self.extra_attrs:
-            deserial_actual[ea.results_key_name] = ea.get(
-                self, serialize_and_deserialize=True
-            )
+            data[ea.results_key_name] = ea.get(self, serialize_and_deserialize=True)
 
-        self._trim_arrays_to_input_map_output(deserial_actual)
+        self._trim_arrays_to_input_map_output(data)
 
         if write_to_file:
             self.write_json(
-                deserial_actual,
+                data,
                 self.actual_results_file_path(suffix, current_output_step),
             )
-        return deserial_actual
+        return data
 
     def write_json(self, dictionary_to_write: dict, json_path: str) -> None:
         """Write the deserialized results to a JSON file."""
@@ -338,40 +422,29 @@ class BMIForcingFixture_Class(BMIForcingFixture):
         """Get the expected metadata results as a deserialized dictionary."""
         file_path = self.expected_results_file_path(suffix, current_output_step)
 
-        if os.environ.get(OS_VAR__CREATE_TEST_EXPECT_DATA, "").lower() == "true":
-            # Dump current results to disk, to save it as "expected" results for later test runs.
-            # Should only be used when committing new test results to the repository.
-            logging.warning(f"Writing test data: {file_path}")
-            deserial_expected = self.deserial_actual(
-                suffix, current_output_step, write_to_file=False
-            )
-            with open(file_path, "w") as f:
-                f.write(serialize_to_json(deserial_expected, sort_keys=True))
-            # Remove keys that should be excluded from comparison (match read-exclusion)
-            deserial_expected = remove_key(deserial_expected, self.keys_to_exclude)
-            if self.map_old_to_new_var_names:
-                deserial_expected = self.map_old_to_new_variable_names(
-                    deserial_expected
-                )
-            self._trim_arrays_to_input_map_output(deserial_expected)
-            return deserial_expected
-        else:
-            try:
-                with open(file_path) as f:
-                    deserial_expected = json.load(f)
-                if self.map_old_to_new_var_names:
-                    deserial_expected = self.map_old_to_new_variable_names(
-                        deserial_expected
-                    )
-                self._trim_arrays_to_input_map_output(deserial_expected)
-                # Remove keys that should be excluded from comparison (match write-exclusion)
-                deserial_expected = remove_key(deserial_expected, self.keys_to_exclude)
-                # order and reverse so private attributes are last
-                return OrderedDict(reversed(list(deserial_expected.items())))
-            except FileNotFoundError as e:
-                raise FileNotFoundError(
-                    f"Could not find {file_path}. Try running the test using OS var {OS_VAR__CREATE_TEST_EXPECT_DATA}=true first to set up the test results expected data."
-                ) from e
+        try:
+            with open(file_path) as f:
+                # Files are already in their final representation (transformed + trimmed), do not re-transform.
+                return json.load(f)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Could not find {file_path}. Try running the test using OS var {OS_VAR__CREATE_TEST_EXPECT_DATA}=true first to set up the test results expected data."
+            ) from e
+
+    def _write_expected_file(
+        self, actual_data: dict, suffix: str, current_output_step: str = ""
+    ) -> None:
+        """Write actual data to expected results file for test data generation.
+
+        This is a separate explicit step in the workflow to avoid confusion between
+        expected and actual data. Should only be called when FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true.
+        """
+        file_path = self.expected_results_file_path(suffix, current_output_step)
+        # Remove excluded keys before writing
+        data_to_write = remove_key(dict(actual_data), self.keys_to_exclude)
+        logging.warning(f"Writing test data: {file_path}")
+        with open(file_path, "w") as f:
+            f.write(serialize_to_json(data_to_write, sort_keys=True))
 
     def map_old_to_new_variable_names(self, data: dict) -> dict:
         """Map old variable names to new variable names in the expected results data."""
@@ -392,7 +465,11 @@ class BMIForcingFixture_Class(BMIForcingFixture):
         orig = self.keys_to_exclude
         self.keys_to_exclude = orig + self.keys_to_exclude_at_init
         try:
-            self.compare(self.deserial_actual("init"), self.deserial_expected("init"))
+            actual = self.deserial_actual("init")
+            if os.environ.get(OS_VAR__CREATE_TEST_EXPECT_DATA, "").lower() == "true":
+                self._write_expected_file(actual, "init")
+            expected = self.deserial_expected("init")
+            self.compare(actual, expected)
         finally:
             self.keys_to_exclude = orig
 
@@ -400,8 +477,8 @@ class BMIForcingFixture_Class(BMIForcingFixture):
         """Compare actual vs expected results."""
         try:
             assert_equal_with_tol(
-                expect=expected,
-                actual=actual,
+                expect=_normalize_coords_hashes(expected),
+                actual=_normalize_coords_hashes(actual),
                 new_keys_in_actual_ok=True,
             )
         except ExpectVsActualError as e:
@@ -426,17 +503,24 @@ class BMIForcingFixture_Class(BMIForcingFixture):
 
         """
         logging.info("Starting after_bmi_model_update()...")
-        self.compare(
-            self.deserial_actual("after_update", f"_step_{current_output_step}"),
-            self.deserial_expected("after_update", f"_step_{current_output_step}"),
+        actual = self.deserial_actual("after_update", f"_step_{current_output_step}")
+        if os.environ.get(OS_VAR__CREATE_TEST_EXPECT_DATA, "").lower() == "true":
+            self._write_expected_file(
+                actual, "after_update", f"_step_{current_output_step}"
+            )
+        expected = self.deserial_expected(
+            "after_update", f"_step_{current_output_step}"
         )
+        self.compare(actual, expected)
 
     def after_finalize(self) -> None:
         """Run checks after bmi_model.finalize() has been called."""
         logging.info("Starting after_finalize()...")
-        self.compare(
-            self.deserial_actual("finalize"), self.deserial_expected("finalize")
-        )
+        actual = self.deserial_actual("finalize")
+        if os.environ.get(OS_VAR__CREATE_TEST_EXPECT_DATA, "").lower() == "true":
+            self._write_expected_file(actual, "finalize")
+        expected = self.deserial_expected("finalize")
+        self.compare(actual, expected)
 
     def actual_results_file_path(
         self, suffix: str, current_output_step: str = ""
@@ -611,64 +695,20 @@ class BMIForcingFixture_Regrid(BMIForcingFixture):
                 f"In pre_regrid, expected state to be either None or 'post_ran' but got {repr(self._state)}. The test is set up incorrectly."
             )
 
-        config_options = self.config_options
-        mpi_config = self.mpi_config
-        geo_meta = self.geo_meta
-        supp_pcp_mod = self.bmi_model._supp_pcp_mod
-        output_obj = self.bmi_model._output_obj
-        input_forcing_mod = self.bmi_model._input_forcing_mod
-
         future_time = (
             self.bmi_model._values["current_model_time"]
             + self.bmi_model._values["time_step_size"]
         )
         model = self.bmi_model._model
 
-        ### NOTE with the exception of setting the skip flag, the below
-        ### block is copied verbatim from NWMv3ForcingEngineModel.run()
-        (
-            future_time,
-            config_options,
-        ) = model.determine_forecast(
-            future_time,
-            config_options,
-        )
-        (
-            config_options,
-            input_forcing_mod,
-            mpi_config,
-        ) = model.adjust_precip(
-            config_options,
-            input_forcing_mod,
-            mpi_config,
-        )
-        (
-            config_options,
-            mpi_config,
-        ) = model.log_forecast(
-            config_options,
-            mpi_config,
-        )
+        # NOTE this should mimic NWMv3ForcingEngineModel.run()
+        # with the exception of externally setting the skip flags within this class.
+        model.set_cycle_timing_attrs(future_time)
+        model.set_skip_flags()
+        model.log_cycle()
         ### NOTE setting the flag causes the regrid step to be skipped
         self.set_input_forcings_skip_flags()
-        (
-            future_time,
-            config_options,
-            geo_meta,
-            input_forcing_mod,
-            supp_pcp_mod,
-            mpi_config,
-            output_obj,
-            input_forcings,
-        ) = model.loop_through_forcing_products(
-            future_time,
-            config_options,
-            geo_meta,
-            input_forcing_mod,
-            supp_pcp_mod,
-            mpi_config,
-            output_obj,
-        )
+        model.loop_through_forcing_products(future_time)
 
         # Update test fixture status
         self._state = "pre_ran"
@@ -676,7 +716,7 @@ class BMIForcingFixture_Regrid(BMIForcingFixture):
     def set_input_forcings_skip_flags(self) -> None:
         """Set the `skip` flag on the InputForcings object so that forcing regrid will not occur during loop_through_forcing_products()."""
         logging.debug(
-            "Setting input_forcing.skip = True for each value in dict self.input_forcing_mod"
+            "Setting input_forcing.skip = True for each value in dict self.bmi_model._input_forcing_mod"
         )
         for force_key, input_forcing in self.bmi_model._input_forcing_mod.items():
             input_forcing.skip = True

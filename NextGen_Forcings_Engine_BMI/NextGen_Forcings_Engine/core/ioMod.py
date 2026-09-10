@@ -990,12 +990,10 @@ class OutputObj:
                         self.output_local[
                             output_variable_attribute_dict[varTmp][0], :, :
                         ],
-                        ConfigOptions,
                     )
                 elif ConfigOptions.grid_type == "hydrofabric":
                     dataOutTmp = MpiConfig.merge_slabs_gatherv(
                         self.output_local[output_variable_attribute_dict[varTmp][0], :],
-                        ConfigOptions,
                         allgather=True,
                     )
                     # NOTE this assumes that the var order here matches var order elsewhere.
@@ -1006,14 +1004,12 @@ class OutputObj:
                             self.output_local_elem[
                                 output_variable_attribute_dict[varTmp][0], :
                             ],
-                            ConfigOptions,
                         )
                     else:
                         dataOutTmp = MpiConfig.merge_slabs_gatherv(
                             self.output_local[
                                 output_variable_attribute_dict[varTmp][0], :
                             ],
-                            ConfigOptions,
                         )
                 else:
                     raise ValueError(f"Invalid grid_type: {ConfigOptions.grid_type}")
