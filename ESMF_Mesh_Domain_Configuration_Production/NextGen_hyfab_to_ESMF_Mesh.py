@@ -33,25 +33,26 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     # for orientation properties since there are issues
     # with geopandas for converting crs and translating
     # orientation of polygon from original dataset
-    hyfab = gpd.read_file(hyfab_gpkg, layer='divides')
-    hyfab_cart = hyfab
-    # convert hydrofabric data to spherical coordiantes
-    hyfab = hyfab.to_crs('WGS84')
+    hyfab_cart = gpd.read_file(hyfab_gpkg, layer='divides')
+    hyfab_cart = hyfab_cart.sort_values(by=["div_id"]).reset_index(drop=True)
+    hyfab = hyfab_cart.to_crs("WGS84")
 
     # Eventually, we'll add code to slice catchment ids
     # but for now just use feature ids
-    element_ids = np.array(hyfab.div_id.values, dtype=int)
+    # just use the default dtype for the values instead of trying to specify in the code
+    element_ids = np.array(hyfab.div_id.values, copy=True, dtype=np.int64)
+
+    # generate 32-bit false IDs that are required for ESMF meshes
+    # access to the IDs should be through indexes into the return of this function,
+    # so it doesn't matter what these IDs are as long as they're int32
+    false_ids = np.arange(len(element_ids), dtype=np.int32)
     hyfab_coords = np.empty((len(element_ids), 2), dtype=float)
-    hyfab_coords[:, 0] = element_ids
-    hyfab_coords[:, 1] = element_ids
+    hyfab_coords[:, 0] = false_ids
+    hyfab_coords[:, 1] = false_ids
 
     # Sort data by feature id and reset index
-    hyfab['element_id'] = element_ids
-    hyfab_cart['element_id'] = element_ids
-    hyfab = hyfab.sort_values(by=['element_id'])
-    hyfab_cart = hyfab_cart.sort_values(by=['element_id'])
-    hyfab = hyfab.reset_index()
-    hyfab_cart = hyfab_cart.reset_index()
+    hyfab['element_id'] = false_ids
+    hyfab_cart['element_id'] = false_ids
 
     # Get element count
     element_count = len(hyfab.element_id)
@@ -206,8 +207,8 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     node_count_dim = nc.createDimension("coordDim", 2)
     node_coords_var = nc.createVariable("nodeCoords", 'f8', ("nodeCount", "coordDim"))
     node_coords_var.units = "degrees"
-    elem_id = nc.createVariable("element_id", "i", "elementCount")
-    elem_id.long_name = "Catchment ID for hydrofabric"
+    elem_id = nc.createVariable("element_id", "i4", "elementCount")
+    elem_id.long_name = "False 32-bit catchment IDs use for ESMF mesh generation"
     elem_conn_var = nc.createVariable("elementConn", "i4", ("connectionCount"))
     elem_conn_var.long_name = "Node Indices that define the element connectivity"
     num_elem_conn_var = nc.createVariable("numElementConn", "i", "elementCount")
@@ -251,6 +252,7 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     except FileExistsError:
         # Another process already published the file.
         os.remove(temp_path)
+    return element_ids
 
 
 def get_options():

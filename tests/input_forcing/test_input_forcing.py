@@ -11,38 +11,37 @@ spec = importlib.util.spec_from_file_location(
 test_utils = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(test_utils)
 
+consts = test_utils.test_consts
+configs = test_utils.test_config_classes
+ClassAttrFetcher = test_utils.ClassAttrFetcher
 
-### This disables a LOG call which was causing a crash at ioMod.py: LOG.debug(f"Wgrib2 command: {Wgrib2Cmd}", True)
-os.environ["MFE_SILENT"] = "true"
+TEST_FILE_NAME_PREFIX = "input_forcing"
 
 
-RETRO_FORCING_CONFIG_FILE__AORC_CONUS = (
-    "/workspaces/nwm-rte/src/ngen-forcing/tests/test_data/configs/aorc_config.yml"
-)
-FORECAST_FORCING_CONFIG_FILE__SHORT_RANGE_CONUS = "/workspaces/nwm-rte/src/ngen-forcing/tests/test_data/configs/short_range_config.yml"
-COMPOSITE_KEYS_TO_CHECK = ()
-GRID_TYPE = "hydrofabric"  # ["gridded","hydrofabric","unstructured"]
-KEYS_TO_EXCLUDE = ("uid64",)
+TEST_CONFIGS = [
+    configs.TestConfig_InputForcing(
+        config_file=consts.RETRO_FORCING_CONFIG_FILE__AORC_CONUS,
+        keys_to_check=consts.COMPOSITE_KEYS_TO_CHECK,
+        keys_to_exclude=tuple(
+            set(consts.KEYS_TO_EXCLUDE) | {"config_options", "geo_meta", "mpi_config"}
+        ),
+        grid_type=consts.GRID_TYPE,
+        force_key=12,
+        test_file_name_prefix=TEST_FILE_NAME_PREFIX,
+        extra_attrs=[ClassAttrFetcher("bmi_model_values", "CAT-ID")],
+    ),
+]
 
 
 @pytest.mark.parametrize(
-    "bmi_forcing_fixture_input_forcing",
-    [
-        (
-            RETRO_FORCING_CONFIG_FILE__AORC_CONUS,
-            COMPOSITE_KEYS_TO_CHECK,
-            KEYS_TO_EXCLUDE,
-            GRID_TYPE,
-            12,
-        )
-    ],
-    indirect=True,
+    "bmi_forcing_fixture_input_forcing", TEST_CONFIGS, indirect=True
 )
 def test_input_forcing(
     bmi_forcing_fixture_input_forcing: test_utils.BMIForcingFixture_InputForcing,  # pyright: ignore
 ) -> None:
     """Pytest function for testing InputForcing functionality."""
-    ### Total number of timesteps needs to be at least 2, since the 1st one behaves differently than the others, e.g. see `if config_options.current_output_step == 1` throughout the code.
+    ### Total number of timesteps needs to be at least 3, since the 1st and 2nd behaves differently than the others,
+    ### e.g. see `if config_options.current_output_step == 1` throughout the code and the regridded_forcings1 vs regridded_forcings2 weighting.
     total_timesteps = 3
 
     fixt = bmi_forcing_fixture_input_forcing

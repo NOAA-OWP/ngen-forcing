@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import numpy as np
 
@@ -15,12 +14,13 @@ try:
 except ImportError:
     import ESMF
 
+import logging
 from functools import cached_property, wraps
 from typing import Any
 
-import ewts
 import xarray as xr
 
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core import err_handler
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
     ConfigOptions,
 )
@@ -29,8 +29,12 @@ from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.err_handler import
     log_critical,
 )
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import MpiConfig
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.esmf_utils import (
+    esmf_grid_retry,
+    esmf_mesh_retry,
+)
 
-LOG = ewts.get_logger(ewts.FORCING_ID)
+LOG = logging.getLogger("FORCING")
 
 
 def set_none(func) -> Any:
@@ -353,16 +357,14 @@ class GriddedGeoMeta(GeoMeta):
     @cached_property
     def esmf_grid(self) -> ESMF.Grid:
         """Create the ESMF grid object for the gridded domain."""
-        try:
-            return ESMF.Grid(
-                np.array([self.ny_global, self.nx_global]),
-                staggerloc=ESMF.StaggerLoc.CENTER,
-                coord_sys=ESMF.CoordSys.SPH_DEG,
-            )
-        except Exception as e:
-            self.config_options.errMsg = f"Unable to create ESMF grid for WRF-Hydro geogrid: {self.config_options.geogrid}"
-            log_critical(self.config_options, self.mpi_config)
-            raise e
+        return esmf_grid_retry(
+            self.mpi_config,
+            self.config_options,
+            err_handler,
+            np.array([self.ny_global, self.nx_global]),
+            staggerloc=ESMF.StaggerLoc.CENTER,
+            coord_sys=ESMF.CoordSys.SPH_DEG,
+        )
 
     @cached_property
     def esmf_lat(self) -> np.ndarray:
@@ -866,16 +868,13 @@ class HydrofabricGeoMeta(GeoMeta):
     @cached_property
     def esmf_grid(self) -> ESMF.Mesh:
         """Create the ESMF Mesh object for the hydrofabric domain."""
-        try:
-            return ESMF.Mesh(
-                filename=self.config_options.geogrid, filetype=ESMF.FileFormat.ESMFMESH
-            )
-        except Exception as e:
-            LOG.critical(
-                f"Unable to create ESMF Mesh: {self.config_options.geogrid} "
-                f"due to {str(e)}"
-            )
-            raise e
+        return esmf_mesh_retry(
+            self.mpi_config,
+            self.config_options,
+            err_handler,
+            filename=self.config_options.geogrid,
+            filetype=ESMF.FileFormat.ESMFMESH,
+        )
 
     @cached_property
     def latitude_grid(self) -> np.ndarray:

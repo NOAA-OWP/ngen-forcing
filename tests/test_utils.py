@@ -8,9 +8,22 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
 
+import test_config_classes  # noqa: F401 # Used by test implementations, more convenient to have it in here rather than using more importlib
+import test_consts  # noqa: F401 # Used by test implementations, more convenient to have it in here rather than using more importlib
 import xarray as xr
+from test_config_classes import (
+    TestConfig_AnA,
+    TestConfig_Base,
+    TestConfig_BmiModel,
+    TestConfig_ConfigOptions,
+    TestConfig_GeoMod,
+    TestConfig_InputForcing,
+    TestConfig_Regrid,
+    TestConfig_SuppPrecip,
+)
 
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.bmi_model import (
+    BMIMODEL,
     NWMv3_Forcing_Engine_BMI_model_Base,
 )
 from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
@@ -31,23 +44,39 @@ from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.general_utils import (
     serialize_to_json,
 )
 
-try:
-    import esmpy as ESMF
-except ImportError:
-    import ESMF
-
 OS_VAR__CREATE_TEST_EXPECT_DATA = "FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA"
 
 
 def remove_key(input_data: dict, keys_to_exclude: tuple = ()) -> dict:
-    """Recursively remove keys from a nested dictionary."""
+    """Recursively remove keys from nested dicts.
+
+    Plain keys remove at all levels. Dot-separated keys (e.g. "esmf_field_out._data")
+    remove only at the specified path."""
+    # Collect keys that apply globally (no dots)
+    flat_keys = tuple(k for k in keys_to_exclude if isinstance(k, str) and "." not in k)
+
     output_data = {}
     for key, val in input_data.items():
-        if key not in keys_to_exclude:
-            if isinstance(val, dict):
-                output_data[key] = remove_key(val, keys_to_exclude)
-            else:
-                output_data[key] = val
+        # Skip if this key is in the global exclusion list
+        if key in flat_keys:
+            continue
+
+        # Example: key="esmf_field_out", keys_to_exclude=("uid64", "esmf_field_out._data", "esmf_field_out.grid")
+        # then child_exclude becomes ("_data", "grid") after stripping the "esmf_field_out." prefix
+        child_exclude = ()
+        if isinstance(key, str):
+            child_exclude = tuple(
+                path[len(key) + 1 :]  # Strip "key." prefix from the path
+                for path in keys_to_exclude
+                if isinstance(path, str) and path.startswith(key + ".")
+            )
+
+        # Recurse into nested dicts with combined exclusion rules
+        if isinstance(val, dict):
+            output_data[key] = remove_key(val, flat_keys + child_exclude)
+        else:
+            output_data[key] = val
+
     return output_data
 
 
@@ -66,7 +95,9 @@ def class_to_dict(class_to_convert: typing.Any, keys_to_exclude: list = []) -> d
         val = getattr(class_to_convert, key)
         if not callable(val) and not key.startswith("_"):
             if isinstance(val, (MpiConfig, ConfigOptions, InputForcings, GeoMeta)):
-                data[key] = remove_key(class_to_dict(val), keys_to_exclude)
+                data[key] = remove_key(
+                    class_to_dict(val, keys_to_exclude), keys_to_exclude
+                )
             elif isinstance(val, dict):
                 data[key] = remove_key(val, keys_to_exclude)
             elif isinstance(val, datetime):
@@ -116,9 +147,9 @@ def convert_long_lists(data: typing.Any, max_length: int = 10) -> typing.Any:
             if isinstance(data[0], list):
                 for i, val in enumerate(data):
                     if len(val) > max_length:
-                        data[i] = f"hash_{hash(tuple(val))}"
+                        data[i] = f"hash_{hash(tuple(val))}_len_{len(val)}"
             else:
-                return f"hash_{hash(tuple(data))}"
+                return f"hash_{hash(tuple(data))}_len_{len(data)}"
         else:
             return [convert_long_lists(item, max_length) for item in data]
     else:
@@ -156,7 +187,7 @@ class ClassAttrFetcher:
             the desired child attribute, e.g. "geo_meta"
 
         child_attr_name:
-            The name of the child attribute to be collected, e.g. "element_ids".
+            The name of the child attribute or dict key to be collected, e.g. "element_ids".
 
     """
 
@@ -187,7 +218,10 @@ class ClassAttrFetcher:
 
         """
         parent = getattr(fixture_instance, self.fixture_attr_name)
-        child = getattr(parent, self.child_attr_name)
+        if isinstance(parent, dict):
+            child = parent[self.child_attr_name]
+        else:
+            child = getattr(parent, self.child_attr_name)
         if serialize_and_deserialize:
             child = json.loads(serialize_to_json(child))
         return child
@@ -199,48 +233,72 @@ class BMIForcingFixture:
     For example usage, see: tests/esmf_regrid/test_esmf_regrid.test_regrid.
     """
 
-    def __init__(self, bmi_model: NWMv3_Forcing_Engine_BMI_model_Base) -> None:
+    def __init__(self, cfg: TestConfig_Base) -> None:
         """Initialize BMIForcingFixture."""
-        self.bmi_model: NWMv3_Forcing_Engine_BMI_model_Base = bmi_model
-        self.mpi_config: MpiConfig = bmi_model._mpi_meta
-        self.config_options: ConfigOptions = bmi_model._job_meta
-        self.geo_meta: GeoMeta = bmi_model.geo_meta
+        self.bmi_model: NWMv3_Forcing_Engine_BMI_model_Base = BMIMODEL[cfg.grid_type]()
+        self.bmi_model.initialize_with_params(config_file=cfg.config_file)
+
+        self.bmi_model_values = self.bmi_model._values
+        self.mpi_config: MpiConfig = self.bmi_model._mpi_meta
+        self.config_options: ConfigOptions = self.bmi_model._job_meta
+        self.geo_meta: GeoMeta = self.bmi_model.geo_meta
         self.input_forcing_mod: dict = self.bmi_model._input_forcing_mod
+        self.supp_precip_mod: dict = self.bmi_model._supp_pcp_mod
+
+        self.keys_to_check = cfg.keys_to_check
+        self.keys_to_exclude = cfg.keys_to_exclude
+        self.map_old_to_new_var_names = cfg.map_old_to_new_var_names
+        self.test_file_name_prefix = cfg.test_file_name_prefix
+
+    @staticmethod
+    def _trim_arrays_to_input_map_output(data_dict: dict) -> None:
+        """Trim arrays in data_dict to match input_map_output length.
+
+        Removes unused forcing indices (e.g., LQFRAC at index 8 when include_lqfrac=0).
+        Scans all list values in data_dict and trims those that are longer than input_map_output.
+        Modifies data_dict in place.
+
+        Args:
+            data_dict: Dictionary containing 'input_map_output' and array keys to trim.
+        """
+        input_map_output = data_dict.get("input_map_output", [])
+        if not input_map_output:
+            return  # No trimming if we don't have the mapping
+
+        for key, value in data_dict.items():
+            if key == "input_map_output" or value is None:
+                continue
+            # Only trim list values (which were 2D arrays serialized as list of lists)
+            if isinstance(value, list) and len(value) > len(input_map_output):
+                logging.debug(
+                    f"Trimming {key} from {len(value)} to {len(input_map_output)} rows"
+                )
+                data_dict[key] = value[: len(input_map_output)]
 
 
 class BMIForcingFixture_Class(BMIForcingFixture):
     """Test fixture for Class-based tests."""
 
-    def __init__(
-        self,
-        bmi_model: NWMv3_Forcing_Engine_BMI_model_Base,
-        keys_to_check: tuple[str] = (),
-        keys_to_exclude: tuple[str] = (),
-        map_old_to_new_var_names: bool = True,
-    ) -> None:
+    def __init__(self, cfg: TestConfig_Base) -> None:
         """Initialize BMIForcingFixture_Class.
 
         Args:
         ----
-            bmi_model: The BMI model to be used in the test fixture
-            keys_to_check: The keys to check
-            keys_to_exclude: The keys to exclude from the test results json and from equality checks, for example because they contain non-deterministic values or values that are not relevant to the test.
-            map_old_to_new_var_names: Whether to map old variable names to new variable names in the expected results data, which is needed when updating the test expected outputs dataset but should be false for regular test runs.
+            cfg: an instance of TestConfig_Base
         """
-        super().__init__(bmi_model=bmi_model)
-
-        self.keys_to_check = keys_to_check
-        self.keys_to_exclude = keys_to_exclude
-        self.map_old_to_new_var_names = map_old_to_new_var_names
+        super().__init__(cfg)
 
         self.expected_sub_dir = "test_data/expected_results"
         self.actual_sub_dir = "test_data/actual_results"
         self.test_dir = os.path.dirname(os.path.abspath(__file__))
+        self.extra_attrs: tuple[ClassAttrFetcher] = cfg.extra_attrs
+        self.keys_no_hash: tuple[str] = cfg.keys_no_hash
+        self.keys_to_exclude_at_init: tuple[str] = cfg.keys_to_exclude_at_init
 
     def deserial_actual(
         self, suffix: str, current_output_step: str = "", write_to_file: bool = True
     ) -> dict:
-        """Get the actual metadata results as a deserialized dictionary."""
+        """Get the actual metadata results as a deserialized dictionary, including any extra_attrs."""
         deserial_actual = json.loads(
             serialize_to_json(
                 copy_and_stringify_functions(self.test_class_as_dict), sort_keys=True
@@ -248,7 +306,21 @@ class BMIForcingFixture_Class(BMIForcingFixture):
         )
         # order and reverse so private attributes are last
         deserial_actual = OrderedDict(reversed(list(deserial_actual.items())))
+        # Save raw values for keys that should not be hashed
+        raw_vals = {
+            k: deserial_actual[k] for k in self.keys_no_hash if k in deserial_actual
+        }
         deserial_actual = convert_long_lists(deserial_actual, 10)
+        deserial_actual.update(raw_vals)
+        deserial_actual = remove_key(dict(deserial_actual), self.keys_to_exclude)
+        # Add any extra attributes to the results
+        for ea in self.extra_attrs:
+            deserial_actual[ea.results_key_name] = ea.get(
+                self, serialize_and_deserialize=True
+            )
+
+        self._trim_arrays_to_input_map_output(deserial_actual)
+
         if write_to_file:
             self.write_json(
                 deserial_actual,
@@ -275,10 +347,13 @@ class BMIForcingFixture_Class(BMIForcingFixture):
             )
             with open(file_path, "w") as f:
                 f.write(serialize_to_json(deserial_expected, sort_keys=True))
+            # Remove keys that should be excluded from comparison (match read-exclusion)
+            deserial_expected = remove_key(deserial_expected, self.keys_to_exclude)
             if self.map_old_to_new_var_names:
                 deserial_expected = self.map_old_to_new_variable_names(
                     deserial_expected
                 )
+            self._trim_arrays_to_input_map_output(deserial_expected)
             return deserial_expected
         else:
             try:
@@ -288,6 +363,9 @@ class BMIForcingFixture_Class(BMIForcingFixture):
                     deserial_expected = self.map_old_to_new_variable_names(
                         deserial_expected
                     )
+                self._trim_arrays_to_input_map_output(deserial_expected)
+                # Remove keys that should be excluded from comparison (match write-exclusion)
+                deserial_expected = remove_key(deserial_expected, self.keys_to_exclude)
                 # order and reverse so private attributes are last
                 return OrderedDict(reversed(list(deserial_expected.items())))
             except FileNotFoundError as e:
@@ -310,7 +388,13 @@ class BMIForcingFixture_Class(BMIForcingFixture):
 
         This is useful for checking the state of the model immediately after initialization, before any updates have occurred.
         """
-        self.compare(self.deserial_actual("init"), self.deserial_expected("init"))
+        logging.info("Starting after_intitialization_check()...")
+        orig = self.keys_to_exclude
+        self.keys_to_exclude = orig + self.keys_to_exclude_at_init
+        try:
+            self.compare(self.deserial_actual("init"), self.deserial_expected("init"))
+        finally:
+            self.keys_to_exclude = orig
 
     def compare(self, actual: dict, expected: dict) -> None:
         """Compare actual vs expected results."""
@@ -341,6 +425,7 @@ class BMIForcingFixture_Class(BMIForcingFixture):
         current_output_step: The current output step, which can be used to conditionally run different checks on the first step vs subsequent steps, since the first step behaves differently in some ways.
 
         """
+        logging.info("Starting after_bmi_model_update()...")
         self.compare(
             self.deserial_actual("after_update", f"_step_{current_output_step}"),
             self.deserial_expected("after_update", f"_step_{current_output_step}"),
@@ -348,6 +433,7 @@ class BMIForcingFixture_Class(BMIForcingFixture):
 
     def after_finalize(self) -> None:
         """Run checks after bmi_model.finalize() has been called."""
+        logging.info("Starting after_finalize()...")
         self.compare(
             self.deserial_actual("finalize"), self.deserial_expected("finalize")
         )
@@ -368,105 +454,85 @@ class BMIForcingFixture_Class(BMIForcingFixture):
 class BMIForcingFixture_GeoMod(BMIForcingFixture_Class):
     """Test fixture for GeoMod tests."""
 
-    def __init__(
-        self,
-        bmi_model: NWMv3_Forcing_Engine_BMI_model_Base,
-        keys_to_check: tuple = (),
-        keys_to_exclude: tuple = (),
-    ) -> None:
+    def __init__(self, cfg: TestConfig_GeoMod) -> None:
         """Initialize BMIForcingFixture_GeoMod.
 
         Args:
-        ----
-            bmi_model: the BMI model to be used in the test fixture
-            keys_to_chek: The keys to check
-            keys_to_exclude: The keys to exclude from the test results json and from equality checks, for example because they contain non-deterministic values or values that are not relevant to the test.
-
+            cfg: an instance of TestConfig_GeoMod
         """
-        super().__init__(
-            bmi_model=bmi_model,
-            keys_to_check=keys_to_check,
-            keys_to_exclude=keys_to_exclude,
-        )
+        super().__init__(cfg)
         self.test_class = self.geo_meta
 
-        self.test_file_name_prefix = "geomod"
+
+class BMIForcingFixture_ConfigOptions(BMIForcingFixture_Class):
+    """Test fixture for ConfigOptions tests."""
+
+    def __init__(self, cfg: TestConfig_ConfigOptions) -> None:
+        """Initialize BMIForcingFixture_ConfigOptions.
+
+        Args:
+            cfg: an instance of TestConfig_ConfigOptions
+        """
+        super().__init__(cfg)
+        self.test_class = self.config_options
 
 
 class BMIForcingFixture_InputForcing(BMIForcingFixture_Class):
     """Test fixture for InputForcing tests."""
 
-    def __init__(
-        self,
-        bmi_model: NWMv3_Forcing_Engine_BMI_model_Base,
-        keys_to_check: tuple = (),
-        keys_to_exclude: tuple = (),
-        force_key: int = None,
-        map_old_to_new_var_names: bool = True,
-    ) -> None:
+    def __init__(self, cfg: TestConfig_InputForcing) -> None:
         """Initialize BMIForcingFixture_InputForcing.
 
         Args:
-        ----
-            bmi_model: the BMI model to be used in the test fixture
-            keys_to_chek: The keys to check
-            keys_to_exclude: The keys to exclude from the test results json and from equality checks, for example because they contain non-deterministic values or values that are not relevant to the test.
-            force_key: Key for the forcing type
-            map_old_to_new_var_names: whether to map old variable names to new variable names in the expected results data, which is needed when updating the test expected outputs dataset but should be false for regular test runs.
-
+            cfg: an instance of TestConfig_InputForcing
         """
-        super().__init__(
-            bmi_model=bmi_model,
-            keys_to_check=keys_to_check,
-            keys_to_exclude=keys_to_exclude,
-            map_old_to_new_var_names=map_old_to_new_var_names,
-        )
-        self.force_key = force_key
+        super().__init__(cfg)
+        self.force_key = cfg.force_key
         self.test_class = self.input_forcing_mod[self.force_key]
-        self.test_file_name_prefix = "input_forcing"
+
+
+class BMIForcingFixture_SuppPrecip(BMIForcingFixture_Class):
+    """Test fixture for SuppPrecip tests."""
+
+    def __init__(self, cfg: TestConfig_SuppPrecip) -> None:
+        """Initialize BMIForcingFixture_SuppPrecip.
+
+        Args:
+            cfg: an instance of TestConfig_SuppPrecip
+        """
+        super().__init__(cfg)
+        self.force_key = cfg.force_key
+        self.test_class = self.supp_precip_mod[self.force_key]
+
+
+class BMIForcingFixture_AnA(BMIForcingFixture_Class):
+    """Test fixture for Analysis and Assimilation tests."""
+
+    def __init__(self, cfg: TestConfig_AnA) -> None:
+        """Initialize BMIForcingFixture_AnA.
+
+        Args:
+            cfg: an instance of TestConfig_AnA
+        """
+        super().__init__(cfg)
+        self.test_class = self.bmi_model._output_obj
 
 
 class BMIForcingFixture_BmiModel(BMIForcingFixture_Class):
     """Test fixture for BMI model tests."""
 
-    def __init__(
-        self,
-        bmi_model: NWMv3_Forcing_Engine_BMI_model_Base,
-        keys_to_check: tuple = (),
-        keys_to_exclude: tuple = (),
-    ) -> None:
-        """Initialize BMIForcingFixture_BmiModel.
+    def __init__(self, cfg: TestConfig_BmiModel) -> None:
+        """Initialize BMIForcingFixture_AnA.
 
         Args:
-        ----
-            bmi_model: the BMI model to be used in the test fixture
-            keys_to_check: The keys to check
-            keys_to_exclude: The keys to exclude from the test results json and from
-                equality checks, for example because they contain non-deterministic
-                values or values that are not relevant to the test.
-
+            cfg: an instance of TestConfig_AnA
         """
-        super().__init__(
-            bmi_model=bmi_model,
-            keys_to_check=keys_to_check,
-            keys_to_exclude=keys_to_exclude,
-        )
+        super().__init__(cfg)
         self.test_class = self.bmi_model
-
-        self.test_file_name_prefix = "bmi_model"
 
 
 class BMIForcingFixture_Regrid(BMIForcingFixture):
-    def __init__(
-        self,
-        bmi_model: NWMv3_Forcing_Engine_BMI_model_Base,
-        regrid_func: typing.Callable,
-        force_key: int,
-        extra_attrs: tuple[ClassAttrFetcher],
-        regrid_arrays_to_trim_extra_elements: tuple[str],
-        keys_to_check: tuple[str],
-        keys_to_exclude: tuple[str],
-    ) -> None:
+    def __init__(self, cfg: TestConfig_Regrid) -> None:
         """Writers of regrid tests must call the methods in this order. This is enforced by state attributes.
 
             self.pre_regrid()
@@ -475,27 +541,19 @@ class BMIForcingFixture_Regrid(BMIForcingFixture):
             self.post_regrid()
 
         Args:
-        ----
-            bmi_model: the BMI model to be used in the test fixture
-            regrid_func: The regrid function that is being tested.
-            force_key: Should agree with the regrid function being tested, e.g. see ginputfunc.forcing_map
-            extra_attrs: These are extra attributes to be added to the test results JSON, to supplement the primary InputForcings attributes.
-            regrid_arrays_to_trim_extra_elements: These are output arrays which can contain extra unused elements which need to be removed during an equality check.
-            keys_to_check: These are keys to include in the "expected" test results json, and are checked for equality versus "actual" results from regrid operation.
-            keys_to_exclude: These are keys to exclude from the test results json and from equality checks, for example because they contain non-deterministic values or values that are not relevant to the test.
-
+            cfg: An instance of TestConfig_Regrid
         """
-        super().__init__(bmi_model=bmi_model)
+        assert isinstance(cfg, TestConfig_Regrid)
+        super().__init__(cfg)
 
-        self.regrid_func = regrid_func
-        self.regrid_arrays_to_trim_extra_elements = regrid_arrays_to_trim_extra_elements
-        self.keys_to_check = keys_to_check
-        self.keys_to_exclude = keys_to_exclude
+        self.regrid_func = cfg.regrid_func
+        self.regrid_arrays_to_trim_extra_elements = (
+            cfg.regrid_arrays_to_trim_extra_elements
+        )
+        self.force_key = cfg.force_key
+        self.extra_attrs: tuple[ClassAttrFetcher] = cfg.extra_attrs
 
-        self.force_key = force_key
         self.cull_force_keys_not_used_this_test()
-
-        self.extra_attrs: tuple[ClassAttrFetcher] = extra_attrs
 
         self._state = None  # Test fixture state used to help ensure things happen in the right order
 
@@ -532,9 +590,7 @@ class BMIForcingFixture_Regrid(BMIForcingFixture):
     def regrid_results_file_name_expect(self) -> str:
         """File name for expected test results."""
         test_dir = os.path.dirname(os.path.abspath(__file__))
-        file_basename = (
-            f"test_expect_{self.regrid_func.__name__}{self.serialized_file_suffix}.json"
-        )
+        file_basename = f"test_expect_{self.test_file_name_prefix}{self.regrid_func.__name__}{self.serialized_file_suffix}.json"
         file_path = os.path.join(
             test_dir, "test_data", "expected_results", file_basename
         )
@@ -544,9 +600,7 @@ class BMIForcingFixture_Regrid(BMIForcingFixture):
     def regrid_results_file_name_actual(self) -> str:
         """File name for actual test results."""
         test_dir = os.path.dirname(os.path.abspath(__file__))
-        file_basename = (
-            f"test_actual_{self.regrid_func.__name__}{self.serialized_file_suffix}.json"
-        )
+        file_basename = f"test_actual_{self.test_file_name_prefix}{self.regrid_func.__name__}{self.serialized_file_suffix}.json"
         file_path = os.path.join(test_dir, "test_data", "actual_results", file_basename)
         return file_path
 
@@ -775,11 +829,12 @@ class BMIForcingFixture_Regrid(BMIForcingFixture):
                     f"Expected type list[list], got {type(attr)} for key {key}"
                 )
                 continue
-            attr = attr[: len(input_map_output)]
-            input_forcings_deserial[key] = attr
 
         if errors:
             raise RuntimeError(f"input_forcings had invalid state. Errors: {errors}")
+
+        ### After validation, trim the arrays to the appropriate length.
+        self._trim_arrays_to_input_map_output(input_forcings_deserial)
 
         return input_forcings_deserial
 
@@ -854,6 +909,9 @@ class BMIForcingFixture_Regrid(BMIForcingFixture):
             raise FileNotFoundError(
                 f"Could not find {self.regrid_results_file_name_expect}. Try running the test using OS var {OS_VAR__CREATE_TEST_EXPECT_DATA}=true first to set up the test results expected data."
             ) from e
+
+        # This handles ignoring extra elements that shouldn't be checked which might contain random values, e.g. when include_lqfrac=0.
+        self._trim_arrays_to_input_map_output(regrid_results_expect)
 
         # keys_to_check = ("nx_local", "ny_local", "nx_global", "ny_global")
         # regrid_results_expect = {

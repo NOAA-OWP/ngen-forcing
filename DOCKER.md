@@ -31,10 +31,10 @@ docker run -it ngen-bmi-forcing
 ```
 This will drop you to a bash prompt inside the container.
 
-You will next need to activate the required conda environment:
-```
-conda activate /ngen-app/conda
-```
+The Python virtual environment (`/ngen-app/ngen-python`) is already on the `PATH`,
+so `python` runs the container's interpreter with all dependencies installed. No
+activation step is needed.
+
 All the ngen-forcing scripts are located at `/ngen-app/ngen-forcing/`.
 
 
@@ -46,10 +46,11 @@ docker run -it ngen-lumped-forcing
 ```
 This will drop you to a bash prompt inside the container.
 
-You will next need to activate the required conda environment:
-```
-conda activate /ngen-app/conda
-```
+The `ngen_lumped_forcings_driver` conda environment is already on the `PATH`, so
+`python` runs with its dependencies installed. The image also ships the
+`ngen_forcing_extraction` and `ngen_streamflow` environments; switch between them
+with `conda activate <env-name>`.
+
 All the ngen-forcing scripts are located at `/ngen-app/ngen-forcing/`.
 
 ## Troubleshooting

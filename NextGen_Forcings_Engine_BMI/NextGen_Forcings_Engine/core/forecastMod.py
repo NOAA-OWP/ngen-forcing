@@ -46,15 +46,11 @@ def process_forecasts(
 
         if ConfigOptions.ana_flag:
             fcstCycleOutDir = (
-                ConfigOptions.output_dir
-                + "/"
-                + ConfigOptions.e_date_proc.strftime("%Y%m%d%H")
+                f"{ConfigOptions.output_dir}/{ConfigOptions.e_date_proc.strftime('%Y%m%d%H')}"
             )
         else:
             fcstCycleOutDir = (
-                ConfigOptions.output_dir
-                + "/"
-                + ConfigOptions.current_fcst_cycle.strftime("%Y%m%d%H")
+                f"{ConfigOptions.output_dir}/{ConfigOptions.current_fcst_cycle.strftime('%Y%m%d%H')}"
             )
 
         # reset skips if present
@@ -68,12 +64,10 @@ def process_forecasts(
             fcstCycleOutDir = ConfigOptions.ana_out_dir
 
         # completeFlag = ConfigOptions.scratch_dir + "/WrfHydroForcing.COMPLETE"
-        completeFlag = fcstCycleOutDir + "/WrfHydroForcing.COMPLETE"
+        completeFlag = f"{fcstCycleOutDir}/WrfHydroForcing.COMPLETE"
         if os.path.isfile(completeFlag):
             ConfigOptions.statusMsg = (
-                "Forecast Cycle: "
-                + ConfigOptions.current_fcst_cycle.strftime("%Y-%m-%d %H:%M")
-                + " has already completed."
+                f"Forecast Cycle: {ConfigOptions.current_fcst_cycle.strftime('%Y-%m-%d %H:%M')} has already completed."
             )
             err_handler.log_msg(ConfigOptions, MpiConfig)
             # We have already completed processing this cycle,
@@ -88,7 +82,7 @@ def process_forecasts(
                         os.mkdir(fcstCycleOutDir)
                     except Exception:
                         ConfigOptions.errMsg = (
-                            "Unable to create output directory: " + fcstCycleOutDir
+                            f"Unable to create output directory: {fcstCycleOutDir}"
                         )
                         err_handler.err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)
@@ -98,14 +92,11 @@ def process_forecasts(
             ConfigOptions.statusMsg = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
             err_handler.log_msg(ConfigOptions, MpiConfig)
             ConfigOptions.statusMsg = (
-                "Processing Forecast Cycle: "
-                + ConfigOptions.current_fcst_cycle.strftime("%Y-%m-%d %H:%M")
+                f"Processing Forecast Cycle: {ConfigOptions.current_fcst_cycle.strftime('%Y-%m-%d %H:%M')}"
             )
             err_handler.log_msg(ConfigOptions, MpiConfig)
             ConfigOptions.statusMsg = (
-                "Forecast Cycle Length is: "
-                + str(ConfigOptions.cycle_length_minutes)
-                + " minutes"
+                f"Forecast Cycle Length is: {ConfigOptions.cycle_length_minutes!s} minutes"
             )
             err_handler.log_msg(ConfigOptions, MpiConfig)
         # MpiConfig.comm.barrier()
@@ -148,8 +139,7 @@ def process_forecasts(
                 ConfigOptions.statusMsg = "========================================="
                 err_handler.log_msg(ConfigOptions, MpiConfig, True)
                 ConfigOptions.statusMsg = (
-                    "Processing for output timestep: "
-                    + file_date.strftime("%Y-%m-%d %H:%M")
+                    f"Processing for output timestep: {file_date.strftime('%Y-%m-%d %H:%M')}"
                 )
                 err_handler.log_msg(ConfigOptions, MpiConfig, True)
             # MpiConfig.comm.barrier()
@@ -157,19 +147,14 @@ def process_forecasts(
             # Compose the expected path to the output file. Check to see if the file exists,
             # if so, continue to the next time step. Also initialize our output arrays if necessary.
             OutputObj.outPath = (
-                fcstCycleOutDir
-                + "/"
-                + file_date.strftime("%Y%m%d%H%M")
-                + ".LDASIN_DOMAIN1"
+                f"{fcstCycleOutDir}/{file_date.strftime('%Y%m%d%H%M')}.LDASIN_DOMAIN1"
             )
             # MpiConfig.comm.barrier()
 
             if os.path.isfile(OutputObj.outPath):
                 if MpiConfig.rank == 0:
                     ConfigOptions.statusMsg = (
-                        "Output file: "
-                        + OutputObj.outPath
-                        + " exists. Moving to the next output timestep."
+                        f"Output file: {OutputObj.outPath} exists. Moving to the next output timestep."
                     )
                     err_handler.log_msg(ConfigOptions, MpiConfig)
                 err_handler.check_program_status(ConfigOptions, MpiConfig)
@@ -330,8 +315,7 @@ def process_forecasts(
         if (not ConfigOptions.ana_flag) or (fcstCycleNum == (ConfigOptions.nFcsts - 1)):
             if MpiConfig.rank == 0:
                 ConfigOptions.statusMsg = (
-                    "Forcings complete for forecast cycle: "
-                    + ConfigOptions.current_fcst_cycle.strftime("%Y-%m-%d %H:%M")
+                    f"Forcings complete for forecast cycle: {ConfigOptions.current_fcst_cycle.strftime('%Y-%m-%d %H:%M')}"
                 )
                 err_handler.log_msg(ConfigOptions, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)
@@ -342,7 +326,7 @@ def process_forecasts(
                 open(completeFlag, "a").close()
             except Exception:
                 ConfigOptions.errMsg = (
-                    "Unable to create completion file: " + completeFlag
+                    f"Unable to create completion file: {completeFlag}"
                 )
                 err_handler.log_critical(ConfigOptions, MpiConfig)
             err_handler.check_program_status(ConfigOptions, MpiConfig)

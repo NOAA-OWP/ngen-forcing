@@ -253,7 +253,7 @@ class MpiConfig:
         try:
             contents = os.listdir(dir_path)
         except (FileNotFoundError, NotADirectoryError) as e:
-            self.log_warning(
+            self.log_debug(
                 f"Could not list (it may have already been deleted): {dir_path}: {e}"
             )
             return []
@@ -266,7 +266,7 @@ class MpiConfig:
         try:
             os.remove(file_path)
         except OSError as e:
-            self.log_warning(
+            self.log_debug(
                 f"Could not delete file (it may have already been deleted): {file_path}: {e}"
             )
         else:
@@ -278,7 +278,7 @@ class MpiConfig:
         try:
             os.rmdir(dir_path)
         except OSError as e:
-            self.log_warning(
+            self.log_debug(
                 f"Could not rmdir (it may have already been deleted): {dir_path}: {e}"
             )
         else:

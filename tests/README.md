@@ -11,15 +11,6 @@ The initial test data was generated using `nwm-rte` to create a calibration real
 for gage 01123000, starting at time 2013-07-01 00:00:00, and running for 3 timesteps,
 using `nwm-rte's` run_suite.sh.  See RETRO_FORCING_CONFIG_FILE__AORC_CONUS.
 
-More specifically the initial expected test data was developed with these specific configurations in `config.bashrc`.
-```
-REPO_TAG_FCST_MGR="856fc0e1201076df909e56c7cd384f58e82965a2"
-REPO_TAG_MSW_MGR="693c206a22b5e9ffcca3103166c0ca59e2b11b25"
-REPO_TAG_CAL_MGR="7e56bf01477ea77e72dfb25a166ac26ff6090ecb"
-REPO_TAG_NGEN_FORCING="LOCAL"
-NGEN_SOURCE_MODE="ghcr"
-NGEN_BASE__REMOTE_GHCR_TAG="844c5f6"
-```
 
 And these two commands in `nwm-rte's` `run_suite.sh`:
 ```bash
@@ -34,37 +25,16 @@ The test suite is organized into the following modules:
 - **`esmf_regrid/`** - Tests for ESMF regridding functionality
 - **`geomod/`** - Tests for geomod components
 - **`input_forcing/`** - Tests for input forcing data processing
+- **`supp_precip/`** - Tests for supp precip data processing
 - **`bmi_model/`** - Tests for the BMI model lifecycle
+- **`config_options/`** - Tests config options
 - **`test_utils.py`** - Shared test utilities and fixtures
 - **`conftest.py`** - Pytest configuration and shared fixtures
 
-## Prerequisites
-### Setup requirements:
-    1. Create the forcing config.yml files using RTE.
-    2. Enter the RTE devcontainer.
-
-### Required Dependencies
-
-The test suite requires Python 3.11 or higher. Install the package with test dependencies inside of the `dev container`:
-
-```bash
-# From the repository root directory
-pip install -e ".[develop]"
-```
-
-Or install pytest directly inside of the `dev container`:
-
-```bash
-pip install pytest
-```
-
-### Additional Requirements
-
-Ensure all main package dependencies are installed inside of the `dev container` (this typically should happen when the `dev container` is built):
-
-```bash
-pip install -e .
-```
+## Prerequisite Steps
+    1. Clone the nwm-rte repository
+    2. Build a Docker image using nwm-rte.
+    3. Enter a Dev Container using nwm-rte.
 
 ## Running Tests
 
@@ -91,13 +61,29 @@ Multiple processors: ( cd src/ngen-forcing && mpirun -n 2 pytest tests/geomod)
 Single processor: ( cd src/ngen-forcing && pytest tests/input_forcing)
 Multiple processors: ( cd src/ngen-forcing && mpirun -n 2 pytest tests/input_forcing)
 
+# Supp precip tests
+Single processor: ( cd src/ngen-forcing && pytest tests/supp_precip)
+Multiple processors: ( cd src/ngen-forcing && mpirun -n 2 pytest tests/supp_precip)
+
+# Analysis and Assimilation tests
+Single processor: ( cd src/ngen-forcing && pytest tests/ana )
+Multiple processors: ( cd src/ngen-forcing && mpirun -n 2 pytest tests/ana )
+
 # BMI model tests
 Single processor: ( cd src/ngen-forcing && pytest tests/bmi_model)
 Multiple processors: ( cd src/ngen-forcing && mpirun -n 2 pytest tests/bmi_model)
+
+# config options tests
+Single processor: ( cd src/ngen-forcing && pytest tests/config_options)
+Multiple processors: ( cd src/ngen-forcing && mpirun -n 2 pytest tests/config_options)
 ```
 
 Create new test output data (creates expected outputs for subsequent tests)
 ```bash
+# All
+Single processor: (cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest )
+Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest )
+
 # ESMF regridding tests
 Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/esmf_regrid)
 Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/esmf_regrid)
@@ -110,9 +96,21 @@ Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED
 Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/input_forcing)
 Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/input_forcing)
 
+# Supp precip tests
+Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/supp_precip)
+Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/supp_precip)
+
+# Analysis and Assimilation tests
+Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/ana )
+Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/ana )
+
 # BMI model tests
 Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/bmi_model)
 Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/bmi_model)
+
+# config_options tests
+Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/config_options)
+Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/config_options)
 ```
 
 In the rare case where you want to create new `expected` data and run the tests using `old` variable names use the following for `Input Forcing Tests`:
@@ -120,44 +118,32 @@ In the rare case where you want to create new `expected` data and run the tests 
 # Input forcing tests
 Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/input_forcing --map_old_to_new_var_names False)
 Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/input_forcing --map_old_to_new_var_names False)
+
+# Supp precip tests
+Single processor: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true pytest tests/supp_precip --map_old_to_new_var_names False)
+Multiple processors: ( cd src/ngen-forcing && FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA=true mpirun -n 2 pytest tests/supp_precip --map_old_to_new_var_names False)
+
 ```
 ## Test Configuration
 
-The test suite is configured via `pytest.ini` at the repository root:
-
-- **Python path**: Set to repository root (`.`)
-- **Logging**: Enabled with INFO level (DEBUG available by uncommenting)
-- **Verbosity**: Full trace with verbose output (`-vv`)
-- **Test paths**: Pre-configured to discover tests in `esmf_regrid`, `geomod`, `input_forcing`, and `bmi_model`
-
+The test suite is configured via `pytest.ini` at the repository root.
 
 ## Test Data
 
 Test data is stored in the `test_data/` directory. Tests may reference files from this location for input data and expected results validation.
 
-## Writing New Tests
+## Writing New Tests or Updating Expected Results Files
 
-When adding new tests:
+When adding new tests, use the OS env var `FORCING_PYTEST_WRITE_TEST_EXPECTED_DATA`
+to have your new test automatically write new "expected" data to `tests/test_data/expected_results/`,
+then commit those files to the repository.  See above for example calls.
 
-1. Place test files in the appropriate subdirectory
-2. Name test files with the `test_*.py` prefix
-3. Name test functions with the `test_*` prefix
-4. Use fixtures from `conftest.py` for common setup
-5. Place test data files in `test_data/` with descriptive names
+## Key Exclusion in Test Configs
 
-Example test structure:
+`keys_to_exclude` and `keys_to_exclude_at_init` both support dot notation to target nested keys.
+A plain key like `"config_options"` is removed at every nesting level.
+A dotted key like `"esmf_field_out._data"` removes only `_data` when it appears
+directly under `esmf_field_out`, leaving all other occurrences of `_data` intact.
 
-```python
-import pytest
-
-def test_my_feature():
-    """Test description."""
-    # Arrange
-    input_data = ...
-
-    # Act
-    result = function_under_test(input_data)
-
-    # Assert
-    assert result == expected_output
-```
+This means that the exclusion logic does not support the notion of a key that contains a literal dot in its name,
+since a dot always causes a hierarchical search.

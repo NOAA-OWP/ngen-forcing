@@ -39,6 +39,13 @@ def retrieve_forcing(config_options: ConfigOptions):
     input_horizons = input_horizons + [input_horizons[0]] * len(
         config_options.supp_precip_forcings
     )
+    fcst_offsets = getattr(config_options, "fcst_input_offsets", None)
+    if fcst_offsets is None:
+        fcst_offsets = [0] * len(config_options.input_forcings)
+    supp_offsets = getattr(config_options, "supp_input_offsets", None)
+    if supp_offsets is None:
+        supp_offsets = [0] * len(config_options.supp_precip_forcings)
+    input_offsets = list(fcst_offsets) + list(supp_offsets)
     ens_number = config_options.cfsv2EnsMember
     ana_flag = config_options.ana_flag
     look_back = config_options.look_back
@@ -53,19 +60,21 @@ def retrieve_forcing(config_options: ConfigOptions):
         # Set supp forcing hours timehandling placeholder
         supp_forcing_hours = None
 
+        offset_hours = (input_offsets[i] or 0) / 60.0
+
         # Set lookback hours and extraction scripts
         if ana_flag == 0:
             lookback_hours = 1
             forcing_script = FORCING_EXTRACTION["forcing_src"].get(input_forcings[i])
-            forcing_start_time = refcstbdate + timedelta(hours=1)
+            forcing_start_time = refcstbdate + timedelta(hours=1) - timedelta(hours=offset_hours)
         elif ana_flag == 1:
-            lookback_hours = int(look_back / 60)
-            forcing_start_time = refcstbdate + timedelta(hours=(lookback_hours - 1))
+            lookback_hours = int(look_back / 60 )
+            forcing_start_time = refcstbdate + timedelta(hours=(lookback_hours -1)) - timedelta(hours=offset_hours)
             if input_forcings[i] in (
                 "supp1",
                 "supp2",
                 "supp6",
-                "supp10",
+                #"supp10",
                 "supp11",
                 "supp12",
             ):
@@ -141,6 +150,8 @@ def main():
         input_force_dirs=config_options_dict["InputForcingDirectories"],
         supp_precip_dirs=config_options_dict["SuppPcpDirectories"],
         fcst_input_horizons=config_options_dict["ForecastInputHorizons"],
+        fcst_input_offsets=config_options_dict["ForecastInputOffsets"],
+        supp_input_offsets=config_options_dict["SuppPcpInputOffsets"],
         cfsv2EnsMember=config_options_dict["cfsEnsNumber"],
         ana_flag=config_options_dict["AnAFlag"],
         look_back=config_options_dict["LookBack"],

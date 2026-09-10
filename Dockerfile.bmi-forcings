@@ -1,264 +1,162 @@
 ############################################################################
 # Change/Verify these values when adopting this Dockerfile into another org:
-#   GH_ORG, IMAGE_NAMESPACE,
+#   GH_ORG, GHCR_ORG, IMAGE_NAMESPACE,
 #   EWTS_ORG, EWTS_REF
 ############################################################################
 
 # Ownership / branding overrides
 ARG GH_ORG=NGWPC
+ARG GHCR_ORG=ngwpc
 ARG IMAGE_NAMESPACE=ngwpc
 
 # External repository sources (org and ref/branch overrides)
+ARG USE_EWTS=ON
 ARG EWTS_ORG=${GH_ORG}
 ARG EWTS_REF=development
+
+############################################################################
+# Image selection
 ############################################################################
 
-# Image selection
-## TODO: replace with base image created under NGWPC-3223 ##
-## see: https://jira.nextgenwaterprediction.com/browse/NGWPC-3223
-ARG BMI_BASE_REPO=rockylinux
-ARG BMI_BASE_TAG=8
+# Use the compiled dependencies image. This already includes the slow-moving
+# Bookworm-based FOSS/compiled stack: WGRIB2, ESMF, ESMPy, HDF5, NetCDF-C,
+# NetCDF-Fortran, Boost, GDAL, UDUNITS2, and stable Python dependencies.
+#
+# Default build:
+#   docker build -t ngen-bmi-forcing .
+#
+# Build from a different published dependency image:
+#   docker build \
+#     --build-arg DEPS_IMAGE=ghcr.io/ngwpc/ngen-dependencies-bookworm:<tag> \
+#     -t ngen-bmi-forcing .
+#
+# Build from a locally built dependency image:
+#   docker build \
+#     --build-arg DEPS_IMAGE=ngen-dependencies-bookworm \
+#     -t ngen-bmi-forcing .
+ARG DEPS_IMAGE=ghcr.io/${GHCR_ORG}/ngen-dependencies-bookworm
 
-FROM ${BMI_BASE_REPO}:${BMI_BASE_TAG}
+FROM ${DEPS_IMAGE}
 
-# Re-expose args after FROM for the remaining build stage
-# Keeps whatever value was already set
+# Re-expose args after FROM for the remaining build stage.
 ARG GH_ORG
+ARG GHCR_ORG
 ARG IMAGE_NAMESPACE
+ARG USE_EWTS=ON
 ARG EWTS_ORG
 ARG EWTS_REF
+ARG DEPS_IMAGE
+
+# Optional cache-bust args.
+# Leave this at 0 for normal builds. Override only when you intentionally want
+# the EWTS layer rebuilt even though the Dockerfile inputs did not change.
+ARG EWTS_CACHE_BUST=0
 
 # OCI Metadata Arguments
-ARG BMI_BASE_REPO
-ARG BMI_BASE_TAG
-ARG BMI_BASE_NAME="${BMI_BASE_REPO}:${BMI_BASE_TAG}"
-ARG BMI_BASE_DIGEST="unknown"
-ARG BMI_BASE_REVISION="unknown"
+#
+# DEPS_IMAGE_* refers to the dependency image this image is built FROM.
+ARG DEPS_IMAGE_DIGEST="unknown"
+ARG DEPS_IMAGE_REVISION="unknown"
 ARG IMAGE_SOURCE="unknown"
 ARG IMAGE_VENDOR="unknown"
 ARG IMAGE_VERSION="unknown"
 ARG IMAGE_REVISION="unknown"
+ARG EWTS_REVISION="unknown"
 
-# OCI Standard Labels
-LABEL org.opencontainers.image.base.name="${BMI_BASE_NAME}" \
-    org.opencontainers.image.base.digest="${BMI_BASE_DIGEST}" \
-    io.${IMAGE_NAMESPACE}.image.base.revision="${BMI_BASE_REVISION}" \
-    org.opencontainers.image.source="${IMAGE_SOURCE}" \
-    org.opencontainers.image.vendor="${IMAGE_VENDOR}" \
-    org.opencontainers.image.version="${IMAGE_VERSION}" \
-    org.opencontainers.image.revision="${IMAGE_REVISION}" \
-    org.opencontainers.image.title="NGEN BMI Forcing" \
-    org.opencontainers.image.description="Docker image for the NGEN BMI Forcings application"
+# Image Labels: OCI-spec annotations followed by custom source-repo metadata.
+LABEL org.opencontainers.image.base.name="${DEPS_IMAGE}" \
+      org.opencontainers.image.base.digest="${DEPS_IMAGE_DIGEST}" \
+      org.opencontainers.image.source="${IMAGE_SOURCE}" \
+      org.opencontainers.image.vendor="${IMAGE_VENDOR}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${IMAGE_REVISION}" \
+      org.opencontainers.image.title="NGEN BMI Forcing" \
+      org.opencontainers.image.description="Docker image for the NGEN BMI Forcings application" \
+      io.${IMAGE_NAMESPACE}.image.base.revision="${DEPS_IMAGE_REVISION}" \
+      io.${IMAGE_NAMESPACE}.ewts.org="${EWTS_ORG}" \
+      io.${IMAGE_NAMESPACE}.ewts.ref="${EWTS_REF}" \
+      io.${IMAGE_NAMESPACE}.ewts.revision="${EWTS_REVISION}"
 
-# ensure local python is preferred over distribution python
-ENV PATH="/usr/local/bin:$PATH"
+############################################################################
+# Python environment inherited from dependencies image
+############################################################################
 
-# cannot remove LANG even though https://bugs.python.org/issue19846 is fixed
-# last attempted removal of LANG broke many users:
-# https://github.com/docker-library/python/pull/570
-ENV LANG="C.UTF-8"
-
-## FIXME: Replace installation and build of FOSS dependencies wiith a base image. ##
-
-# runtime dependencies
-RUN set -eux; \
-    dnf install -y dnf-plugins-core; \
-    dnf install -y epel-release; \
-    dnf config-manager --set-enabled powertools; \
-    dnf install -y \
-        proj proj-devel \
-        sqlite sqlite-devel \
-        autoconf \
-        automake \
-        bzip2 bzip2-devel \
-        cmake \
-        curl curl-devel \
-        file \
-        findutils \
-        git \
-        jq \
-## FIXME: replace GNU compilers with Intel compiler ##
-        gcc-toolset-10 \
-        gcc-toolset-10-libasan-devel \
-        gcc-toolset-10-gcc-gfortran \
-        jasper-libs jasper-devel \
-        libaec libaec-devel \
-        libasan6 \
-        libffi libffi-devel \
-        libpng libpng-devel \
-        m4 \
-## FIXME: replace openmpi with Intel MPI libraries ##
-        openmpi openmpi-devel \
-        openssl openssl-devel \
-        python3.11 \
-        python3.11-devel \
-        python3.11-pip \
-        python3.11-pyyaml \
-        rsync \
-        uuid uuid-devel \
-        which \
-        zlib zlib-devel \
-        hdf5-devel \
-        netcdf-devel \
-        netcdf-fortran-devel \
-    ; \
-    dnf clean all
-
-## FIXME: replace GNU compilers with Intel compiler ##
-SHELL [ "/usr/bin/scl", "enable", "gcc-toolset-10"]
-## FIXME: replace openmpi with Intel MPI libraries ##
-ENV PATH="${PATH}:/usr/lib64/openmpi/bin/"
-
-RUN set -eux; \
-    curl --location --output wgrib2.tgz "https://ftp.cpc.ncep.noaa.gov/wd51we/wgrib2/wgrib2.tgz" ; \
-    mkdir --parents /usr/src/wgrib2 ; \
-    tar --extract --directory /usr/src/wgrib2 --strip-components=1 --file wgrib2.tgz ; \
-    rm wgrib2.tgz ; \
-    cd /usr/src/wgrib2 ; \
-    export CC=gcc ; \
-    export FC=gfortran ; \
-    make \
-        USE_IPOLATES=3 \
-        USE_PNG=1 \
-        USE_AEC=0 \
-        USE_JASPER=1 \
-        USE_OPENJPEG=0 \
-        USE_G2CLIB=0 \
-        PREFIX=/usr/local ; \
-    make lib ; \
-    cp /usr/src/wgrib2/wgrib2/wgrib2 /usr/local/bin/ ; \
-    chmod +x /usr/local/bin/wgrib2 ; \
-    rm --recursive --force /usr/src/wgrib2
-
-# Build and install ESMF 8.8.0
-RUN set -eux; \
-    curl --location --output esmf-8.8.0.tar.gz "https://github.com/esmf-org/esmf/archive/refs/tags/v8.8.0.tar.gz"; \
-    tar --extract --gzip --file esmf-8.8.0.tar.gz; \
-    rm esmf-8.8.0.tar.gz; \
-    cd esmf-8.8.0; \
-    export ESMF_DIR=/esmf-8.8.0; \
-    export ESMF_INSTALL_PREFIX=/usr/local/esmf; \
-    export ESMF_COMPILER=gfortran; \
-    export ESMF_COMM=openmpi; \
-    export ESMF_NETCDF="nc-config"; \
-    export ESMF_F90COMPILEPATHS="-I/usr/lib64/gfortran/modules"; \
-    export ESMF_BOPT=O; \
-    make all; \
-    make install; \
-    cd ..; \
-    rm -rf esmf-8.8.0
-
-# Build GDAL from source
-RUN --mount=type=cache,target=/root/.cache/gdal,id=gdal-build \
-    set -eux && \
-    curl --location --output gdal.tar.gz https://github.com/OSGeo/gdal/releases/download/v3.7.3/gdal-3.7.3.tar.gz && \
-    mkdir --parents /usr/src/gdal && \
-    tar --extract --directory /usr/src/gdal --strip-components=1 --file gdal.tar.gz && \
-    cd /usr/src/gdal && \
-    cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local && \
-    cmake --build build --parallel "$(nproc)" && \
-    cmake --build build --target install && \
-    ldconfig && \
-    rm --recursive --force /usr/src/gdal gdal.tar.gz
-
-# -------------------------------
-# Create a self-contained venv for ngen-forcing
-# -------------------------------
+# Re-expose the shared Python virtual environment created by the dependency
+# image. Do not recreate it here; forcing, ngen, and downstream images should
+# all install into and reuse the same venv.
 ENV VIRTUAL_ENV="/ngen-app/ngen-python"
-RUN python3.11 -m venv ${VIRTUAL_ENV}
-ENV PATH="${VIRTUAL_ENV}/bin:${PATH}" \
-    PYTHONPATH="${VIRTUAL_ENV}/lib/python3.11/site-packages"
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
-# Install ESMPy
-ENV ESMFMKFILE=/usr/local/esmf/lib/libO/Linux.gfortran.64.openmpi.default/esmf.mk
-RUN set -eux; \
-    pip3.11 install setuptools-git-versioning; \
-    git clone --depth 1 --branch v8.8.0 https://github.com/esmf-org/esmf.git; \
-    cd esmf/src/addon/esmpy; \
-    python3.11 -m pip install .; \
-    cd /; \
-    rm -rf esmf
+############################################################################
+# Optional EWTS Python package
+############################################################################
 
-
-ENV PATH="/usr/local/bin:${PATH}"
-
-ENV WGRIB2=/usr/local/bin/wgrib2
-
-# Fix OpenMPI transport for containers
-ENV OMPI_MCA_btl_vader_single_copy_mechanism=none
-ENV OMPI_MCA_btl=^openib,ofi
-ENV OMPI_MCA_pml=ob1
-ENV OMPI_MCA_btl_base_warn_component_unused=0
-
-################################################
-
-# Reset SHELL so we're not locked into the gcc-10 build environment
 SHELL ["/bin/bash", "-c"]
 
-# ── EWTS (Error, Warning and Trapping System)
-# ngen-bmi-forcing only needs the EWTS Python package (not the C/C++/Fortran
-# libraries or ngen bridge that the full ngen image requires).
+# ngen-bmi-forcing only needs the EWTS Python package, not the C/C++/Fortran
+# libraries or ngen bridge that the full ngen image requires.
 #
-# Build args – override at build time to pin a branch, tag, or full commit SHA:
-#   docker build --build-arg EWTS_REF=v1.2.3 ...
-#   docker build --build-arg EWTS_REF=abc123def456 ...
+# Ensures an unset or empty USE_EWTS defaults to ON.
 #
-# Clone nwm-ewts, install the Python package, capture git metadata for
-# provenance, then remove the source tree.
-# Try shallow clone by branch/tag name first; fall back to full clone + checkout
-# for bare commit SHAs (which git clone -b doesn't support).
+# USE_EWTS accepted ON values:
+#   ON, YES, TRUE, 1
 #
-# NOTE: Unlike the ngen Dockerfile, clone + pip install + cleanup are kept in a
-# single RUN so the source tree never persists in a layer.  In ngen the split is
-# safe because cmake installs the wheel to /opt/ewts before the source is removed;
-# here there is no cmake step, so the source must remain until pip finishes.
-RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache \
+# Everything else is treated as OFF.
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
     set -eux && \
-    (git clone --depth 1 -b "${EWTS_REF}" \
-        "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts \
-     || (git clone "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts && \
-         cd /tmp/nwm-ewts && git checkout "${EWTS_REF}")) && \
-    cd /tmp/nwm-ewts && \
-    # ── Capture EWTS git provenance ──
-    # Saved as a JSON sidecar so the git-info step below can merge EWTS
-    # metadata alongside ngen-bmi-forcing.
-    jq -n \
-      --arg commit_hash "$(git rev-parse HEAD)" \
-      --arg branch "$(git branch -r --contains HEAD 2>/dev/null | grep -v '\->' | sed 's|origin/||' | head -n1 | xargs || echo "${EWTS_REF}")" \
-      --arg tags "$(git tag --points-at HEAD 2>/dev/null | tr '\n' ' ')" \
-      --arg author "$(git log -1 --pretty=format:'%an')" \
-      --arg commit_date "$(date -u -d @$(git log -1 --pretty=format:'%ct') +'%Y-%m-%d %H:%M:%S UTC')" \
-      --arg message "$(git log -1 --pretty=format:'%s' | tr '\n' ';')" \
-      --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
-      '{"nwm-ewts": {commit_hash: $commit_hash, branch: $branch, tags: $tags, author: $author, commit_date: $commit_date, message: $message, build_date: $build_date}}' \
-      > /ngen-app/nwm-ewts_git_info.json && \
-    # ── Install the EWTS Python package into the venv ──
-    # This is what makes "import ewts" work for ngen-bmi-forcing.
-    # For example, bmi_model.py does:  import ewts; LOG = ewts.get_logger(ewts.FORCING_ID)
-    pip install /tmp/nwm-ewts/runtime/python/ewts && \
-    # ── Cleanup ──
-    cd / && \
-    rm -rf /tmp/nwm-ewts
+    USE_EWTS="${USE_EWTS:-ON}" && \
+    echo "USE_EWTS=${USE_EWTS}; EWTS org: ${EWTS_ORG}; ref: ${EWTS_REF}; cache bust: ${EWTS_CACHE_BUST}" && \
+    USE_EWTS_NORMALIZED="$(echo "${USE_EWTS}" | tr '[:lower:]' '[:upper:]')" && \
+    if [[ "${USE_EWTS_NORMALIZED}" =~ ^(ON|YES|TRUE|1)$ ]]; then \
+        echo "Installing EWTS Python package"; \
+        rm -rf /tmp/nwm-ewts && \
+        (git clone --depth 1 -b "${EWTS_REF}" \
+            "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts \
+         || (git clone "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts && \
+             cd /tmp/nwm-ewts && git checkout "${EWTS_REF}")) && \
+        cd /tmp/nwm-ewts && \
+        jq -n \
+          --arg commit_hash "$(git rev-parse HEAD)" \
+          --arg branch "$(git branch -r --contains HEAD 2>/dev/null | grep -v '\->' | sed 's|origin/||' | head -n1 | xargs || echo "${EWTS_REF}")" \
+          --arg tags "$(git tag --points-at HEAD 2>/dev/null | tr '\n' ' ')" \
+          --arg author "$(git log -1 --pretty=format:'%an')" \
+          --arg commit_date "$(date -u -d @$(git log -1 --pretty=format:'%ct') +'%Y-%m-%d %H:%M:%S UTC')" \
+          --arg message "$(git log -1 --pretty=format:'%s' | tr '\n' ';')" \
+          --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+          '{"nwm-ewts": {commit_hash: $commit_hash, branch: $branch, tags: $tags, author: $author, commit_date: $commit_date, message: $message, build_date: $build_date}}' \
+          > /ngen-app/nwm-ewts_git_info.json && \
+        python -m pip install /tmp/nwm-ewts/runtime/python/ewts && \
+        cd / && \
+        rm -rf /tmp/nwm-ewts; \
+    else \
+        echo "EWTS disabled; ensuring ewts package is absent"; \
+        python -m pip uninstall -y ewts || true; \
+        rm -f /ngen-app/nwm-ewts_git_info.json; \
+    fi
 
+############################################################################
+# ngen-bmi-forcing - most frequently changing layer
+############################################################################
+
+# Keep COPY near the end. Source changes should invalidate only this section
+# and the git-info section below, not the inherited compiled dependencies,
+# ESMPy, mpi4py, or EWTS.
 COPY . /ngen-app/ngen-forcing/
 
-# Install ngen-forcing as a Python package
 WORKDIR /ngen-app/ngen-forcing
-RUN set -eux; \
-    pip install --upgrade pip setuptools wheel; \
-    pip install --no-cache-dir mpi4py .
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
+    set -eux; \
+    python -m pip install .
 
 ARG CI_COMMIT_REF_NAME
 
 RUN set -eux; \
-    # Get the remote URL from Git configuration
+    # Ensure local tag metadata includes all remote tags before creating git_info.
+    git fetch --force --tags origin '+refs/tags/*:refs/tags/*' && \
     repo_url=$(git config --get remote.origin.url); \
-    # Extract the repo name (everything after the last slash) and remove any trailing .git
     key=${repo_url##*/}; \
     key=${key%.git}; \
-    # ngen-forcing is different from the other repos.  We don't use the repo name directly
     GIT_INFO_PATH="/ngen-app/ngen-bmi-forcing_git_info.json"; \
-    # Determine branch name: use CI_COMMIT_REF_NAME if set; otherwise, use git's current branch
     branch=$( [ -n "${CI_COMMIT_REF_NAME:-}" ] && echo "${CI_COMMIT_REF_NAME}" || git rev-parse --abbrev-ref HEAD ); \
     jq -n \
       --arg commit_hash "$(git rev-parse HEAD)" \
@@ -270,7 +168,6 @@ RUN set -eux; \
       --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
       "{\"ngen-bmi-forcing\": {commit_hash: \$commit_hash, branch: \$branch, tags: \$tags, author: \$author, commit_date: \$commit_date, message: \$message, build_date: \$build_date}}" \
       > $GIT_INFO_PATH; \
-    # Merge EWTS git provenance if it exists
     if [ -f /ngen-app/nwm-ewts_git_info.json ]; then \
       jq -s 'add' $GIT_INFO_PATH /ngen-app/nwm-ewts_git_info.json > ${GIT_INFO_PATH}.tmp; \
       mv ${GIT_INFO_PATH}.tmp $GIT_INFO_PATH; \
@@ -278,7 +175,5 @@ RUN set -eux; \
     fi
 
 WORKDIR /
-
-ENV LD_LIBRARY_PATH="/usr/lib64/openmpi/lib/"
 
 ENTRYPOINT [ "/bin/bash" ]

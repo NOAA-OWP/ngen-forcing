@@ -19,7 +19,7 @@ RefcstBDateProc: "202311191900"
 ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [2700]
-ForecastInputOffsets: [0]
+ForecastInputOffsets: [180]
 Geopackage: "{root_dir}/gpkg/alaska/{gage}.gpkg"
 GeogridIn: "{root_dir}/esmf_mesh/{gage}_ESMF_Mesh.nc"
 SpatialMetaIn: ""
@@ -54,7 +54,7 @@ SuppPcpDirectories: ["{root_dir}/raw_input/NBM_AK"]
 SuppPcpParamDir: '{root_dir}'
 RegridOptSuppPcp: [1]
 SuppPcpTemporalInterpolation: [0]
-SuppPcpInputOffsets: [0]
+SuppPcpInputOffsets: [180]
 SuppPcpMandatory: [1]
 RqiMethod: 0
 RqiThreshold: 0.9

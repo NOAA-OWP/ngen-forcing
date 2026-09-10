@@ -1,0 +1,293 @@
+name: Dependencies Image
+
+# Reusable workflow (called by cicd.yml, it does not run on its own). Builds and
+# publishes the compiled-dependency base image (ngen-dependencies-<base>) that
+# Dockerfile.bmi-forcings builds FROM. Because cicd.yml calls this as a job, the
+# forcing build can order itself after a base rebuild with `needs`, and the base
+# is only rebuilt when the dependency files change.
+#
+# The published image name follows the base image. The current base is
+# python:3.12-slim-bookworm, published as ngen-dependencies-bookworm via the
+# explicit DEPS_BASE_SUFFIX=bookworm override (the suffix auto-derived from
+# python:3.12-slim-bookworm would not be "bookworm"). Change DEPS_BASE_REPO /
+# DEPS_BASE_TAG to change the base; set DEPS_BASE_SUFFIX to control the name.
+#
+# Outputs the published repo and tag so the caller can build FROM exactly what
+# was just built.
+
+on:
+  workflow_call:
+    inputs:
+      DEPS_BASE_REPO:
+        description: 'Base image to compile the dependencies from (default python)'
+        required: false
+        type: string
+        default: ''
+      DEPS_BASE_TAG:
+        description: 'Base image tag (default 3.12-slim-bookworm)'
+        required: false
+        type: string
+        default: ''
+      DEPS_BASE_SUFFIX:
+        description: 'Override the published name suffix (default derived from the base, e.g. bookworm)'
+        required: false
+        type: string
+        default: ''
+      GHCR_ORG:
+        description: 'GHCR org (default repo owner, lowercased)'
+        required: false
+        type: string
+        default: ''
+      BOOST_VERSION:
+        description: 'Boost version (blank = Dockerfile.dependencies default)'
+        required: false
+        type: string
+        default: ''
+      ESMF_VERSION:
+        description: 'ESMF version (blank = Dockerfile.dependencies default)'
+        required: false
+        type: string
+        default: ''
+    outputs:
+      image:
+        description: 'Published deps image repo (no tag)'
+        value: ${{ jobs.setup.outputs.deps_image }}
+      tag:
+        description: 'Tag of the deps image just built'
+        value: ${{ jobs.setup.outputs.test_image_tag }}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # set variables for use in other jobs
+  setup:
+    name: setup
+    runs-on: ubuntu-latest
+    outputs:
+      deps_image: ${{ steps.vars.outputs.deps_image }}
+      test_image_tag: ${{ steps.vars.outputs.test_image_tag }}
+      alias_tag: ${{ steps.vars.outputs.alias_tag }}
+      build_args: ${{ steps.vars.outputs.build_args }}
+    steps:
+      - name: Compute image vars
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # org (lowercased for GHCR); ghcr_org input overrides the repo owner
+          ORG="$(echo "${{ inputs.GHCR_ORG || github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+
+          # one datetime for all time variables
+          NOW=$(date -u +'%Y-%m-%d %H:%M:%S')
+          TIMESTAMP=$(date -u -d "$NOW" +'%Y%m%d%H%M%SZ')
+
+          # real branch name and commit SHA (handle pull_request head)
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            REAL_REF="${{ github.head_ref }}"
+            REAL_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            REAL_REF="${{ github.ref_name }}"
+            REAL_SHA="${GITHUB_SHA}"
+          fi
+          CLEAN_REF=$(echo "$REAL_REF" | tr '[:upper:]' '[:lower:]' | sed 's/\//-/g')
+          SHORT_SHA="${REAL_SHA:0:7}"
+
+          # base image the dependencies are compiled FROM. inputs may arrive empty
+          # (the caller passes them through on every event), so fall back here.
+          DEPS_BASE_REPO="${{ inputs.DEPS_BASE_REPO }}"
+          [ -n "$DEPS_BASE_REPO" ] || DEPS_BASE_REPO="python"
+          DEPS_BASE_TAG="${{ inputs.DEPS_BASE_TAG }}"
+          [ -n "$DEPS_BASE_TAG" ] || DEPS_BASE_TAG="3.12-slim-bookworm"
+
+          # resolve the base image's manifest digest for the OCI base.digest
+          # label (passed through as the BASE_IMAGE_DIGEST build-arg below). skopeo
+          # inspect reads the manifest without pulling; --override-os/--override-arch
+          # pin the amd64 digest (the platform this image builds for) so the value
+          # does not vary with the runner's own architecture.
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+          DEPS_BASE_INSPECT=$(skopeo inspect --override-os linux --override-arch amd64 "docker://${DEPS_BASE_REPO}:${DEPS_BASE_TAG}" 2>/dev/null || echo '{}')
+          DEPS_BASE_DIGEST=$(echo "$DEPS_BASE_INSPECT" | jq -r '.Digest // "unknown"')
+
+          # derive the published name suffix from the base image (unless overridden)
+          # so the package name reflects its base (e.g. rockylinux:8 derives rocky8;
+          # the current python:3.12-slim-bookworm base instead sets DEPS_BASE_SUFFIX=bookworm explicitly):
+          #   - keep only the last path segment (drop any registry/namespace)
+          #   - drop the literal "linux" (rockylinux -> rocky)
+          #   - append the tag reduced to alphanumerics (8 -> 8, 24.04 -> 2404)
+          #   - lowercase
+          SUFFIX_INPUT="${{ inputs.DEPS_BASE_SUFFIX }}"
+          if [ -n "$SUFFIX_INPUT" ]; then
+            BASE_SUFFIX="$SUFFIX_INPUT"
+          else
+            base_name="${DEPS_BASE_REPO##*/}"
+            base_name="${base_name//linux/}"
+            tag_clean="$(echo "$DEPS_BASE_TAG" | tr -cd '[:alnum:]')"
+            BASE_SUFFIX="$(echo "${base_name}${tag_clean}" | tr '[:upper:]' '[:lower:]')"
+          fi
+
+          DEPS_IMAGE="${REGISTRY}/${ORG}/ngen-dependencies-${BASE_SUFFIX}"
+
+          # test_image_tag (commit short sha): always pushed, so the caller can
+          # build FROM it. alias_tag: promoted on success (timestamp-branch, or
+          # pr-<n>-build).
+          TEST_TAG="${SHORT_SHA}"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            ALIAS="pr-${{ github.event.pull_request.number }}-build"
+          else
+            ALIAS="${TIMESTAMP}-${CLEAN_REF}"
+          fi
+
+          # Build the list of docker build-args for the dependencies image. Start
+          # with the base image identity (repo, tag, resolved digest), then append
+          # each library version ONLY if the caller provided it. Empty values are
+          # skipped so that version stays at the default baked into
+          # Dockerfile.dependencies (single source of truth for versions; the
+          # workflow only overrides when asked).
+          ARGS=(
+            "IMAGE_SOURCE=https://github.com/${{ github.repository }}"
+            "IMAGE_REVISION=${REAL_SHA}"
+            "BASE_IMAGE=${DEPS_BASE_REPO}:${DEPS_BASE_TAG}"
+            "BASE_IMAGE_DIGEST=${DEPS_BASE_DIGEST}"
+          )
+          # add NAME VALUE -> appends "NAME=VALUE" to ARGS when VALUE is non-empty
+          # (the "|| true" keeps the skipped case from tripping "set -e").
+          add() { [ -n "$2" ] && ARGS+=("$1=$2") || true; }
+          add BOOST_VERSION "${{ inputs.BOOST_VERSION }}"
+          add ESMF_VERSION "${{ inputs.ESMF_VERSION }}"
+
+          # Publish step outputs. $GITHUB_OUTPUT is a FILE the runner provides;
+          # every line appended to it becomes `steps.vars.outputs.<name>`,
+          # which the setup job re-exports as a job output so other jobs can read
+          # it via needs.setup.outputs.<name>.
+          #
+          # Most outputs are one line: "name=value". But build_args holds MANY
+          # lines (one docker build-arg each), which "name=value" can't represent.
+          # GitHub's multi-line output syntax handles that:
+          #     name<<MARKER
+          #     ...value lines...
+          #     MARKER
+          # Everything between the opening "build_args<<BUILDARGS_EOF" line and the
+          # closing "BUILDARGS_EOF" line becomes the value of build_args. printf
+          # writes each ARGS element on its own line in between. BUILDARGS_EOF is
+          # just an arbitrary end marker (any unique word works). Downstream,
+          # build-dependencies passes needs.setup.outputs.build_args straight to
+          # docker/build-push-action, which splits it into one --build-arg per line.
+          {
+            echo "deps_image=${DEPS_IMAGE}"
+            echo "test_image_tag=${TEST_TAG}"
+            echo "alias_tag=${ALIAS}"
+            echo "build_args<<BUILDARGS_EOF"
+            printf '%s\n' "${ARGS[@]}"
+            echo "BUILDARGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # build the compiled-dependencies base image
+  build-dependencies:
+    name: build-dependencies
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v6
+      - name: Free disk space
+        run: |
+          # the compiled dependency stack (ESMF/GDAL/Boost/NetCDF) is large;
+          # reclaim runner space before building
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          df -h
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Log in to registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # No GHA layer cache here: this image is built from scratch by design when
+      # it runs (rare), and its layers are multi-GB. The published image is the
+      # reuse mechanism for the forcing build (it builds FROM this image).
+      - name: Build & push dependencies image
+        uses: docker/build-push-action@v7
+        with:
+          load: false
+          platforms: linux/amd64
+          context: .
+          file: Dockerfile.dependencies
+          push: true
+          tags: ${{ needs.setup.outputs.deps_image }}:${{ needs.setup.outputs.test_image_tag }}
+          # multi-line string (one NAME=VALUE per line) assembled in the setup
+          # job; see the build_args output there. build-push-action turns each
+          # line into a --build-arg.
+          build-args: ${{ needs.setup.outputs.build_args }}
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          cache: true
+          version: v0.69.3
+      - name: Trivy scan (dependencies)
+        env:
+          TMPDIR: /mnt/trivy-temp
+        run: |
+          sudo mkdir -p $TMPDIR
+          sudo chown -R $USER:$USER $TMPDIR
+
+          trivy image \
+            --format sarif \
+            --output trivy-results-dependencies.sarif \
+            --severity CRITICAL,HIGH \
+            --scanners vuln \
+            --ignore-unfixed \
+            --timeout 45m \
+            ${{ needs.setup.outputs.deps_image }}:${{ needs.setup.outputs.test_image_tag }}
+      - name: Promote Tags
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ensure skopeo is available for promotion
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+
+          IMAGE_BASE="${{ needs.setup.outputs.deps_image }}"
+          TEST_TAG="${{ needs.setup.outputs.test_image_tag }}"
+          ALIAS_TAG="${{ needs.setup.outputs.alias_tag }}"
+
+          # apply the primary alias (timestamp-branch)
+          skopeo copy \
+            --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --all \
+            "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:${ALIAS_TAG}"
+
+          # Branch-keyed promotion: development promotes 'latest' (bookworm/AWS
+          # lane); development-pw promotes 'latest-pw' (rocky8/PW lane). Do not
+          # manually dispatch a cross-lane build from either branch: promotion
+          # keys off the branch name, so the built image would promote under
+          # the wrong alias.
+          if [ "$GITHUB_REF_NAME" = "development" ]; then
+            skopeo copy \
+              --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --all \
+              "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest"
+          elif [ "$GITHUB_REF_NAME" = "development-pw" ]; then
+            skopeo copy \
+              --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --all \
+              "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest-pw"
+          fi

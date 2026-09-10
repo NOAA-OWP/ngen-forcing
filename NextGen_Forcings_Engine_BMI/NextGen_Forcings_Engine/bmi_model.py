@@ -8,8 +8,8 @@ import os
 import time
 from collections import defaultdict
 from pathlib import Path
-
-import ewts
+from datetime import datetime, timezone
+import logging
 import netCDF4 as nc
 
 # import data_tools
@@ -20,6 +20,9 @@ import pandas as pd
 # Configuration file functionality
 import yaml
 from bmipy import Bmi
+from ewts import Payload as Pld
+from ewts import Status as St
+from ewts.modules import ModuleKey
 
 # Import MPI Python module
 from mpi4py import MPI
@@ -59,15 +62,58 @@ except ImportError:
 
 from typing import Any
 
-# Use the Error, Warning, and Trapping System Package for logging
-import ewts
 from numpy.typing import NDArray
 
-LOG = ewts.get_logger(ewts.FORCING_ID)
+LOG = logging.getLogger("FORCING")
+try:
+    from ewts.helper import getenv_any
+    from ewts.logger import configure_existing_logger
+    FORCING_USE_EWTS = True
+except ImportError:
+    FORCING_USE_EWTS = False
+
+class StdoutStyleFormatter(logging.Formatter):
+
+    INFO_FORMAT = (
+        "%(asctime)s %(name)-8s %(levelname)-7s %(message)s"
+    )
+
+    DETAILED_FORMAT = (
+        "%(asctime)s %(name)-8s %(levelname)-7s "
+        "%(message)s "
+        "[%(filename)s.%(funcName)s(L%(lineno)s)]"
+    )
+
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = self.INFO_FORMAT
+        else:
+            self._style._fmt = self.DETAILED_FORMAT
+
+        return super().format(record)
+    
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _configure_stdout_logging():
+    LOG.setLevel(logging.INFO)
+
+    if not LOG.handlers:
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(StdoutStyleFormatter())
+        LOG.addHandler(handler)
+
+    LOG.propagate = False
 
 # If less than 0, then ESMF.__version__ is greater than 8.7.0
 if ESMF.version_compare("8.7.0", ESMF.__version__) < 0:
     manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
+
+
+MODNM = ModuleKey.FORCING.value
 
 
 class UnknownBMIVariable(RuntimeError):
@@ -105,6 +151,17 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
 
         Initializes the model with default values for time, variables, and grid types.
         """
+        # This is required prior to the first log message.
+        if FORCING_USE_EWTS:
+            val = getenv_any("EWTS_USE_NGEN_BRIDGE", "").strip().lower()
+            if val in {"1", "true", "yes", "on"}:
+                configure_existing_logger(LOG)
+            else:
+                _configure_stdout_logging()
+                LOG.warning("ewts package installed but EWTS_USE_NGEN_BRIDGE not on. Falling back to default logging.")
+        else:
+            _configure_stdout_logging()
+
         super(NWMv3_Forcing_Engine_BMI_model_Base, self).__init__()
         self._values = {}
         self._start_time = 0.0
@@ -179,11 +236,11 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
         :param config_file: The path to the configuration file for model initialization.
         :raises RuntimeError: If the configuration file is invalid or missing.
         """
-        # This is required prior to the first log message.
-        LOG.bind()
 
         LOG.info("---------------------------")
-        LOG.info(f"BMI Forcing Engine initialized with {config_file}")
+        LOG.info(
+            f"BMI Forcing Engine initializing with {config_file}{Pld(St.INITTING, modnm=MODNM)}"
+        )
 
         # -------------- Read in the BMI configuration -------------------------#
         if not isinstance(config_file, str) or len(config_file) == 0:
@@ -248,8 +305,14 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
         # LOG.debug(f"self._job_meta type: {type(self._job_meta)}")
         # Call ESMF mesh creation process
         if self._mpi_meta.rank == 0:
-            esmf_creation.create_mesh(self._job_meta)
-        self._mpi_meta.comm.Barrier()
+            cat_ids = esmf_creation.create_mesh(self._job_meta)
+        cat_count = np.array([
+            len(cat_ids) if self._mpi_meta.rank == 0 else 0
+        ], dtype=np.intc)
+        self._mpi_meta.comm.Bcast(cat_count, root=0)
+        if self._mpi_meta.rank != 0:
+            cat_ids = np.empty(cat_count[0], dtype=np.int64)
+        self._mpi_meta.comm.Bcast(cat_ids, root=0)
 
         # Call forcing_extraction process
         if self._job_meta.nwmConfig not in ["AORC", "NWM"]:
@@ -342,18 +405,17 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
         # for model_input in self.get_input_var_names():
         #    self._values[model_input] = np.zeros(self._varsize, dtype=float)
 
-        # Set initial time and step
+        # Set initial time, step, and true catchment IDs
         self._values["current_model_time"] = self.cfg_bmi["initial_time"]
         self._values["time_step_size"] = self.cfg_bmi["time_step_seconds"]
+        self._values["CAT-ID"] = cat_ids
 
         # Initialize the Forcings Engine model
         self._model = NWMv3ForcingEngineModel()
 
-        # Set catchment ids if using hydrofabric
-        if self._grid_type == "hydrofabric":
-            self._values["CAT-ID"] = self.geo_meta.element_ids_global
-
         self._configure_output_path(output_path)
+
+        LOG.info(f"BMI Forcing Engine initialized{Pld(St.INITTED, modnm=MODNM)}")
 
     def initialize_with_params(
         self,
@@ -423,7 +485,7 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
                 )
 
             self._output_obj.init_forcing_file(
-                self._job_meta, self.geo_meta, self._mpi_meta
+                self._job_meta, self.geo_meta, self._mpi_meta, self._values["CAT-ID"]
             )
             self._output_configured = True
 
@@ -521,6 +583,7 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
         # the job, and let the workflow clean them up after the
         # process exits
         gc.collect()  # make sure objects are deleted from memory
+        LOG.info(Pld(St.COMPLETE, msg="Finishing BMI finalize()", modnm=MODNM))
 
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -719,10 +782,7 @@ class NWMv3_Forcing_Engine_BMI_model_Base(Bmi):
 
         # Ensure dtype is float64 (C double), except for CAT-ID
         if var_name == "CAT-ID":
-            if arr.dtype != np.int32:
-                msg = f"[BMI] Array for '{var_name}' has dtype {arr.dtype}, expected int32"
-                LOG.critical(msg)
-                raise RuntimeError(msg)
+            return arr # allow CAT-ID to pass on whatever the dtype is based on the input data
         elif arr.dtype != np.float64:
             LOG.warning(
                 f"[BMI] Array for '{var_name}' has dtype {arr.dtype}, expected float64; converting."

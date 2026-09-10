@@ -25,8 +25,10 @@ class AlaskaHRRRDownloader(ForecastDownloader):
 
     def get_download_targets(self, d_start):
         # Forecast hours vary depending on cycle
+        if d_start.hour in (0, 6, 12, 18):
+            return range(0, 49)
         if d_start.hour % 3 == 0:
-            return range(0, 49) if d_start.hour == 0 else range(0, 19)
+            return range(0, 19)
         else:
             return []  # Skip non-forecast cycles
 

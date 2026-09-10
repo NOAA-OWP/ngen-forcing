@@ -13,14 +13,13 @@ import shutil
 import subprocess
 import sys
 from typing import Optional
-
-import ewts
+import logging
 import numpy as np
 from netCDF4 import Dataset
 
 from . import err_handler
 
-LOG = ewts.get_logger(ewts.FORCING_ID)
+LOG = logging.getLogger("FORCING")
 
 
 if "WGRIB2" not in os.environ:
@@ -57,7 +56,7 @@ class OutputObj:
             self.output_global = np.empty([9, GeoMetaWrfHydro.ny_global])
         # self.output_local[:,:,:] = self.out_ndv
 
-    def init_forcing_file(self, ConfigOptions, geoMetaWrfHydro, MpiConfig):
+    def init_forcing_file(self, ConfigOptions, geoMetaWrfHydro, MpiConfig, cat_ids: np.ndarray):
         """Initialize the forcing file output for the WRF-Hydro model.
 
         Initializes the forcing file output for the WRF-Hydro model. This function assumes that all necessary
@@ -234,7 +233,7 @@ class OutputObj:
                 elif ConfigOptions.grid_type == "hydrofabric":
                     try:
                         self.idOut.createDimension(
-                            "catchment-id", len(geoMetaWrfHydro.element_ids_global)
+                            "catchment-id", len(cat_ids)
                         )  # Catchment ID dimension
                     except Exception as e:
                         ConfigOptions.errMsg = f"Unable to create catchment id dimension in: {self.outPath} - {e}"
@@ -626,14 +625,9 @@ class OutputObj:
                             err_handler.log_critical(ConfigOptions, MpiConfig)
                             break
                         try:
-                            self.idOut.variables["ids"][:] = np.array(
-                                [
-                                    "cat-" + str(x)
-                                    for x in np.array(
-                                        geoMetaWrfHydro.element_ids_global, dtype=int
-                                    )
-                                ]
-                            )
+                            self.idOut.variables["ids"][:] = np.array([
+                                "cat-" + str(x) for x in cat_ids
+                            ])
                         except Exception as e:
                             ConfigOptions.errMsg = f"Unable to place catchment id string values into output variable for output file: {self.outPath} - {e}"
                             err_handler.log_critical(ConfigOptions, MpiConfig)

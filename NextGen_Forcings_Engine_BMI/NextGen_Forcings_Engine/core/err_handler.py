@@ -4,14 +4,14 @@ import os
 import sys
 import traceback
 
+# Use the Error, Warning, and Trapping System Package for logging
+import ewts
 import numpy as np
 from mpi4py import MPI
 from scipy import spatial
 
-# Use the Error, Warning, and Trapping System Package for logging
-import ewts
-LOG = ewts.get_logger(ewts.FORCING_ID)
-
+# Use the Error and Warning Trapping System Package for logging
+LOG = ewts.get_logger("FORCING")
 
 def in_exception_context() -> bool:
     if sys.exc_info()[0] is not None:
@@ -254,7 +254,7 @@ def log_msg(ConfigOptions, MpiConfig, debug: bool = False, msg: str = None):
     """
     if not isinstance(debug, bool):
         raise TypeError(f"Expected type bool for debug, got type: {type(debug)}")
-    
+
     if msg is not None:
         if not isinstance(msg, str):
             raise TypeError(

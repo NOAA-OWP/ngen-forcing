@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 # Use the Error, Warning, and Trapping System Package for logging
-import ewts
-LOG = ewts.get_logger(ewts.FORCING_ID)
+import logging
+LOG = logging.getLogger("FORCING")
 
 _error_on_grid_type: bool = False
 
