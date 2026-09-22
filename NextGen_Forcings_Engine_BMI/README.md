@@ -41,6 +41,9 @@ This application streamlines forcing file production for all National Water Mode
 
 ## Setup and Execution Guide
 
+1. **Construct Required Python Environment**
+   Navigate to the [Environment Setup](#environment-setup) within this README.md file and follow instructions accordingly. 
+
 1. **Configure Execution Options**:
    Navigate to `./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files` and select the appropriate template for your domain and NWM v3.1 configuration. Copy the selected `config.yml` into the working directory containing `bmi_wrapper.py`.
 
@@ -95,8 +98,100 @@ This application streamlines forcing file production for all National Water Mode
 
 ## Environment Setup
 
-To create and activate the required Python environment:
+> [!IMPORTANT]  
+> **HPC System Notice:** Building this environment on HPC systems requires linking Python bindings (`mpi4py`, `netCDF4`, `ESMF`) against the cluster’s system-installed MPI and NetCDF libraries. Simple Conda binary installs will often fail or create runtime ABI conflicts.
+
+### Option 1: Standard Local Setup (Workstations / Single Nodes)
+For local testing or non-HPC Linux environments using standard Conda binaries:
 
 ```bash
 conda env create -f environment.yml
 conda activate bmi_test
+```
+
+### Option 2: HPC System Setup (Module-Linked Build)
+
+On HPC systems (e.g., Slurm/PBS clusters), load the system compiler, MPI, and NetCDF modules before creating the environment to ensure `mpi4py` and `ESMF` build against the host interconnect.
+
+#### 1. Load System Modules
+Load your cluster's designated toolchain (adjust module names based on your cluster environment):
+
+```bash
+module purge
+module load gcc/11.x          # or intel/compiler
+module load openmpi/4.x       # or mpich / mvapich2 / cray-mpich
+module load netcdf-c/4.x
+module load netcdf-fortran/4.x
+```
+
+#### 2. Create Base Conda Environment
+Create a clean Conda environment containing the supporting Python packages (data manipulation, plotting, GIS, BMI interfaces) available via `conda-forge`. Crucially, we *exclude* `mpi4py`, `netCDF4`, `esmf`, and `esmpy` from this step, as they must be compiled against system libraries later.
+
+```bash
+# Create the base environment with core, non-compiled dependencies
+conda create -n bmi_test -c conda-forge \
+  python=3.10 \
+  numpy \
+  scipy \
+  pandas \
+  xarray \
+  dask \
+  zarr \
+  s3fs \
+  geopandas \
+  shapely \
+  pyproj \
+  cfgrib \
+  beautifulsoup4 \
+  matplotlib \
+  bokeh \
+  pyyaml \
+  ruamel.yaml \
+  python-dotenv \
+  bmipy
+
+# Activate the new environment
+conda activate bmi_test
+```
+
+#### 3. Compile `mpi4py` Against System MPI
+Build `mpi4py` from source using the system's active `mpicc` wrapper:
+
+```bash
+MPICC=$(which mpicc) pip install --no-binary mpi4py mpi4py
+```
+
+#### 4. Compile & Link Parallel NetCDF4 (`netcdf4-python`)
+Because the code base leverages parallel NetCDF I/O alongside MPI directives, `netCDF4` must be built from source against your HPC system's parallel-enabled NetCDF-C library (rather than using standard non-MPI Conda binaries):
+
+```bash
+# Point to your system's active NetCDF installation directory
+export NETCDF4_DIR=$NETCDF_ROOT   # Or path from: nc-config --prefix
+
+# Compile netCDF4 from source linking against system NetCDF + MPI
+NETCDF4_DIR=$NETCDF4_DIR pip install --no-binary netcdf4 netcdf4
+```
+
+#### 5. Build & Link ESMF (ESMPy)
+For proper parallel regridding, `esmpy` must be compiled or linked against the active system `ESMF` library build.
+
+##### If ESMF is pre-configured on your system:
+Load the module and install the Python bindings matching the system library version:
+
+```bash
+module load esmf
+pip install esmpy --no-deps
+```
+
+##### If ESMF is NOT installed or configured:
+If your cluster administrator has not provided a pre-built `esmf` module, you must install or compile the core C++/Fortran ESMF library first:
+
+* **Build from Source (Recommended for HPC performance):** Follow the official [ESMF Building and Installing Guide](https://earthsystemmodeling.org/docs/release/latest/ESMF_refdoc/node9.html) to build the library directly against your cluster's native MPI implementation and compiler suite. Once built, export the library path prior to installing `esmpy`:
+  ```bash
+  export ESMFMKFILE=/path/to/installed/esmf/lib/esmf.mk
+  pip install esmpy --no-deps
+```
+  
+*Note: Verify your build by confirming `python -c "import mpi4py, esmpy; print('MPI and ESMF loaded successfully')"` executes without library linking errors inside an interactive compute node (`srun` / `qsub`).*
+
+
