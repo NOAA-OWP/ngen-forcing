@@ -1,0 +1,179 @@
+############################################################################
+# Change/Verify these values when adopting this Dockerfile into another org:
+#   GH_ORG, GHCR_ORG, IMAGE_NAMESPACE,
+#   EWTS_ORG, EWTS_REF
+############################################################################
+
+# Ownership / branding overrides
+ARG GH_ORG=NGWPC
+ARG GHCR_ORG=ngwpc
+ARG IMAGE_NAMESPACE=ngwpc
+
+# External repository sources (org and ref/branch overrides)
+ARG USE_EWTS=ON
+ARG EWTS_ORG=${GH_ORG}
+ARG EWTS_REF=development
+
+############################################################################
+# Image selection
+############################################################################
+
+# Use the compiled dependencies image. This already includes the slow-moving
+# Bookworm-based FOSS/compiled stack: WGRIB2, ESMF, ESMPy, HDF5, NetCDF-C,
+# NetCDF-Fortran, Boost, GDAL, UDUNITS2, and stable Python dependencies.
+#
+# Default build:
+#   docker build -t ngen-bmi-forcing .
+#
+# Build from a different published dependency image:
+#   docker build \
+#     --build-arg DEPS_IMAGE=ghcr.io/ngwpc/ngen-dependencies-bookworm:<tag> \
+#     -t ngen-bmi-forcing .
+#
+# Build from a locally built dependency image:
+#   docker build \
+#     --build-arg DEPS_IMAGE=ngen-dependencies-bookworm \
+#     -t ngen-bmi-forcing .
+ARG DEPS_IMAGE=ghcr.io/${GHCR_ORG}/ngen-dependencies-bookworm
+
+FROM ${DEPS_IMAGE}
+
+# Re-expose args after FROM for the remaining build stage.
+ARG GH_ORG
+ARG GHCR_ORG
+ARG IMAGE_NAMESPACE
+ARG USE_EWTS=ON
+ARG EWTS_ORG
+ARG EWTS_REF
+ARG DEPS_IMAGE
+
+# Optional cache-bust args.
+# Leave this at 0 for normal builds. Override only when you intentionally want
+# the EWTS layer rebuilt even though the Dockerfile inputs did not change.
+ARG EWTS_CACHE_BUST=0
+
+# OCI Metadata Arguments
+#
+# DEPS_IMAGE_* refers to the dependency image this image is built FROM.
+ARG DEPS_IMAGE_DIGEST="unknown"
+ARG DEPS_IMAGE_REVISION="unknown"
+ARG IMAGE_SOURCE="unknown"
+ARG IMAGE_VENDOR="unknown"
+ARG IMAGE_VERSION="unknown"
+ARG IMAGE_REVISION="unknown"
+ARG EWTS_REVISION="unknown"
+
+# Image Labels: OCI-spec annotations followed by custom source-repo metadata.
+LABEL org.opencontainers.image.base.name="${DEPS_IMAGE}" \
+      org.opencontainers.image.base.digest="${DEPS_IMAGE_DIGEST}" \
+      org.opencontainers.image.source="${IMAGE_SOURCE}" \
+      org.opencontainers.image.vendor="${IMAGE_VENDOR}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${IMAGE_REVISION}" \
+      org.opencontainers.image.title="NGEN BMI Forcing" \
+      org.opencontainers.image.description="Docker image for the NGEN BMI Forcings application" \
+      io.${IMAGE_NAMESPACE}.image.base.revision="${DEPS_IMAGE_REVISION}" \
+      io.${IMAGE_NAMESPACE}.ewts.org="${EWTS_ORG}" \
+      io.${IMAGE_NAMESPACE}.ewts.ref="${EWTS_REF}" \
+      io.${IMAGE_NAMESPACE}.ewts.revision="${EWTS_REVISION}"
+
+############################################################################
+# Python environment inherited from dependencies image
+############################################################################
+
+# Re-expose the shared Python virtual environment created by the dependency
+# image. Do not recreate it here; forcing, ngen, and downstream images should
+# all install into and reuse the same venv.
+ENV VIRTUAL_ENV="/ngen-app/ngen-python"
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+############################################################################
+# Optional EWTS Python package
+############################################################################
+
+SHELL ["/bin/bash", "-c"]
+
+# ngen-bmi-forcing only needs the EWTS Python package, not the C/C++/Fortran
+# libraries or ngen bridge that the full ngen image requires.
+#
+# Ensures an unset or empty USE_EWTS defaults to ON.
+#
+# USE_EWTS accepted ON values:
+#   ON, YES, TRUE, 1
+#
+# Everything else is treated as OFF.
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
+    set -eux && \
+    USE_EWTS="${USE_EWTS:-ON}" && \
+    echo "USE_EWTS=${USE_EWTS}; EWTS org: ${EWTS_ORG}; ref: ${EWTS_REF}; cache bust: ${EWTS_CACHE_BUST}" && \
+    USE_EWTS_NORMALIZED="$(echo "${USE_EWTS}" | tr '[:lower:]' '[:upper:]')" && \
+    if [[ "${USE_EWTS_NORMALIZED}" =~ ^(ON|YES|TRUE|1)$ ]]; then \
+        echo "Installing EWTS Python package"; \
+        rm -rf /tmp/nwm-ewts && \
+        (git clone --depth 1 -b "${EWTS_REF}" \
+            "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts \
+         || (git clone "https://github.com/${EWTS_ORG}/nwm-ewts.git" /tmp/nwm-ewts && \
+             cd /tmp/nwm-ewts && git checkout "${EWTS_REF}")) && \
+        cd /tmp/nwm-ewts && \
+        jq -n \
+          --arg commit_hash "$(git rev-parse HEAD)" \
+          --arg branch "$(git branch -r --contains HEAD 2>/dev/null | grep -v '\->' | sed 's|origin/||' | head -n1 | xargs || echo "${EWTS_REF}")" \
+          --arg tags "$(git tag --points-at HEAD 2>/dev/null | tr '\n' ' ')" \
+          --arg author "$(git log -1 --pretty=format:'%an')" \
+          --arg commit_date "$(date -u -d @$(git log -1 --pretty=format:'%ct') +'%Y-%m-%d %H:%M:%S UTC')" \
+          --arg message "$(git log -1 --pretty=format:'%s' | tr '\n' ';')" \
+          --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+          '{"nwm-ewts": {commit_hash: $commit_hash, branch: $branch, tags: $tags, author: $author, commit_date: $commit_date, message: $message, build_date: $build_date}}' \
+          > /ngen-app/nwm-ewts_git_info.json && \
+        python -m pip install /tmp/nwm-ewts/runtime/python/ewts && \
+        cd / && \
+        rm -rf /tmp/nwm-ewts; \
+    else \
+        echo "EWTS disabled; ensuring ewts package is absent"; \
+        python -m pip uninstall -y ewts || true; \
+        rm -f /ngen-app/nwm-ewts_git_info.json; \
+    fi
+
+############################################################################
+# ngen-bmi-forcing - most frequently changing layer
+############################################################################
+
+# Keep COPY near the end. Source changes should invalidate only this section
+# and the git-info section below, not the inherited compiled dependencies,
+# ESMPy, mpi4py, or EWTS.
+COPY . /ngen-app/ngen-forcing/
+
+WORKDIR /ngen-app/ngen-forcing
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache-bookworm \
+    set -eux; \
+    python -m pip install .
+
+ARG CI_COMMIT_REF_NAME
+
+RUN set -eux; \
+    # Ensure local tag metadata includes all remote tags before creating git_info.
+    git fetch --force --tags origin '+refs/tags/*:refs/tags/*' && \
+    repo_url=$(git config --get remote.origin.url); \
+    key=${repo_url##*/}; \
+    key=${key%.git}; \
+    GIT_INFO_PATH="/ngen-app/ngen-bmi-forcing_git_info.json"; \
+    branch=$( [ -n "${CI_COMMIT_REF_NAME:-}" ] && echo "${CI_COMMIT_REF_NAME}" || git rev-parse --abbrev-ref HEAD ); \
+    jq -n \
+      --arg commit_hash "$(git rev-parse HEAD)" \
+      --arg branch "$branch" \
+      --arg tags "$(git tag --points-at HEAD | tr '\n' ' ')" \
+      --arg author "$(git log -1 --pretty=format:'%an')" \
+      --arg commit_date "$(date -u -d @$(git log -1 --pretty=format:'%ct') +'%Y-%m-%d %H:%M:%S UTC')" \
+      --arg message "$(git log -1 --pretty=format:'%s' | tr '\n' ';')" \
+      --arg build_date "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+      "{\"ngen-bmi-forcing\": {commit_hash: \$commit_hash, branch: \$branch, tags: \$tags, author: \$author, commit_date: \$commit_date, message: \$message, build_date: \$build_date}}" \
+      > $GIT_INFO_PATH; \
+    if [ -f /ngen-app/nwm-ewts_git_info.json ]; then \
+      jq -s 'add' $GIT_INFO_PATH /ngen-app/nwm-ewts_git_info.json > ${GIT_INFO_PATH}.tmp; \
+      mv ${GIT_INFO_PATH}.tmp $GIT_INFO_PATH; \
+      rm -f /ngen-app/nwm-ewts_git_info.json; \
+    fi
+
+WORKDIR /
+
+ENTRYPOINT [ "/bin/bash" ]

@@ -60,6 +60,8 @@
 # Overview bullet points for modifying the original NWM Forcings Engine into a BMI complaint NextGen Forcings Engine capable of handling any domain types
   •	To streamline the NWMv3.0 Forcings engine into a Basic Model Interface application, we’ve had to initialize the BMI model using the same approach highlighted in the “genForcing.py” module and then directly reconfigure the forecast module (forecastMod.py) workflow to streamline the ability to update and produce gridded forcings for the WRFHydro domain based on a specified time stamp within the standard BMI functionality (“model_update_until”). This is all completed within the “model.py” module, which essentially mimics the “forecastMod.py” module within the “core” directory as a BMI-compliant module. 
 
+  •	**2026 Update**: `forecastMod.py` is no longer referenced by the `ngen-forcing` codebase nor the `ngen` stack, and has been deprecated with a `NotImplementedError`.
+
   •	Once source code modifications were implemented, we were able to demonstrate the ability for the NextGen Forcings Engine to advertise gridded and unstructured mesh forcings back to the NextGen model engine.
 
   •	We've optimized the NextGen Forcings Engine source code within the BMI to include I/O functionality for producing netcdf forcing files across any domain configuration (gridded, hydrofabric, unstructured) and also clear out data production within its scratch directory once the BMI execution is complete. 

@@ -79,3 +79,7 @@ dist/
 
 venv
 .venv
+.idea
+
+/git_info.json
+/tests/test_data/actual_results/
