@@ -7,7 +7,7 @@ dependencies:
   - xarray
   - dask
   - pandas
-  - python
+  - python~=3.10.0
   - netCDF4
   - pybind11
   - geopandas
@@ -21,3 +21,7 @@ dependencies:
   - multiprocess
   - regex
   - openssl
+  - cmake
+  - python-wget
+  - zarr
+  - s3fs

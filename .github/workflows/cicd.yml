@@ -1,0 +1,514 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - ngwpc-candidate
+      - ngwpc-release
+      - master
+      - nwm-master
+      - development
+      - release-candidate
+  pull_request:
+    branches:
+      - ngwpc-candidate
+      - ngwpc-release
+      - main
+      - nwm-master
+      - development
+      - release-candidate
+  workflow_dispatch:
+    inputs:
+      REBUILD_DEPS:
+        description: 'Force a rebuild of the dependencies image before building forcing'
+        required: false
+        default: false
+        type: boolean
+      DEPS_BASE_REPO:
+        description: 'Base image to compile the dependencies from (default python)'
+        required: false
+        type: string
+      DEPS_BASE_TAG:
+        description: 'Dependencies base image tag (default 3.12-slim-bookworm, pinned by digest in dependencies.yml)'
+        required: false
+        type: string
+      DEPS_BASE_SUFFIX:
+        description: 'Override the published deps name suffix (default derived, e.g. bookworm)'
+        required: false
+        type: string
+      DEPS_IMAGE_REPO:
+        description: 'Deps image repo to build forcing FROM when not rebuilding deps (default ghcr.io/<org>/ngen-dependencies-bookworm)'
+        required: false
+        type: string
+      DEPS_IMAGE_TAG:
+        description: 'Deps image tag to build forcing FROM when not rebuilding deps (default latest)'
+        required: false
+        type: string
+      GHCR_ORG:
+        description: 'GHCR_ORG'
+        required: false
+        type: string
+      EWTS_ORG:
+        description: 'EWTS_ORG'
+        required: false
+        type: string
+      EWTS_REF:
+        description: 'EWTS_REF'
+        required: false
+        type: string
+      TRIGGER_DOWNSTREAM:
+        description: 'Trigger downstream repos'
+        required: false
+        default: false
+        type: boolean
+      NGEN_REF:
+        description: 'NGEN_REF'
+        required: false
+        type: string
+      NWM_CAL_MGR_REF:
+        description: 'NWM_CAL_MGR_REF'
+        required: false
+        type: string
+      NWM_FCST_MGR_REF:
+        description: 'NWM_FCST_MGR_REF'
+        required: false
+        type: string
+      EVAL_MGR_ORG:
+        description: 'EVAL_MGR_ORG'
+        required: false
+        type: string
+      EVAL_MGR_REF:
+        description: 'EVAL_MGR_REF'
+        required: false
+        type: string
+      NWM_METRICS_ORG:
+        description: 'NWM_METRICS_ORG'
+        required: false
+        type: string
+      NWM_METRICS_REF:
+        description: 'NWM_METRICS_REF'
+        required: false
+        type: string
+      MSW_MGR_ORG:
+        description: 'MSW_MGR_ORG'
+        required: false
+        type: string
+      MSW_MGR_REF:
+        description: 'MSW_MGR_REF'
+        required: false
+        type: string
+      BOOST_VERSION:
+        description: 'Deps image: Boost version (blank = Dockerfile default; forces a deps rebuild)'
+        required: false
+        type: string
+      ESMF_VERSION:
+        description: 'Deps image: ESMF version (blank = Dockerfile default; forces a deps rebuild)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # set variables for use in other jobs
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      org: ${{ steps.vars.outputs.org }}
+      bmi_image: ${{ steps.vars.outputs.bmi_image }}
+      commit_sha: ${{ steps.vars.outputs.commit_sha }}
+      commit_sha_short: ${{ steps.vars.outputs.commit_sha_short }}
+      test_image_tag: ${{ steps.vars.outputs.test_image_tag }}
+      alias_tag: ${{ steps.vars.outputs.alias_tag }}
+      clean_ref: ${{ steps.vars.outputs.clean_ref }}
+      default_ref: ${{ steps.vars.outputs.default_ref }}
+      ewts_revision: ${{ steps.vars.outputs.ewts_revision }}
+    steps:
+      - name: Compute image vars
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # set variables to use with Docker images
+          ORG="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          REPO="$(basename "${GITHUB_REPOSITORY}")"
+          IMAGE_BASE="${REGISTRY}/${ORG}"
+
+          # one datetime for all time variables
+          NOW=$(date -u +'%Y-%m-%d %H:%M:%S')
+
+          # for Docker image tags
+          TIMESTAMP=$(date -u -d "$NOW" +'%Y%m%d%H%M%SZ')
+
+          # logic to get the real branch name and commit SHA on pull requests
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            REAL_REF="${{ github.head_ref }}"
+            REAL_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            REAL_REF="${{ github.ref_name }}"
+            REAL_SHA="${GITHUB_SHA}"
+          fi
+
+          # clean ref name and short commit sha
+          CLEAN_REF=$(echo "$REAL_REF" | tr '[:upper:]' '[:lower:]' | sed 's/\//-/g')
+          SHORT_SHA="${REAL_SHA:0:7}"
+
+          # default source-repo ref: follow the release-line branch we're building from
+          # (development / ngwpc-candidate / ngwpc-release); tags and other branches
+          # fall back to development. Override per source repo via the *_REF
+          # dispatch inputs.
+          case "${GITHUB_REF_TYPE}:${GITHUB_REF_NAME}" in
+            branch:development|branch:ngwpc-candidate|branch:ngwpc-release)
+              DEFAULT_REF="$GITHUB_REF_NAME" ;;
+            *)
+              DEFAULT_REF="development" ;;
+          esac
+          # use an explicit *_REF input if provided, else DEFAULT_REF
+          ref_or_default() { [ -n "$1" ] && echo "$1" || echo "$DEFAULT_REF"; }
+
+          # resolve each source repo's ref (branch/tag/SHA) to its commit SHA for revision labels
+          resolve_sha() {
+            local url="$1" ref="$2" out sha
+            # a full 40-char SHA can't be looked up via ls-remote; use it directly
+            if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then echo "$ref"; return; fi
+            out=$(git ls-remote "$url" "$ref" "refs/tags/${ref}^{}" 2>/dev/null)
+            # prefer the dereferenced commit (^{}) for annotated tags; else first match
+            sha=$(echo "$out" | grep '\^{}$' | head -n1 | cut -f1)
+            [ -z "$sha" ] && sha=$(echo "$out" | head -n1 | cut -f1)
+            echo "${sha:-unknown}"
+          }
+
+          # EWTS_REVISION is the resolved commit SHA: it labels the image AND doubles
+          # as the EWTS_CACHE_BUST build-arg, so a new commit on the requested ref
+          # reinstalls EWTS instead of a stale cache.
+          EWTS_REVISION=$(resolve_sha "https://github.com/${{ inputs.EWTS_ORG || github.repository_owner }}/nwm-ewts.git" "$(ref_or_default "${{ inputs.EWTS_REF }}")")
+
+          # logic for the tags:
+          # test_image_tag (commit short sha): used for the initial build and test
+          # alias_tag: used for final tagging on successful tests
+
+          # test tag is always commit short sha
+          TEST_TAG="${SHORT_SHA}"
+
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # for pull requests, use pr-<pr number>-build
+            ALIAS="pr-${{ github.event.pull_request.number }}-build"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            # for workflow dispatches on tags, use the git tag
+            ALIAS="${CLEAN_REF}"
+          else
+            # for pushes or workflow dispatches to branches, use <timestamp-branchname>
+            ALIAS="${TIMESTAMP}-${CLEAN_REF}"
+          fi
+
+          # save outputs
+          cat >> "$GITHUB_OUTPUT" <<EOF
+          org=${ORG}
+          bmi_image=${IMAGE_BASE}/ngen-bmi-forcing
+          ewts_revision=${EWTS_REVISION}
+          test_image_tag=${TEST_TAG}
+          alias_tag=${ALIAS}
+          commit_sha=${REAL_SHA}
+          commit_sha_short=${SHORT_SHA}
+          clean_ref=${CLEAN_REF}
+          default_ref=${DEFAULT_REF}
+          EOF
+
+  # detect whether this change touched the dependency image files, so the deps
+  # rebuild below runs only when needed (or when manually forced)
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      deps: ${{ steps.filter.outputs.deps || 'false' }}
+      versions: ${{ steps.versions.outputs.set || 'false' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          # on push the filter's default base is the repo default branch, which
+          # would make a push to any other release-line branch diff against
+          # development. compare against the pushed branch itself instead.
+          base: ${{ github.ref_name }}
+          filters: |
+            deps:
+              - 'Dockerfile.dependencies'
+              - '.github/workflows/dependencies.yml'
+      - name: Detect dependency version overrides
+        id: versions
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          # if any dependency version input was provided, force a deps rebuild so
+          # the override actually takes effect
+          if [ -n "${{ inputs.BOOST_VERSION }}${{ inputs.ESMF_VERSION }}" ]; then
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # rebuild the compiled-dependencies base image, ONLY when the deps files
+  # changed or a rebuild is forced. pipeline-bmi `needs` this, so forcing always
+  # builds AFTER the new base exists. This is the reusable workflow dependencies.yml.
+  dependencies:
+    name: dependencies
+    needs: changes
+    if: ${{ needs.changes.outputs.deps == 'true' || inputs.REBUILD_DEPS || needs.changes.outputs.versions == 'true' }}
+    uses: ./.github/workflows/dependencies.yml
+    with:
+      DEPS_BASE_REPO: ${{ inputs.DEPS_BASE_REPO || 'python' }}
+      DEPS_BASE_TAG: ${{ inputs.DEPS_BASE_TAG || '3.12-slim-bookworm' }}
+      DEPS_BASE_SUFFIX: ${{ inputs.DEPS_BASE_SUFFIX || 'bookworm' }}
+      GHCR_ORG: ${{ inputs.GHCR_ORG }}
+      BOOST_VERSION: ${{ inputs.BOOST_VERSION }}
+      ESMF_VERSION: ${{ inputs.ESMF_VERSION }}
+
+  # CodeQL scan
+  codeql-scan:
+    name: codeql-scan
+    if: |
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    needs: setup
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+
+  # build ngen-bmi-forcing Docker image
+  pipeline-bmi:
+    name: pipeline-bmi
+    # run whether the deps rebuild happened or was skipped, but not if anything
+    # upstream failed or was cancelled
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    needs:
+      - setup
+      - changes
+      - dependencies
+    outputs:
+      bmi_digest: ${{ steps.build_bmi_image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Log in to registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve base (deps) image
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # if the dependencies job rebuilt the image this run, build FROM exactly
+          # that; otherwise use the override inputs, else this org's deps :latest
+          REPO="${{ needs.dependencies.outputs.image }}"
+          TAG="${{ needs.dependencies.outputs.tag }}"
+          [ -n "$REPO" ] || REPO="${{ inputs.DEPS_IMAGE_REPO }}"
+          [ -n "$REPO" ] || REPO="${REGISTRY}/${{ needs.setup.outputs.org }}/ngen-dependencies-bookworm"
+          [ -n "$TAG" ] || TAG="${{ inputs.DEPS_IMAGE_TAG }}"
+          [ -n "$TAG" ] || TAG="latest"
+
+          # inspect the base for the OCI base.* labels on the forcing image
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+          INSPECT=$(skopeo inspect --override-os linux --override-arch amd64 "docker://${REPO}:${TAG}" 2>/dev/null || echo '{}')
+          DIGEST=$(echo "$INSPECT" | jq -r '.Digest // "unknown"')
+          REVISION=$(echo "$INSPECT" | jq -r '.Labels["org.opencontainers.image.revision"] // .Labels["io.ngwpc.image.base.revision"] // "unknown"')
+
+          cat >> "$GITHUB_OUTPUT" <<EOF
+          repo=${REPO}
+          tag=${TAG}
+          digest=${DIGEST}
+          revision=${REVISION}
+          EOF
+      - name: Build & push BMI Forcing
+        id: build_bmi_image # set ID to capture output from this step to use outputs like digest, imageid, and metadata
+        uses: docker/build-push-action@v7
+        with:
+          load: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: .
+          file: Dockerfile.bmi-forcings
+          push: true
+          tags: ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }}
+          build-args: |
+            DEPS_IMAGE=${{ steps.base.outputs.repo }}:${{ steps.base.outputs.tag }}
+            DEPS_IMAGE_DIGEST=${{ steps.base.outputs.digest }}
+            DEPS_IMAGE_REVISION=${{ steps.base.outputs.revision }}
+            EWTS_ORG=${{ inputs.EWTS_ORG || github.repository_owner }}
+            EWTS_REF=${{ inputs.EWTS_REF || needs.setup.outputs.default_ref }}
+            EWTS_REVISION=${{ needs.setup.outputs.ewts_revision }}
+            EWTS_CACHE_BUST=${{ needs.setup.outputs.ewts_revision }}
+            IMAGE_SOURCE=https://github.com/${{ github.repository }}
+            IMAGE_VENDOR=${{ github.repository_owner }}
+            IMAGE_VERSION=${{ needs.setup.outputs.clean_ref }}
+            IMAGE_REVISION=${{ needs.setup.outputs.commit_sha }}
+            CI_COMMIT_REF_NAME=${{ needs.setup.outputs.clean_ref }}
+      - name: Free disk space
+        run: |
+          # clear pre-installed tools
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+          # clear Docker build cache only
+          # This removes intermediate layers but keeps the final bmi image
+          docker builder prune -af
+
+          # remove dangling images only
+          docker image prune -f
+
+          # check space
+          df -h
+      - name: Unit Test BMI
+        run: |
+          docker run --rm ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }} \
+          -c 'echo "Running BMI Forcing Unit Tests..."'
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          cache: true
+          version: v0.69.3
+      - name: Trivy scan (BMI Forcing)
+        env:
+          TMPDIR: /mnt/trivy-temp
+        run: |
+          sudo mkdir -p $TMPDIR
+          sudo chown -R $USER:$USER $TMPDIR
+
+          trivy image \
+            --format sarif \
+            --output trivy-results-bmi-forcing.sarif \
+            --severity CRITICAL,HIGH \
+            --scanners vuln \
+            --ignore-unfixed \
+            --timeout 45m \
+            ${{ needs.setup.outputs.bmi_image }}:${{ needs.setup.outputs.test_image_tag }}
+      - name: Promote Tags
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ensure skopeo is available for promotion
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends skopeo
+          fi
+
+          IMAGE_BASE="${{ needs.setup.outputs.bmi_image }}"
+          TEST_TAG="${{ needs.setup.outputs.test_image_tag }}"
+          ALIAS_TAG="${{ needs.setup.outputs.alias_tag }}"
+
+          # apply the primary alias (pr tag or timestamp-branch)
+          skopeo copy \
+            --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            --all \
+            "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:${ALIAS_TAG}"
+
+          # pushes to development also promote 'latest'
+          if [ "$GITHUB_REF_NAME" = "development" ]; then
+            skopeo copy \
+              --src-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+              --all \
+              "docker://${IMAGE_BASE}:${TEST_TAG}" "docker://${IMAGE_BASE}:latest"
+          fi
+
+  # trigger downstream repo ngen
+  # always passes TRIGGER_DOWNSTREAM=true to ngen so the chain propagates to nwm-cal-mgr and nwm-fcst-mgr
+  trigger-ngen:
+    name: trigger-ngen
+    if: >-
+      !cancelled() && !failure() &&
+      (
+        (
+          github.event_name == 'push' &&
+          (
+            github.ref_name == 'development' ||
+            github.ref_name == 'ngwpc-candidate' ||
+            github.ref_name == 'ngwpc-release'
+          )
+        ) ||
+        (github.event_name == 'workflow_dispatch' && inputs.TRIGGER_DOWNSTREAM)
+      )
+    runs-on: ubuntu-latest
+    needs:
+      - setup
+      - pipeline-bmi
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Trigger ngen CI/CD
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          NGEN_REF: ${{ inputs.NGEN_REF || needs.setup.outputs.default_ref }}
+          NWM_CAL_MGR_REF: ${{ inputs.NWM_CAL_MGR_REF || needs.setup.outputs.default_ref }}
+          NWM_FCST_MGR_REF: ${{ inputs.NWM_FCST_MGR_REF || needs.setup.outputs.default_ref }}
+          EWTS_ORG: ${{ inputs.EWTS_ORG || github.repository_owner }}
+          EWTS_REF: ${{ inputs.EWTS_REF || needs.setup.outputs.default_ref }}
+          MSW_MGR_ORG: ${{ inputs.MSW_MGR_ORG || github.repository_owner }}
+          MSW_MGR_REF: ${{ inputs.MSW_MGR_REF || needs.setup.outputs.default_ref }}
+          EVAL_MGR_ORG: ${{ inputs.EVAL_MGR_ORG || github.repository_owner }}
+          EVAL_MGR_REF: ${{ inputs.EVAL_MGR_REF || needs.setup.outputs.default_ref }}
+          NWM_METRICS_ORG: ${{ inputs.NWM_METRICS_ORG || github.repository_owner }}
+          NWM_METRICS_REF: ${{ inputs.NWM_METRICS_REF || needs.setup.outputs.default_ref }}
+          GHCR_ORG: ${{ inputs.GHCR_ORG || needs.setup.outputs.org }}
+          NGEN_FORCING_IMAGE_TAG: ${{ needs.setup.outputs.alias_tag }}
+        run: |
+          gh workflow run ngwpc-cicd.yml \
+            --repo ${{ github.repository_owner }}/ngen \
+            --ref "$NGEN_REF" \
+            -f TRIGGER_DOWNSTREAM=true \
+            -f NWM_CAL_MGR_REF="$NWM_CAL_MGR_REF" \
+            -f NWM_FCST_MGR_REF="$NWM_FCST_MGR_REF" \
+            -f EWTS_ORG="$EWTS_ORG" \
+            -f EWTS_REF="$EWTS_REF" \
+            -f MSW_MGR_ORG="$MSW_MGR_ORG" \
+            -f MSW_MGR_REF="$MSW_MGR_REF" \
+            -f EVAL_MGR_ORG="$EVAL_MGR_ORG" \
+            -f EVAL_MGR_REF="$EVAL_MGR_REF" \
+            -f NWM_METRICS_ORG="$NWM_METRICS_ORG" \
+            -f NWM_METRICS_REF="$NWM_METRICS_REF" \
+            -f GHCR_ORG="$GHCR_ORG" \
+            -f NGEN_FORCING_IMAGE_TAG="$NGEN_FORCING_IMAGE_TAG"

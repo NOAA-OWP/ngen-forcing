@@ -1,111 +1,46 @@
-# Quick and dirty program to pull down operational 
-# conus HRRR data (surface files).
-
-# Logan Karsten
-# National Center for Atmospheric Research
-# Research Applications Laboratory
-
-import datetime
-import urllib
-from urllib import request
-import http
-from http import cookiejar
 import os
-import sys
-import shutil
-import time
-import argparse
 
-def main(args):
-    outDir = args.outDir
-    lookBackHours = args.lookBackHours
-    cleanBackHours = args.cleanBackHours
-    lagBackHours = args.lagBackHours
-
-    dNowUTC = datetime.datetime.utcnow()
-    dNow = datetime.datetime(dNowUTC.year,dNowUTC.month,dNowUTC.day,dNowUTC.hour)
-    ncepHTTP = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
-
-    pid = os.getpid()
-    lockFile = outDir + "/GET_Conus_HRRR.lock"
-
-    # First check to see if lock file exists, if it does, throw error message as
-    # another pull program is running. If lock file not found, create one with PID.
-    if os.path.isfile(lockFile):
-        fileLock = open(lockFile,'r')
-        pid = fileLock.readline()
-        warningMsg =  "ERROR: Another CONUS HRRR Fetch Program Running. PID: " + pid + ". Please remove lockfile before attempting to execute another file extraction. Exiting script"
-        sys.exit(1)
-    else:
-        fileLock = open(lockFile,'w')
-        fileLock.write(str(os.getpid()))
-        fileLock.close()
-
-    for hour in range(cleanBackHours,lagBackHours,-1):
-        # Calculate current hour.
-        dCurrent = dNow - datetime.timedelta(seconds=3600*hour)
-
-        # Compose path to directory containing data.
-        hrrrCleanDir = outDir + "/hrrr." + dCurrent.strftime('%Y%m%d') + "/conus"
-
-        # Check to see if directory exists. If it does, remove it. 
-        if os.path.isdir(hrrrCleanDir):
-            print("Removing old HRRR data from: " + hrrrCleanDir)
-            shutil.rmtree(hrrrCleanDir)
-
-    # Now that cleaning is done, download files within the download window. 
-    for hour in range(lookBackHours,lagBackHours,-1):
-        # Calculate current hour.
-        dCurrent = dNow - datetime.timedelta(seconds=3600*hour)
-
-        hrrrOutDir = outDir + "/hrrr." + dCurrent.strftime('%Y%m%d') + "/conus"
-        if not os.path.isdir(hrrrOutDir):
-            os.makedirs(hrrrOutDir)
-
-        if dCurrent.hour % 6 == 0:
-            # HRRR cycles every six hours produce forecasts out to 36 hours.
-            nFcstHrs = 36
-        else:
-            # Otherwise, 18 hour forecasts. 
-            nFcstHrs = 18
-
-        for hrDownload in range(0,nFcstHrs+1):
-            httpDownloadDir = ncepHTTP + "/hrrr." + dCurrent.strftime('%Y%m%d') + "/conus"
-            fileDownload = "hrrr.t" + dCurrent.strftime('%H') + \
-                       "z.wrfsfcf" + str(hrDownload).zfill(2) + ".grib2"
-            url = httpDownloadDir + "/" + fileDownload
-            outFile = hrrrOutDir + "/" + fileDownload
-            if not os.path.isfile(outFile):
-                download_complete = False
-                start_time = time.time()
-                timer = 0.0
-                print("Pulling HRRR file: " + url)
-                while(download_complete == False and timer < 600.0):
-                    try:
-                        request.urlretrieve(url,outFile)
-                        download_complete = True
-                    except:
-                        timer = time.time() - start_time
-
-                if(download_complete == False):
-                    print("Unable to retrieve: " + url)
-                    print("Data may not available yet...")
-
-    # Remove the LOCK file.
-    os.remove(lockFile)
-
-def get_options():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('outDir', type=str, help="Output directory pathway where the NOMADS data will be downloaded to")
-    parser.add_argument('--lookBackHours', type=int, default=30, help="How many hours to look back for forecast data cycles")
-    parser.add_argument('--cleanBackHours', type=int, default=240, help="Period between this time and the beginning of the lookback period to cleanout old data")
-    parser.add_argument('--lagBackHours', type=int, default=1, help="Wait at least this long back before searching for files")
+from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 
 
-    return parser.parse_args()
+class HRRRDownloader(ForecastDownloader):
+    """
+    Downloader for CONUS HRRR forecast data.
+    Downloads full surface forecast files (wrfsfcfXX.grib2) for each cycle.
+    Forecast length depends on the cycle hour (18 or 48 hours).
+    """
+
+    default_lookback = 30
+    default_cleanback = 240
+    default_lagback = 1
+
+    @property
+    def base_url(self):
+        # HRRR data base URL from S3 archive
+        return "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
+
+    def get_download_targets(self, d_start):
+        # HRRR cycles at 00, 06, 12, 18 UTC produce 48-hour forecasts; others produce 18-hour forecasts
+        return range(0, 49) if d_start.hour % 6 == 0 else range(0, 19)
+
+    def build_output_dir(self, d_start, _):
+        # Output directory format: <out_dir>/hrrr.YYYYMMDD/conus
+        return os.path.join(self.out_dir, f"hrrr.{d_start.strftime('%Y%m%d')}", "conus")
+
+    def build_file_url_and_name(self, d_start, forecast_hour, _):
+        """
+        Construct both the download URL and the filename for a given forecast hour.
+
+        Example filename: hrrr.t00z.wrfsfcf01.grib2
+        URL format: https://.../hrrr.YYYYMMDD/conus/hrrr.tHHz.wrfsfcfXX.grib2
+        """
+        fhr_str = str(forecast_hour).zfill(2)
+        filename = f"hrrr.t{d_start.strftime('%H')}z.wrfsfcf{fhr_str}.grib2"
+        date_dir = f"hrrr.{d_start.strftime('%Y%m%d')}"
+        url = os.path.join(self.base_url, date_dir, "conus", filename)
+        return url, filename
+
 
 if __name__ == "__main__":
-    args = get_options()
-    main(args)
-
+    downloader = HRRRDownloader.from_cli_args()
+    downloader.run()

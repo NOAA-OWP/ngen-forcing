@@ -1,5 +1,13 @@
+# 2026 Update
+
+**WARNING:** As of September 2026, many aspects of this file may be outdated relative to the latest NextGen/NWM v4 stack, but this file has been kept mostly intact for posterity.
+
+See the top-level repository [README.md](../README.md), [INSTALL.md](../INSTALL.md), and [DOCKER.md](../DOCKER.md) for the latest information.
+
 # Overview
 This directory contains a series of scripts for each NWM domain subdirectory (CONUS, Alaska, Puerto Rico, Hawaii) that encompasses the required meteorological forcing data products needed for each regional NWMv3.0 operational configuration setup. Each script is a particular meteorlogical forcing data product that is available to download off the NOMADS server. Availability of each meteorlogical forcing data product varies, but a user can generally extract at least the last 24 hours of previous data products or forecast cycles available. 
+
+**2026 Update:** These scripts were organized around products used by NWM v3 configurations. Their presence does not imply that every script or product is current for the NextGen/NWM v4 stack. The AORC Alaska runtime processor is not implemented.
 
 # Setting Up Required Python Environment to Execute Forcing Extraction Scripts Using Anaconda
 conda env create --name forcing_extraction --file=environment.yml
@@ -21,4 +29,5 @@ python get_prod_GFS.py ./output --lookBackHours=24 --cleanBackHours=36 --lagBack
 * At times, the server lags and scripts will take between 2-5 minutes to finally recieve the url request and download a given file.
 * National Blended Model (NWM) products do not have a presistent forecast cycle output file interval. Future changes will be coming however for NBM forecast products to always have hourly data.
 * HRRR data product output varies from region to region (Hourly - CONUS, 3-hourly Alaska)
-* AORC data downloading is not available in this repository currently for CONUS and Alaska domains. The Office of Water Prediction (OWP) is working on making a public data respository for these data products. Once they go online, we will update this repsoitory accordingly. 
+* ~~AORC data downloading is not available in this repository currently for CONUS and Alaska domains. The Office of Water Prediction (OWP) is working on making a public data respository for these data products. Once they go online, we will update this repsoitory accordingly.~~
+* The AORC Alaska runtime processor is not implemented.

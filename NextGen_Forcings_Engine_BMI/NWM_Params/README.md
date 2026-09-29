@@ -1,3 +1,11 @@
+# 2026 Update
+
+**WARNING:** As of September 2026, many aspects of this file may be outdated relative to the latest NextGen/NWM v4 stack, but this file has been kept mostly intact for posterity.
+
+See the top-level repository [README.md](../../README.md), [INSTALL.md](../../INSTALL.md), and [DOCKER.md](../../DOCKER.md) for the latest information.
+
+# Original Content
+
 Currently, we haven't pushed over any files that are necessary for this directory.
 This directory is just a dummy directory required for original NWM Forcings Engine
 configuration file. We will work to build this as an option in future optimizations 

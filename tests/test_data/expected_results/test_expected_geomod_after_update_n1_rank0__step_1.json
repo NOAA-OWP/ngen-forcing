@@ -1,0 +1,193 @@
+{
+  "approx_centroid_global_xy": [
+    -72.05503025291092,
+    41.7594933573475
+  ],
+  "bmi_model_values__CAT-ID": [
+    1285829030285639,
+    1285830316458152,
+    1285830362417586,
+    1285831573571193,
+    1285831588451106,
+    1285831657727826,
+    1285832857302708
+  ],
+  "centerCoords": null,
+  "cosa_grid": null,
+  "crs_atts": null,
+  "dx_meters": null,
+  "dy_meters": null,
+  "element_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "element_ids_global": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "elementcoords_global": [
+    [
+      -72.05141087733057,
+      41.67904491423198
+    ],
+    [
+      -72.0511897347175,
+      41.73961258049449
+    ],
+    [
+      -72.03340566581471,
+      41.72174218772186
+    ],
+    [
+      -72.06530692999941,
+      41.77071194478256
+    ],
+    [
+      -72.08488656934233,
+      41.789309177649876
+    ],
+    [
+      -72.04984213921675,
+      41.79151575447281
+    ],
+    [
+      -72.04916985395525,
+      41.82451694207896
+    ]
+  ],
+  "esmf_ds": null,
+  "esmf_grid": {
+    "_area": [
+      null,
+      null
+    ],
+    "_coord_sys": null,
+    "_coords": [
+      [
+        "hash_2904886930620536845_len_582",
+        "hash_2117205719057770460_len_582"
+      ],
+      [
+        [
+          -72.05141087733057,
+          -72.0511897347175,
+          -72.03340566581471,
+          -72.06530692999941,
+          -72.08488656934233,
+          -72.04984213921675,
+          -72.04916985395525
+        ],
+        [
+          41.67904491423198,
+          41.73961258049449,
+          41.72174218772186,
+          41.77071194478256,
+          41.789309177649876,
+          41.79151575447281,
+          41.82451694207896
+        ]
+      ]
+    ],
+    "_finalized": false,
+    "_mask": [
+      null,
+      null
+    ],
+    "_meta": {},
+    "_parametric_dim": 2,
+    "_rank": 1,
+    "_size": [
+      582,
+      7
+    ],
+    "_size_owned": [
+      582,
+      7
+    ],
+    "_spatial_dim": null,
+    "_struct": {}
+  },
+  "esmf_lat": null,
+  "esmf_lon": null,
+  "height": null,
+  "height_elem": null,
+  "heights_global": null,
+  "inds": null,
+  "lat_bounds": "hash_2117205719057770460_len_582",
+  "latitude_grid": [
+    41.67904491423198,
+    41.73961258049449,
+    41.72174218772186,
+    41.77071194478256,
+    41.789309177649876,
+    41.79151575447281,
+    41.82451694207896
+  ],
+  "latitude_grid_elem": null,
+  "lon_bounds": "hash_2904886930620536845_len_582",
+  "longitude_grid": [
+    -72.05141087733057,
+    -72.0511897347175,
+    -72.03340566581471,
+    -72.06530692999941,
+    -72.08488656934233,
+    -72.04984213921675,
+    -72.04916985395525
+  ],
+  "longitude_grid_elem": null,
+  "mesh_inds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "mesh_inds_elem": null,
+  "nodeCoords": null,
+  "nx_global": 7,
+  "nx_global_elem": null,
+  "nx_local": 7,
+  "nx_local_elem": null,
+  "ny_global": 7,
+  "ny_global_elem": null,
+  "ny_local": 7,
+  "ny_local_elem": null,
+  "pet_element_inds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "sina_grid": null,
+  "slope": null,
+  "slope_elem": null,
+  "slopes_global": null,
+  "slp_azi": null,
+  "slp_azi_elem": null,
+  "slp_azi_global": null,
+  "spatial_global_atts": null,
+  "spatial_metadata_exists": false,
+  "x_coord_atts": null,
+  "x_coords": null,
+  "x_lower_bound": null,
+  "x_upper_bound": null,
+  "y_coord_atts": null,
+  "y_coords": null,
+  "y_lower_bound": null,
+  "y_upper_bound": null
+}

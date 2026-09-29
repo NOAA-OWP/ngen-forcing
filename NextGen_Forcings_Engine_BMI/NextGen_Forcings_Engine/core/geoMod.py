@@ -1,1114 +1,1398 @@
+from __future__ import annotations
+
 import math
+
 import numpy as np
-from netCDF4 import Dataset
+
+# For ESMF + shapely 2.x, shapely must be imported first, to avoid segfault "address not mapped to object" stemming from calls such as:
+# /usr/local/esmf/lib/libO/Linux.gfortran.64.openmpi.default/libesmf_fullylinked.so(get_geom+0x36)
+import shapely
 from scipy import spatial
-from os import listdir
-from os.path import join
 
 try:
     import esmpy as ESMF
 except ImportError:
     import ESMF
 
-class GeoMetaWrfHydro:
-    """
-    Abstract class for handling information about the WRF-Hydro domain
-    we are processing forcings too.
-    """
-    def __init__(self):
-        self.nx_global = None
-        self.ny_global = None
-        self.nx_global_elem = None
-        self.ny_global_elem = None
-        self.dx_meters = None
-        self.dy_meters = None
-        self.nx_local = None
-        self.ny_local = None
-        self.nx_local_elem = None
-        self.ny_local_elem = None
-        self.x_lower_bound = None
-        self.x_upper_bound = None
-        self.y_lower_bound = None
-        self.y_upper_bound = None
-        self.latitude_grid = None
-        self.longitude_grid = None
-        self.element_ids = None
-        self.element_ids_global = None
-        self.latitude_grid_elem = None
-        self.longitude_grid_elem = None
-        self.lat_bounds = None
-        self.lon_bounds = None
-        self.mesh_inds = None
-        self.mesh_inds_elem = None
-        self.height = None
-        self.height_elem = None
-        self.sina_grid = None
-        self.cosa_grid = None
-        self.nodeCoords = None
-        self.centerCoords = None
-        self.inds = None
-        self.slope = None
-        self.slp_azi = None
-        self.slope_elem = None
-        self.slp_azi_elem = None
-        self.esmf_grid = None
-        self.esmf_lat = None
-        self.esmf_lon = None
-        self.crs_atts = None
-        self.x_coord_atts = None
-        self.x_coords = None
-        self.y_coord_atts = None
-        self.y_coords = None
-        self.spatial_global_atts = None
-        
-    def get_processor_bounds(self,ConfigOptions):
-        """
-        Calculate the local grid boundaries for this processor.
-        ESMF operates under the hood and the boundary values
-        are calculated within the ESMF software.
-        :return:
-        """
-        if(ConfigOptions.grid_type=='gridded'):
-            self.x_lower_bound = self.esmf_grid.lower_bounds[ESMF.StaggerLoc.CENTER][1]
-            self.x_upper_bound = self.esmf_grid.upper_bounds[ESMF.StaggerLoc.CENTER][1]
-            self.y_lower_bound = self.esmf_grid.lower_bounds[ESMF.StaggerLoc.CENTER][0]
-            self.y_upper_bound = self.esmf_grid.upper_bounds[ESMF.StaggerLoc.CENTER][0]
-            self.nx_local = self.x_upper_bound - self.x_lower_bound
-            self.ny_local = self.y_upper_bound - self.y_lower_bound
-        elif(ConfigOptions.grid_type=='unstructured'):
-            self.nx_local = len(self.esmf_grid.coords[0][1])
-            self.ny_local = len(self.esmf_grid.coords[0][1])
-            self.nx_local_elem = len(self.esmf_grid.coords[1][1])
-            self.ny_local_elem = len(self.esmf_grid.coords[1][1])
-            #print("ESMF Mesh nx local node is " + str(self.nx_local))
-            #print("ESMF Mesh nx local elem is " + str(self.nx_local_elem))
-        elif(ConfigOptions.grid_type=='hydrofabric'):
-            self.nx_local = len(self.esmf_grid.coords[1][1])
-            self.ny_local = len(self.esmf_grid.coords[1][1])
-            #self.nx_local_poly = len(self.esmf_poly_coords)
-            #self.ny_local_poly = len(self.esmf_poly_coords)
-            #print("ESMF Mesh nx local elem is " + str(self.nx_local))
-            #print("ESMF Mesh nx local poly is " + str(self.nx_local_poly))
-        #print("WRF-HYDRO LOCAL X BOUND 1 = " + str(self.x_lower_bound))
-        #print("WRF-HYDRO LOCAL X BOUND 2 = " + str(self.x_upper_bound))
-        #print("WRF-HYDRO LOCAL Y BOUND 1 = " + str(self.y_lower_bound))
-        #print("WRF-HYDRO LOCAL Y BOUND 2 = " + str(self.y_upper_bound))
+import logging
+from functools import cached_property, wraps
+from typing import Any
 
-    def initialize_destination_geo_gridded(self,ConfigOptions,MpiConfig):
+import xarray as xr
+
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core import err_handler
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
+    ConfigOptions,
+)
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.consts import (
+    GEOGRID_FILE_INPUT_VARIABLE_NAME_ATTRS,
+    GEOMOD,
+)
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.err_handler import (
+    log_critical,
+)
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import MpiConfig
+from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.esmf_utils import (
+    esmf_grid_retry,
+    esmf_mesh_retry,
+)
+
+LOG = logging.getLogger("FORCING")
+
+
+def set_none(func) -> Any:
+    """Set the output of a function to None if spatial_metadata_exists is false."""
+
+    @wraps(func)
+    def wrapper(self) -> Any:
+        """Set the output of a function to None if spatial_metadata_exists is false."""
+        if self.spatial_metadata_exists:
+            return func(self)
+        else:
+            return None
+
+    return wrapper
+
+
+def broadcast(prop) -> Any:
+    """Broadcast the output of a cached_property to all processors."""
+
+    @wraps(prop)
+    def wrapper(self) -> Any:
+        """Broadcast the output of a cached_property to all processors."""
+        result = prop.func(self)
+        return self.mpi_config.comm.bcast(result, root=0)
+
+    return cached_property(wrapper)
+
+
+def barrier(prop) -> Any:
+    """Synchronize all cached_property at a barrier."""
+
+    @wraps(prop)
+    def wrapper(self) -> Any:
+        """Synchronize all cached_property at a barrier."""
+        result = prop.func(self)
+        self.mpi_config.comm.barrier()
+        return result
+
+    return cached_property(wrapper)
+
+
+def scatter(prop) -> Any:
+    """Scatter the output of a cached_property to all processors."""
+
+    @wraps(prop)
+    def wrapper(self) -> Any:
+        """Scatter the output of a cached_property to all processors.
+
+        Scatter the var array with the var array and config_options.
+        If the post_slice boolean is True, then slice the array before returning.
+        pass the variable name in to raise an informative error if the scatter fails.
         """
+        try:
+            var, name, config_options, post_slice = prop.func(self)
+            assert isinstance(post_slice, bool)
+            assert isinstance(name, str)
+            assert isinstance(config_options, ConfigOptions)
+            # var is only populated on rank 0 -- every other rank gets its
+            # share via scatter_array() below, which is None-safe on
+            # non-zero ranks (confirmed in parallel.py). Asserting here
+            # unconditionally rejected every rank but 0.
+            if self.mpi_config.rank == 0:
+                assert isinstance(var, np.ndarray)
+            else:
+                assert isinstance(var, (np.ndarray, type(None)))
+
+            var = self.mpi_config.scatter_array(self, var, config_options)
+            if post_slice:
+                return var[:, :]
+            else:
+                return var
+        except Exception as e:
+            self.config_options.errMsg = (
+                f"Unable to subset {name} from geogrid file into ESMF object"
+            )
+            log_critical(self.config_options, self.mpi_config)
+            raise e
+
+    return cached_property(wrapper)
+
+
+class GeoMeta:
+    """GeoMeta class for handling information about the geometry metadata.
+
+    Extract names of variable attributes from each of the input geospatial variables. These
+    can change, so we are making this as flexible as possible to accomodate future changes.
+    """
+
+    def __init__(self, config_options: ConfigOptions, mpi_config: MpiConfig) -> None:
+        """Initialize GeoMeta class variables."""
+        self.config_options = config_options
+        self.mpi_config = mpi_config
+        for attr in GEOMOD[__class__.__name__]:
+            setattr(self, attr, None)
+
+    @classmethod
+    def for_grid_type(
+        cls, grid_type: str, config_options: ConfigOptions, mpi_config: MpiConfig
+    ) -> GeoMeta:
+        """Create the geometry metadata implementation for a grid type."""
+        lookup = {
+            "gridded": GriddedGeoMeta,
+            "unstructured": UnstructuredGeoMeta,
+            "hydrofabric": HydrofabricGeoMeta,
+        }
+        try:
+            _class = lookup[grid_type]
+        except KeyError as error:
+            raise ValueError(
+                f"Unsupported grid type: {grid_type}, expected one of: {list(lookup.keys())}"
+            ) from error
+        return _class(config_options, mpi_config)
+
+    @cached_property
+    def spatial_metadata_exists(self) -> bool:
+        """Check to make sure the geospatial metadata file exists in the config_options."""
+        if self.config_options.spatial_meta is None:
+            return False
+        else:
+            return True
+
+    @cached_property
+    def geogrid_ds(self) -> xr.Dataset:
+        """Open the geogrid file and load only the variables needed by this run.
+
+        geo_em_CONUS.nc is ~8.9 GB; loading the whole file with ds.load() exhausts
+        RAM on standard instances. We open lazily, select only the variables
+        referenced by config_options, then load that subset into memory.
+        Global attributes (DX, DY, etc.) are preserved on the subset dataset.
+        """
+        try:
+            with xr.open_dataset(self.config_options.geogrid) as ds:
+                needed = [
+                    getattr(self.config_options, attr)
+                    for attr in GEOGRID_FILE_INPUT_VARIABLE_NAME_ATTRS
+                    if getattr(self.config_options, attr, None) is not None
+                    and getattr(self.config_options, attr) in ds
+                ]
+                return ds[needed].load()
+        except Exception as e:
+            self.config_options.errMsg = "Unable to open geogrid file with xarray"
+            log_critical(self.config_options, self.mpi_config)
+            raise e
+
+    @cached_property
+    @set_none
+    def esmf_ds(self) -> xr.Dataset:
+        """Open the geospatial metadata file and return the xarray dataset object."""
+        try:
+            with xr.open_dataset(self.config_options.spatial_meta) as ds:
+                esmf_ds = ds.load()
+        except Exception as e:
+            self.config_options.errMsg = (
+                f"Unable to open esmf file: {self.config_options.spatial_meta}"
+            )
+            log_critical(self.config_options, self.mpi_config)
+            raise e
+        self._check_variables_exist(esmf_ds)
+        return esmf_ds
+
+    def _check_variables_exist(self, esmf_ds: xr.Dataset):
+        """Check to make sure the expected variables are present in the geospatial metadata file."""
+        if self.mpi_config.rank == 0:
+            for var in ["crs", "x", "y"]:
+                if var not in esmf_ds.variables.keys():
+                    self.config_options.errMsg = f"Unable to locate {var} variable in: {self.config_options.spatial_meta}"
+                    log_critical(self.config_options, self.mpi_config)
+                    raise Exception
+
+    def ncattrs(self, var: str) -> list:
+        """Extract variable attribute names from the geospatial metadata file."""
+        return self.get_esmf_var(var).attrs
+
+    def get_var(self, ds: xr.Dataset, var: str) -> xr.DataArray:
+        """Get a variable from a xr.Dataset."""
+        if var is not None:
+            try:
+                return ds.variables[var]
+            except Exception as e:
+                self.config_options.errMsg = f"Unable to extract {var} variable from: {self.config_options.spatial_meta} due to {str(e)}"
+                log_critical(self.config_options, self.mpi_config)
+                raise e
+
+    def get_geogrid_var(self, var: str) -> xr.DataArray:
+        """Get a variable from the geogrid file."""
+        return self.get_var(self.geogrid_ds, var)
+
+    def get_esmf_var(self, var: str) -> xr.DataArray:
+        """Get a variable from the geospatial metadata file."""
+        return self.get_var(self.esmf_ds, var)
+
+    @cached_property
+    @set_none
+    def x_coord_atts(self) -> dict:
+        """Extract x coordinate attribute values from the geospatial metadata file."""
+        return self.ncattrs("x")
+
+    @cached_property
+    @set_none
+    def y_coord_atts(self) -> dict:
+        """Extract y coordinate attribute values from the geospatial metadata file."""
+        return self.ncattrs("y")
+
+    @cached_property
+    @set_none
+    def crs_atts(self) -> dict:
+        """Extract crs coordinate attribute values from the geospatial metadata file."""
+        return self.ncattrs("crs")
+
+    @cached_property
+    @set_none
+    def spatial_global_atts(self) -> dict:
+        """Extract global attribute values from the geospatial metadata file."""
+        if self.mpi_config.rank == 0:
+            try:
+                return self.esmf_ds.attrs
+            except Exception as e:
+                self.config_options.errMsg = f"Unable to extract global attributes from: {self.config_options.spatial_meta}"
+                log_critical(self.config_options, self.mpi_config)
+                raise e
+
+    def extract_coords(self, dimension: str) -> np.ndarray:
+        """Extract coordinate values from the geospatial metadata file."""
+        if self.mpi_config.rank == 0:
+            if len(self.get_esmf_var(dimension).shape) == 1:
+                return self.get_esmf_var(dimension)[:].data
+            elif len(self.get_esmf_var(dimension).shape) == 2:
+                return self.get_esmf_var(dimension)[:, :].data
+
+    @cached_property
+    @set_none
+    def x_coords(self) -> np.ndarray:
+        """Extract x coordinate values from the geospatial metadata file."""
+        return self.extract_coords("x")
+
+    @cached_property
+    @set_none
+    def y_coords(self) -> np.ndarray:
+        """Extract y coordinate values from the geospatial metadata file.
+
+        Check to see if the Y coordinates are North-South. If so, flip them.
+        """
+        if self.mpi_config.rank == 0:
+            y_coords = self.extract_coords("y")
+            if len(self.get_esmf_var("y").shape) == 1:
+                if y_coords[1] < y_coords[0]:
+                    y_coords[:] = np.flip(y_coords[:], axis=0)
+            elif len(self.get_esmf_var("y").shape) == 2:
+                if y_coords[1, 0] > y_coords[0, 0]:
+                    y_coords[:, :] = np.flipud(y_coords[:, :])
+            return y_coords
+
+    @property
+    def approx_centroid_global_xy(self) -> tuple[float, float]:
+        """The approximate centroid in global coordinates (a tuple of 2 floats: (x, y))"""
+        x_mean = np.mean([c[0] for c in self.elementcoords_global])
+        y_mean = np.mean([c[1] for c in self.elementcoords_global])
+        LOG.debug(f"Approximate centroid: ({x_mean}, {y_mean})")
+        return (x_mean, y_mean)
+
+
+class GriddedGeoMeta(GeoMeta):
+    """Class for handling information about the gridded domains for forcing."""
+
+    def __init__(self, config_options: ConfigOptions, mpi_config: MpiConfig) -> None:
+        """Initialize GriddedGeoMeta class variables.
+
         Initialization function to initialize ESMF through ESMPy,
         calculate the global parameters of the WRF-Hydro grid
         being processed to, along with the local parameters
         for this particular processor.
         :return:
         """
-        # Open the geogrid file and extract necessary information
-        # to create ESMF fields.
-        if MpiConfig.rank == 0:
+        super().__init__(config_options, mpi_config)
+        for attr in GEOMOD[__class__.__name__]:
+            setattr(self, attr, None)
+
+    @broadcast
+    @cached_property
+    def nx_global(self) -> int:
+        """Get the global x dimension size for the gridded domain."""
+        if self.mpi_config.rank == 0:
             try:
-                idTmp = Dataset(ConfigOptions.geogrid,'r')
-            except:
-                ConfigOptions.errMsg = "Unable to open the WRF-Hydro " + \
-                                       "geogrid file: " + ConfigOptions.geogrid
-                raise Exception
-            if(idTmp.variables[ConfigOptions.lat_var].ndim == 3):
-                try:
-                    self.nx_global = idTmp.variables[ConfigOptions.lat_var].shape[2]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract X dimension size " + \
-                                           "from latitude variable in: " + ConfigOptions.geogrid
-                    raise Exception
-
-                try:
-                    self.ny_global = idTmp.variables[ConfigOptions.lat_var].shape[1]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
-                                           "from latitude in: " + ConfigOptions.geogrid
-                    raise Exception
-
-                try:
-                    self.dx_meters = idTmp.DX
-                except:
-                    ConfigOptions.errMsg = "Unable to extract DX global attribute " + \
-                                           " in: " + ConfigOptions.geogrid
-                    raise Exception
-
-                try:
-                    self.dy_meters = idTmp.DY
-                except:
-                    ConfigOptions.errMsg = "Unable to extract DY global attribute " + \
-                                           " in: " + ConfigOptions.geogrid
-                    raise Exception
-            elif(idTmp.variables[ConfigOptions.lat_var].ndim == 2):
-                try:
-                    self.nx_global = idTmp.variables[ConfigOptions.lat_var].shape[1]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract X dimension size " + \
-                                           "from latitude variable in: " + ConfigOptions.geogrid
-                    raise Exception
-
-                try:
-                    self.ny_global = idTmp.variables[ConfigOptions.lat_var].shape[0]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
-                                           "from latitude in: " + ConfigOptions.geogrid
-                    raise Exception
-
-                try:
-                    self.dx_meters = idTmp.variables[ConfigOptions.lon_var].dx
-                except:
-                    ConfigOptions.errMsg = "Unable to extract DX global attribute " + \
-                                           " in: " + ConfigOptions.geogrid
-                    raise Exception
-
-                try:
-                    self.dy_meters = idTmp.variables[ConfigOptions.lat_var].dy
-                except:
-                    ConfigOptions.errMsg = "Unable to extract DY global attribute " + \
-                                           " in: " + ConfigOptions.geogrid
-                    raise Exception
-
-            else:
-                try:
-                    self.nx_global = idTmp.variables[ConfigOptions.lon_var].shape[0]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract X dimension size " + \
-                                           "from longitude variable in: " + ConfigOptions.geogrid
-                    raise Exception
-
-                try:
-                    self.ny_global = idTmp.variables[ConfigOptions.lat_var].shape[0]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
-                                           "from latitude in: " + ConfigOptions.geogrid
-                    raise Exception
-                if(ConfigOptions.input_forcings[0] != 23):
-                    try:
-                        self.dx_meters = idTmp.variables[ConfigOptions.lon_var].dx
-                    except:
-                        ConfigOptions.errMsg = "Unable to extract dx metadata attribute " + \
-                                               " in: " + ConfigOptions.geogrid
-                        raise Exception
-
-                    try:
-                        self.dy_meters = idTmp.variables[ConfigOptions.lat_var].dy
-                    except:
-                        ConfigOptions.errMsg = "Unable to extract dy metadata attribute " + \
-                                               " in: " + ConfigOptions.geogrid
-                        raise Exception
+                if self.ndim_lat == 3:
+                    nx = self.lat_var.shape[2]
+                elif self.ndim_lat == 2:
+                    nx = self.lat_var.shape[1]
                 else:
-                    # Manually input the grid spacing since ERA5-Interim does not 
-                    # internally have this geospatial information within the netcdf file
-                    self.dx_meters = 31000
-                    self.dy_meters = 31000
+                    # NOTE Is this correct? using lon_var
+                    nx = self.lon_var.shape[0]
+                return nx
+            except Exception as e:
+                self.config_options.errMsg = f"Unable to extract X dimension size from {self.config_options.lon_var} in: {self.config_options.geogrid}"
+                log_critical(self.config_options, self.mpi_config)
+                raise e
 
+    @broadcast
+    @cached_property
+    def ny_global(self) -> int:
+        """Get the global y dimension size for the gridded domain."""
+        if self.mpi_config.rank == 0:
+            try:
+                if self.ndim_lat == 3:
+                    return self.lat_var.shape[1]
+                else:
+                    return self.lat_var.shape[0]
+            except Exception as e:
+                self.config_options.errMsg = f"Unable to extract Y dimension size from {self.config_options.lat_var} in: {self.config_options.geogrid}"
+                log_critical(self.config_options, self.mpi_config)
+                raise e
 
-        #MpiConfig.comm.barrier()
+    @cached_property
+    def ndim_lat(self) -> int:
+        """Get the number of dimensions for the latitude variable."""
+        return self.lat_var.ndim
 
-        # Broadcast global dimensions to the other processors.
-        self.nx_global = MpiConfig.broadcast_parameter(self.nx_global,ConfigOptions, param_type=int)
-        self.ny_global = MpiConfig.broadcast_parameter(self.ny_global,ConfigOptions, param_type=int)
-        self.dx_meters = MpiConfig.broadcast_parameter(self.dx_meters,ConfigOptions, param_type=float)
-        self.dy_meters = MpiConfig.broadcast_parameter(self.dy_meters,ConfigOptions, param_type=float)
+    @cached_property
+    def ndim_lon(self) -> int:
+        """Get the number of dimensions for the longitude variable."""
+        return self.lon_var.ndim
 
-        #MpiConfig.comm.barrier()
+    @broadcast
+    @cached_property
+    def dy_meters(self) -> float:
+        """Get the DY distance in meters for the latitude variable."""
+        if self.mpi_config.rank == 0:
+            try:
+                if self.ndim_lat == 3:
+                    return self.geogrid_ds.DY
+                elif self.ndim_lat == 2:
+                    return self.lat_var.dy
+                else:
+                    if self.config_options.input_forcings[0] != 23:
+                        return self.lat_var.dy
+                    else:
+                        # Manually input the grid spacing since ERA5-Interim does not
+                        # internally have this geospatial information within the netcdf file
+                        return 31000
+            except Exception as e:
+                self.config_options.errMsg = f"Unable to extract DY global attribute in: {self.config_options.geogrid}"
+                log_critical(self.config_options, self.mpi_config)
+                raise e
 
-        try:
-            self.esmf_grid = ESMF.Grid(np.array([self.ny_global,self.nx_global]),
-                                       staggerloc=ESMF.StaggerLoc.CENTER,
-                                       coord_sys=ESMF.CoordSys.SPH_DEG)
-        except:
-            ConfigOptions.errMsg = "Unable to create ESMF grid for WRF-Hydro " \
-                                   "geogrid: " + ConfigOptions.geogrid
-            raise Exception
+    @broadcast
+    @cached_property
+    def dx_meters(self) -> float:
+        """Get the DX distance in meters for the longitude variable."""
+        if self.mpi_config.rank == 0:
+            try:
+                if self.ndim_lat == 3:
+                    return self.geogrid_ds.DX
+                elif self.ndim_lat == 2:
+                    return self.lon_var.dx
+                else:
+                    if self.config_options.input_forcings[0] != 23:
+                        return self.lon_var.dx
+                    else:
+                        # Manually input the grid spacing since ERA5-Interim does not
+                        # internally have this geospatial information within the netcdf file
+                        return 31000
+            except Exception as e:
+                self.config_options.errMsg = f"Unable to extract dx metadata attribute in: {self.config_options.geogrid}"
+                log_critical(self.config_options, self.mpi_config)
+                raise e
 
-        #MpiConfig.comm.barrier()
+    @cached_property
+    def esmf_grid(self) -> ESMF.Grid:
+        """Create the ESMF grid object for the gridded domain."""
+        esmf_grid = esmf_grid_retry(
+            self.mpi_config,
+            self.config_options,
+            err_handler,
+            np.array([self.ny_global, self.nx_global]),
+            staggerloc=ESMF.StaggerLoc.CENTER,
+            coord_sys=ESMF.CoordSys.SPH_DEG,
+        )
+        # NOTE Populating the destination coordinates before creating fields or regridding.
+        # Coordinate scattering reads this grid's local bounds. Need to cache the grid
+        # first so that lookup does not re-enter this cached property (avoid infinite recursion)
+        self.esmf_grid = esmf_grid
+        esmf_grid.get_coords(1)[:, :] = self.latitude_grid
+        esmf_grid.get_coords(0)[:, :] = self.longitude_grid
+        return esmf_grid
 
-        self.esmf_lat = self.esmf_grid.get_coords(1)
-        self.esmf_lon = self.esmf_grid.get_coords(0)
+    @cached_property
+    def esmf_lat(self) -> np.ndarray:
+        """Get the ESMF latitude grid."""
+        esmf_lat = self.esmf_grid.get_coords(1)
+        esmf_lat[:, :] = self.latitude_grid
+        return esmf_lat
 
-        #MpiConfig.comm.barrier()
+    @cached_property
+    def esmf_lon(self) -> np.ndarray:
+        """Get the ESMF longitude grid."""
+        esmf_lon = self.esmf_grid.get_coords(0)
+        esmf_lon[:, :] = self.longitude_grid
+        return esmf_lon
 
-        # Obtain the local boundaries for this processor.
-        self.get_processor_bounds(ConfigOptions)
-
+    @scatter
+    @cached_property
+    def latitude_grid(self) -> np.ndarray:
+        """Get the latitude grid for the gridded domain."""
         # Scatter global XLAT_M grid to processors..
-        if MpiConfig.rank == 0:
-            if(idTmp.variables[ConfigOptions.lat_var].ndim == 3):
-                varTmp = idTmp.variables[ConfigOptions.lat_var][0,:,:]
-            elif(idTmp.variables[ConfigOptions.lat_var].ndim == 2):
-                varTmp = idTmp.variables[ConfigOptions.lat_var][:,:]
-            elif(idTmp.variables[ConfigOptions.lat_var].ndim == 1):
-                lat = idTmp.variables[ConfigOptions.lat_var][:]
-                lon = idTmp.variables[ConfigOptions.lon_var][:]
-                varTmp = np.meshgrid(lon,lat)[1]
-                lat = None
-                lon = None
+        if self.mpi_config.rank == 0:
+            if self.ndim_lat == 3:
+                var_tmp = np.asarray(self.lat_var[0, :, :])
+            elif self.ndim_lat == 2:
+                var_tmp = np.asarray(self.lat_var[:, :])
+            elif self.ndim_lat == 1:
+                lat = self.lat_var[:]
+                lon = self.lon_var[:]
+                var_tmp = np.meshgrid(lon, lat)[1]
+
             # Flag to grab entire array for AWS slicing
-            if(ConfigOptions.aws):
-                self.lat_bounds = varTmp
+            if self.config_options.aws:
+                self.lat_bounds = var_tmp
         else:
-            varTmp = None
+            var_tmp = None
+        return var_tmp, "latitude_grid", self.config_options, False
 
-        #MpiConfig.comm.barrier()
+    @cached_property
+    def lon_var(self) -> xr.DataArray:
+        """Get the longitude variable from the geospatial metadata file."""
+        return self.get_geogrid_var(self.config_options.lon_var)
 
-        varSubTmp = MpiConfig.scatter_array(self,varTmp,ConfigOptions)
+    @cached_property
+    def lat_var(self) -> xr.DataArray:
+        """Get the latitude variable from the geospatial metadata file."""
+        return self.get_geogrid_var(self.config_options.lat_var)
 
-        #MpiConfig.comm.barrier()
-
-        # Place the local lat/lon grid slices from the parent geogrid file into
-        # the ESMF lat/lon grids.
-        try:
-            self.esmf_lat[:,:] = varSubTmp
-            self.latitude_grid = varSubTmp
-            varSubTmp = None
-            varTmp = None
-        except:
-            ConfigOptions.errMsg = "Unable to subset latitude from geogrid file into ESMF object"
-            raise Exception
-
-        #MpiConfig.comm.barrier()
-
+    @scatter
+    @cached_property
+    def longitude_grid(self) -> np.ndarray:
+        """Get the longitude grid for the gridded domain."""
         # Scatter global XLONG_M grid to processors..
-        if MpiConfig.rank == 0:
-            if(idTmp.variables[ConfigOptions.lat_var].ndim == 3):
-                varTmp = idTmp.variables[ConfigOptions.lon_var][0, :, :]
-            elif(idTmp.variables[ConfigOptions.lon_var].ndim == 2):
-                varTmp = idTmp.variables[ConfigOptions.lon_var][:,:]
-            elif(idTmp.variables[ConfigOptions.lon_var].ndim == 1):
-                lat = idTmp.variables[ConfigOptions.lat_var][:]
-                lon = idTmp.variables[ConfigOptions.lon_var][:]
-                varTmp = np.meshgrid(lon,lat)[0]
-                lat = None
-                lon = None
+        if self.mpi_config.rank == 0:
+            if (
+                self.ndim_lat == 3
+            ):  # NOTE The original code has lat here... should it maybe be lon instead?
+                var_tmp = np.asarray(self.lon_var[0, :, :])
+            elif self.ndim_lon == 2:
+                var_tmp = np.asarray(self.lon_var[:, :])
+            elif self.ndim_lon == 1:
+                lat = self.lat_var[:]
+                lon = self.lon_var[:]
+                var_tmp = np.meshgrid(lon, lat)[0]
+
             # Flag to grab entire array for AWS slicing
-            if(ConfigOptions.aws):
-                self.lon_bounds = varTmp
+            if self.config_options.aws:
+                self.lon_bounds = var_tmp
         else:
-            varTmp = None
+            var_tmp = None
 
-        #MpiConfig.comm.barrier()
+        return var_tmp, "longitude_grid", self.config_options, False
 
-        varSubTmp = MpiConfig.scatter_array(self,varTmp,ConfigOptions)
+    @cached_property
+    def cosalpha_var(self) -> xr.DataArray:
+        """Get the COSALPHA variable from the geospatial metadata file."""
+        return self.get_geogrid_var(self.config_options.cosalpha_var)
 
-        #MpiConfig.comm.barrier()
-
-        try:
-            self.esmf_lon[:,:] = varSubTmp
-            self.longitude_grid = varSubTmp
-            varSubTmp = None
-            varTmp = None
-        except:
-            ConfigOptions.errMsg = "Unable to subset longitude from geogrid file into ESMF object"
-            raise Exception
-
-        #MpiConfig.comm.barrier()
-
-        if(ConfigOptions.cosalpha_var != None and ConfigOptions.sinalpha_var != None):
+    @scatter
+    @cached_property
+    def cosa_grid(self) -> np.ndarray:
+        """Get the COSALPHA grid for the gridded domain."""
+        if (
+            self.config_options.cosalpha_var is not None
+            and self.config_options.sinalpha_var is not None
+        ):
             # Scatter the COSALPHA,SINALPHA grids to the processors.
-            if MpiConfig.rank == 0:
-                if(idTmp.variables[ConfigOptions.cosalpha_var].ndim == 3):
-                    varTmp = idTmp.variables[ConfigOptions.cosalpha_var][0,:,:]
+            if self.mpi_config.rank == 0:
+                if self.cosalpha_var.ndim == 3:
+                    cosa = self.cosa_grid_from_geogrid_n3
                 else:
-                    varTmp = idTmp.variables[ConfigOptions.cosalpha_var][:,:]
+                    cosa = self.cosalpha_var[:, :]
 
             else:
-                varTmp = None
-            #MpiConfig.comm.barrier()
+                cosa = None
 
-            varSubTmp = MpiConfig.scatter_array(self,varTmp,ConfigOptions)
-            #MpiConfig.comm.barrier()
+            return cosa, "cosa", self.config_options, True
 
-            self.cosa_grid = varSubTmp[:,:]
-            varSubTmp = None
-            varTmp = None
+    @cached_property
+    def sinalpha_var(self) -> xr.DataArray:
+        """Get the SINALPHA variable from the geospatial metadata file."""
+        return self.get_geogrid_var(self.config_options.sinalpha_var)
 
-            if MpiConfig.rank == 0:
-                if(idTmp.variables[ConfigOptions.sinalpha_var].ndim == 3):
-                    varTmp = idTmp.variables[ConfigOptions.sinalpha_var][0,:,:]
+    @cached_property
+    def sina_grid(self) -> np.ndarray:
+        """Get the SINALPHA grid for the gridded domain."""
+        if (
+            self.config_options.cosalpha_var is not None
+            and self.config_options.sinalpha_var is not None
+        ):
+            if self.mpi_config.rank == 0:
+                if self.sinalpha_var.ndim == 3:
+                    sina = self.sina_grid_from_geogrid_n3
                 else:
-                    varTmp = idTmp.variables[ConfigOptions.sinalpha_var][:,:]
+                    sina = self.sinalpha_var[:, :]
             else:
-                varTmp = None
-            #MpiConfig.comm.barrier()
+                sina = None
 
-            varSubTmp = MpiConfig.scatter_array(self, varTmp, ConfigOptions)
-            #MpiConfig.comm.barrier()
-            self.sina_grid = varSubTmp[:, :]
-            varSubTmp = None
-            varTmp = None
+            return sina, "sina", self.config_options, True
 
-        if(ConfigOptions.hgt_var != None):
-            # Read in a scatter the WRF-Hydro elevation, which is used for downscaling
-            # purposes.
-            if MpiConfig.rank == 0:
-                if(idTmp.variables[ConfigOptions.hgt_var].ndim == 3):
-                    varTmp = idTmp.variables[ConfigOptions.hgt_var][0,:,:]
-                else:
-                    varTmp = idTmp.variables[ConfigOptions.hgt_var][:,:]
-            else:
-                varTmp = None
-            #MpiConfig.comm.barrier()
+    @cached_property
+    def hgt_var(self) -> xr.DataArray:
+        """Get the HGT variable from the geospatial metadata file."""
+        return self.get_geogrid_var(self.config_options.hgt_var)
 
-            varSubTmp = MpiConfig.scatter_array(self, varTmp, ConfigOptions)
-            #MpiConfig.comm.barrier()
-            self.height = varSubTmp
-            varSubTmp = None
-            varTmp = None
-        
-        if(ConfigOptions.cosalpha_var != None and ConfigOptions.sinalpha_var != None):
-            # Calculate the slope from the domain using elevation on the WRF-Hydro domain. This will
-            # be used for downscaling purposes.
-            if MpiConfig.rank == 0:
-                try:
-                    slopeTmp, slp_azi_tmp = self.calc_slope(idTmp,ConfigOptions)
-                except Exception:
-                    raise Exception
-            else:
-                slopeTmp = None
-                slp_azi_tmp = None
-            #MpiConfig.comm.barrier()
+    @scatter
+    @cached_property
+    def height(self) -> np.ndarray:
+        """Get the height grid for the gridded domain.
 
-            slopeSubTmp = MpiConfig.scatter_array(self,slopeTmp,ConfigOptions)
-            self.slope = slopeSubTmp[:,:]
-            slopeSubTmp = None
-
-            slp_azi_sub = MpiConfig.scatter_array(self,slp_azi_tmp,ConfigOptions)
-            self.slp_azi = slp_azi_sub[:,:]
-            slp_azi_tmp = None
-
-        elif(ConfigOptions.slope_var != None and ConfigOptions.slope_azimuth_var != None):
-
-            if MpiConfig.rank == 0:
-                if(idTmp.variables[ConfigOptions.slope_var].ndim == 3):
-                    varTmp = idTmp.variables[ConfigOptions.slope_var][0,:,:]
-                else:
-                    varTmp = idTmp.variables[ConfigOptions.slope_var][:,:]
-            else:
-                varTmp = None
-                
-            slopeSubTmp = MpiConfig.scatter_array(self,varTmp,ConfigOptions)
-            self.slope = slopeSubTmp
-            varTmp = None
-
-            if MpiConfig.rank == 0:
-                if(idTmp.variables[ConfigOptions.slope_azimuth_var].ndim == 3):
-                    varTmp = idTmp.variables[ConfigOptions.slope_azimuth_var][0,:,:]
-                else:
-                    varTmp = idTmp.variables[ConfigOptions.slope_azimuth_var][:,:]
-            else:
-                varTmp = None
-                
-            slp_azi_sub = MpiConfig.scatter_array(self,varTmp,ConfigOptions)
-            self.slp_azi = slp_azi_sub[:,:]
-            varTmp = None
-
-        elif(ConfigOptions.hgt_var != None):
-            # Calculate the slope from the domain using elevation of the gridded model and other approximations
-            if MpiConfig.rank == 0:
-                try:
-                    slopeTmp, slp_azi_tmp = self.calc_slope_gridded(idTmp,ConfigOptions)
-                except Exception:
-                    raise Exception
-            else:
-                slopeTmp = None
-                slp_azi_tmp = None
-            #MpiConfig.comm.barrier()
-
-            slopeSubTmp = MpiConfig.scatter_array(self,slopeTmp,ConfigOptions)
-            self.slope = slopeSubTmp[:,:]
-            slopeSubTmp = None
-
-            slp_azi_sub = MpiConfig.scatter_array(self,slp_azi_tmp,ConfigOptions)
-            self.slp_azi = slp_azi_sub[:,:]
-            slp_azi_tmp = None
-
-        if MpiConfig.rank == 0:
-            # Close the geogrid file
-            try:
-                idTmp.close()
-            except:
-                ConfigOptions.errMsg = "Unable to close geogrid file: " + ConfigOptions.geogrid
-                raise Exception
-
-        # Reset temporary variables to free up memory
-        slopeTmp = None
-        slp_azi_tmp = None
-        varTmp = None
-
-    def initialize_geospatial_metadata(self,ConfigOptions,MpiConfig):
+        Used for downscaling purposes.
         """
-        Function that will read in crs/x/y geospatial metadata and coordinates
-        from the optional geospatial metadata file IF it was specified by the user in
-        the configuration file.
-        :param ConfigOptions:
-        :return:
+        if self.config_options.hgt_var is not None:
+            if self.mpi_config.rank == 0:
+                if self.hgt_var.ndim == 3:
+                    hgt = self.hgt_grid_from_geogrid_n3
+                else:
+                    hgt = self.hgt_var[:, :]
+            else:
+                hgt = None
+
+            return hgt, "height", self.config_options, False
+
+    @cached_property
+    def slope_var(self) -> xr.DataArray:
+        """Get the slope variable from the geospatial metadata file."""
+        return self.get_geogrid_var(self.config_options.slope_var)
+
+    @cached_property
+    def slope_azimuth_var(self) -> xr.DataArray:
+        """Get the slope azimuth variable from the geospatial metadata file."""
+        return self.get_geogrid_var(self.config_options.slope_azimuth_var)
+
+    @cached_property
+    def dx(self) -> np.ndarray:
+        """Calculate the dx distance in meters for the longitude variable."""
+        dx = np.empty(
+            (
+                self.lat_var.shape[0],
+                self.lon_var.shape[0],
+            ),
+            dtype=float,
+        )
+        dx[:] = self.lon_var.dx
+        return dx
+
+    @cached_property
+    def dy(self) -> np.ndarray:
+        """Calculate the dy distance in meters for the latitude variable."""
+        dy = np.empty(
+            (
+                self.lat_var.shape[0],
+                self.lon_var.shape[0],
+            ),
+            dtype=float,
+        )
+        dy[:] = self.lat_var.dy
+        return dy
+
+    @cached_property
+    def dz(self) -> np.ndarray:
+        """Calculate the dz distance in meters for the height variable."""
+        dz_init = np.diff(self.hgt_var, axis=0)
+        dz = np.empty(self.dx.shape, dtype=float)
+        dz[0 : dz_init.shape[0], 0 : dz_init.shape[1]] = dz_init
+        dz[dz_init.shape[0] :, :] = dz_init[-1, :]
+        return dz
+
+    @scatter
+    @cached_property
+    def slope(self) -> np.ndarray:
+        """Calculate slope grids needed for incoming shortwave radiation downscaling.
+
+        Calculate slope from sina_grid, cosa_grid, and height variables if they are
+        present in the geogrid file, otherwise calculate slope from slope and slope
+        azimuth variables, and if those are not present, calculate slope from height variable.
+
+
+        Calculate grid coordinates dx distances in meters
+        based on general geospatial formula approximations
+        on a spherical grid.
         """
-        # We will only read information on processor 0. This data is not necessary for the
-        # other processors, and is only used in the output routines.
-        if MpiConfig.rank == 0:
-            # Open the geospatial metadata file.
-            try:
-                idTmp = Dataset(ConfigOptions.spatial_meta,'r')
-            except:
-                ConfigOptions.errMsg = "Unable to open spatial metadata file: " + ConfigOptions.spatial_meta
-                raise Exception
+        if (
+            self.config_options.cosalpha_var is not None
+            and self.config_options.sinalpha_var is not None
+        ):
+            slope = self.slope_from_cosalpha_sinalpha
+        elif (
+            self.config_options.slope_var is not None
+            and self.config_options.slope_azimuth_var is not None
+        ):
+            slope = self.slope_from_slope_azimuth
+        elif self.config_options.hgt_var is not None:
+            slope = self.slope_from_height
+        else:
+            raise Exception(
+                "Unable to calculate slope grid for incoming shortwave radiation downscaling. No geospatial metadata variables provided to calculate slope."
+            )
+        return slope, "slope", self.config_options, True
 
-            # Make sure the expected variables are present in the file.
-            if 'crs' not in idTmp.variables.keys():
-                ConfigOptions.errMsg = "Unable to locate crs variable in: " + ConfigOptions.spatial_meta
-                raise Exception
-            if 'x' not in idTmp.variables.keys():
-                ConfigOptions.errMsg = "Unable to locate x variable in: " + ConfigOptions.spatial_meta
-                raise Exception
-            if 'y' not in idTmp.variables.keys():
-                ConfigOptions.errMsg = "Unable to locate y variable in: " + ConfigOptions.spatial_meta
-                raise Exception
-            # Extract names of variable attributes from each of the input geospatial variables. These
-            # can change, so we are making this as flexible as possible to accomodate future changes.
-            try:
-                crs_att_names = idTmp.variables['crs'].ncattrs()
-            except:
-                ConfigOptions.errMsg = "Unable to extract crs attribute names from: " + ConfigOptions.spatial_meta
-                raise Exception
-            try:
-                x_coord_att_names = idTmp.variables['x'].ncattrs()
-            except:
-                ConfigOptions.errMsg = "Unable to extract x attribute names from: " + ConfigOptions.spatial_meta
-                raise Exception
-            try:
-                y_coord_att_names = idTmp.variables['y'].ncattrs()
-            except:
-                ConfigOptions.errMsg = "Unable to extract y attribute names from: " + ConfigOptions.spatial_meta
-                raise Exception
-            # Extract attribute values
-            try:
-                self.x_coord_atts = {item: idTmp.variables['x'].getncattr(item) for item in x_coord_att_names}
-            except:
-                ConfigOptions.errMsg = "Unable to extract x coordinate attributes from: " + ConfigOptions.spatial_meta
-                raise Exception
-            try:
-                self.y_coord_atts = {item: idTmp.variables['y'].getncattr(item) for item in y_coord_att_names}
-            except:
-                ConfigOptions.errMsg = "Unable to extract y coordinate attributes from: " + ConfigOptions.spatial_meta
-                raise Exception
-            try:
-                self.crs_atts = {item: idTmp.variables['crs'].getncattr(item) for item in crs_att_names}
-            except:
-                ConfigOptions.errMsg = "Unable to extract crs coordinate attributes from: " + ConfigOptions.spatial_meta
-                raise Exception
+    @scatter
+    @cached_property
+    def slp_azi(self) -> np.ndarray:
+        """Calculate slope azimuth grids needed for incoming shortwave radiation downscaling.
 
-            # Extract global attributes
-            try:
-                global_att_names = idTmp.ncattrs()
-            except:
-                ConfigOptions.errMsg = "Unable to extract global attribute names from: " + ConfigOptions.spatial_meta
-                raise Exception
-            try:
-                self.spatial_global_atts = {item: idTmp.getncattr(item) for item in global_att_names}
-            except:
-                ConfigOptions.errMsg = "Unable to extract global attributes from: " + ConfigOptions.spatial_meta
-                raise Exception
-
-            # Extract x/y coordinate values
-            if len(idTmp.variables['x'].shape) == 1:
-                try:
-                    self.x_coords = idTmp.variables['x'][:].data
-                except:
-                    ConfigOptions.errMsg = "Unable to extract x coordinate values from: " + ConfigOptions.spatial_meta
-                    raise Exception
-                try:
-                    self.y_coords = idTmp.variables['y'][:].data
-                except:
-                    ConfigOptions.errMsg = "Unable to extract y coordinate values from: " + ConfigOptions.spatial_meta
-                    raise Exception
-                # Check to see if the Y coordinates are North-South. If so, flip them.
-                if self.y_coords[1] < self.y_coords[0]:
-                    self.y_coords[:] = np.flip(self.y_coords[:], axis=0)
-
-            if len(idTmp.variables['x'].shape) == 2:
-                try:
-                    self.x_coords = idTmp.variables['x'][:,:].data
-                except:
-                    ConfigOptions.errMsg = "Unable to extract x coordinate values from: " + ConfigOptions.spatial_meta
-                    raise Exception
-                try:
-                    self.y_coords = idTmp.variables['y'][:,:].data
-                except:
-                    ConfigOptions.errMsg = "Unable to extract y coordinate values from: " + ConfigOptions.spatial_meta
-                    raise Exception
-                # Check to see if the Y coordinates are North-South. If so, flip them.
-                if self.y_coords[1,0] > self.y_coords[0,0]:
-                    self.y_coords[:,:] = np.flipud(self.y_coords[:,:])
-
-
-            # Close the geospatial metadata file.
-            try:
-                idTmp.close()
-            except:
-                ConfigOptions.errMsg = "Unable to close spatial metadata file: " + ConfigOptions.spatial_meta
-                raise Exception
-
-        #MpiConfig.comm.barrier()
-
-    def calc_slope(self,idTmp,ConfigOptions):
+        Calculate slp_azi from sina_grid, cosa_grid, and height variables if they are
+        present in the geogrid file, otherwise calculate slope from slope and slope
+        azimuth variables, and if those are not present, calculate slope from height variable.
         """
-        Function to calculate slope grids needed for incoming shortwave radiation downscaling
-        later during the program.
-        :param idTmp:
-        :param ConfigOptions:
-        :return:
-        """
-        # First extract the sina,cosa, and elevation variables from the geogrid file.
-        try:
-            sinaGrid = idTmp.variables[ConfigOptions.sinalpha_var][0,:,:]
-        except:
-            ConfigOptions.errMsg = "Unable to extract SINALPHA from: " + ConfigOptions.geogrid
-            raise
+        if (
+            self.config_options.cosalpha_var is not None
+            and self.config_options.sinalpha_var is not None
+        ):
+            slp_azi = self.slp_azi_from_cosalpha_sinalpha
+        elif (
+            self.config_options.slope_var is not None
+            and self.config_options.slope_azimuth_var is not None
+        ):
+            slp_azi = self.slp_azi_from_slope_azimuth
 
-        try:
-            cosaGrid = idTmp.variables[ConfigOptions.cosalpha_var][0,:,:]
-        except:
-            ConfigOptions.errMsg = "Unable to extract COSALPHA from: " + ConfigOptions.geogrid
-            raise
+        elif self.config_options.hgt_var is not None:
+            slp_azi = self.slp_azi_from_height
+        else:
+            raise Exception(
+                "Unable to calculate slope azimuth grid for incoming shortwave radiation downscaling. No geospatial metadata variables provided to calculate slope azimuth."
+            )
 
-        try:
-            heightDest = idTmp.variables[ConfigOptions.hgt_var][0,:,:]
-        except:
-            ConfigOptions.errMsg = "Unable to extract HGT_M from: " + ConfigOptions.geogrid
-            raise
+        return slp_azi, "slp_azi", self.config_options, True
 
-        # Ensure cosa/sina are correct dimensions
-        if sinaGrid.shape[0] != self.ny_global or sinaGrid.shape[1] != self.nx_global:
-            ConfigOptions.errMsg = "SINALPHA dimensions mismatch in: " + ConfigOptions.geogrid
-            raise Exception
-        if cosaGrid.shape[0] != self.ny_global or cosaGrid.shape[1] != self.nx_global:
-            ConfigOptions.errMsg = "COSALPHA dimensions mismatch in: " + ConfigOptions.geogrid
-            raise Exception
-        if heightDest.shape[0] != self.ny_global or heightDest.shape[1] != self.nx_global:
-            ConfigOptions.errMsg = "HGT_M dimension mismatch in: " + ConfigOptions.geogrid
-            raise Exception
+    @cached_property
+    def slp_azi_from_slope_azimuth(self) -> np.ndarray:
+        """Calculate slope azimuth from slope and slope azimuth variables."""
+        if self.mpi_config.rank == 0:
+            if self.slope_azimuth_var.ndim == 3:
+                return self.slope_azimuth_var[0, :, :]
+            else:
+                return self.slope_azimuth_var[:, :]
 
-        # Establish constants
-        rdx = 1.0/self.dx_meters
-        rdy = 1.0/self.dy_meters
+    @cached_property
+    def slp_azi_from_height(self) -> np.ndarray:
+        """Calculate slope azimuth from height variable."""
+        if self.mpi_config.rank == 0:
+            return (180 / np.pi) * np.arctan(self.dx / self.dy)
+
+    @cached_property
+    def slope_from_height(self) -> np.ndarray:
+        """Calculate slope from height variable."""
+        if self.mpi_config.rank == 0:
+            return self.dz / np.sqrt((self.dx**2) + (self.dy**2))
+
+    @cached_property
+    def slope_from_slope_azimuth(self) -> np.ndarray:
+        """Calculate slope from slope and slope azimuth variables."""
+        if self.mpi_config.rank == 0:
+            if self.slope_var.ndim == 3:
+                return self.slope_var[0, :, :]
+            else:
+                return self.slope_var[:, :]
+
+    @cached_property
+    def slope_from_cosalpha_sinalpha(self) -> np.ndarray:
+        """Calculate slope from COSALPHA and SINALPHA variables."""
+        if self.mpi_config.rank == 0:
+            slope_tmp = np.arctan(
+                (self.hx[self.ind_orig] ** 2 + self.hy[self.ind_orig] ** 2) ** 0.5
+            )
+            slope_tmp[np.where(slope_tmp < 1e-4)] = 0.0
+            return slope_tmp
+
+    @cached_property
+    def slp_azi_from_cosalpha_sinalpha(self) -> np.ndarray:
+        """Calculate slope azimuth from COSALPHA and SINALPHA variables."""
+        if self.mpi_config.rank == 0:
+            slp_azi = np.empty([self.ny_global, self.nx_global], np.float32)
+            slp_azi[np.where(self.slope_from_cosalpha_sinalpha < 1e-4)] = 0.0
+            ind_valesmf_ds = np.where(self.slope_from_cosalpha_sinalpha >= 1e-4)
+            slp_azi[ind_valesmf_ds] = (
+                np.arctan2(self.hx[ind_valesmf_ds], self.hy[ind_valesmf_ds]) + math.pi
+            )
+            ind_valesmf_ds = np.where(self.cosa_grid_from_geogrid_n3 >= 0.0)
+            slp_azi[ind_valesmf_ds] = slp_azi[ind_valesmf_ds] - np.arcsin(
+                self.sina_grid_from_geogrid_n3[ind_valesmf_ds]
+            )
+            ind_valesmf_ds = np.where(self.cosa_grid_from_geogrid_n3 < 0.0)
+            slp_azi[ind_valesmf_ds] = slp_azi[ind_valesmf_ds] - (
+                math.pi - np.arcsin(self.sina_grid_from_geogrid_n3[ind_valesmf_ds])
+            )
+            return slp_azi
+
+    @cached_property
+    def ind_orig(self) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate the indices of the original grid points for the height variable."""
+        return np.where(self.hgt_grid_from_geogrid_n3 == self.hgt_grid_from_geogrid_n3)
+
+    @cached_property
+    def hx(self) -> np.ndarray:
+        """Calculate the slope in the x direction from the height variable."""
+        rdx = 1.0 / self.dx_meters
         msftx = 1.0
-        msfty = 1.0
-
-        slopeOut = np.empty([self.ny_global,self.nx_global],np.float32)
-        toposlpx = np.empty([self.ny_global,self.nx_global],np.float32)
-        toposlpy = np.empty([self.ny_global,self.nx_global],np.float32)
-        slp_azi = np.empty([self.ny_global, self.nx_global], np.float32)
-        ipDiff = np.empty([self.ny_global, self.nx_global], np.int32)
-        jpDiff = np.empty([self.ny_global, self.nx_global], np.int32)
-        hx = np.empty([self.ny_global,self.nx_global],np.float32)
-        hy = np.empty([self.ny_global,self.nx_global],np.float32)
+        toposlpx = np.empty([self.ny_global, self.nx_global], np.float32)
+        ip_diff = np.empty([self.ny_global, self.nx_global], np.int32)
+        hx = np.empty([self.ny_global, self.nx_global], np.float32)
 
         # Create index arrays that will be used to calculate slope.
-        xTmp = np.arange(self.nx_global)
-        yTmp = np.arange(self.ny_global)
-        xGrid = np.tile(xTmp[:], (self.ny_global, 1))
-        yGrid = np.repeat(yTmp[:, np.newaxis], self.nx_global, axis=1)
-        indOrig = np.where(heightDest == heightDest)
-        indIp1 = ((indOrig[0]), (indOrig[1] + 1))
-        indIm1 = ((indOrig[0]), (indOrig[1] - 1))
-        indJp1 = ((indOrig[0] + 1), (indOrig[1]))
-        indJm1 = ((indOrig[0] - 1), (indOrig[1]))
-        indIp1[1][np.where(indIp1[1] >= self.nx_global)] = self.nx_global - 1
-        indJp1[0][np.where(indJp1[0] >= self.ny_global)] = self.ny_global - 1
-        indIm1[1][np.where(indIm1[1] < 0)] = 0
-        indJm1[0][np.where(indJm1[0] < 0)] = 0
+        x_tmp = np.arange(self.nx_global)
+        x_grid = np.tile(x_tmp[:], (self.ny_global, 1))
+        ind_ip1 = ((self.ind_orig[0]), (self.ind_orig[1] + 1))
+        ind_im1 = ((self.ind_orig[0]), (self.ind_orig[1] - 1))
+        ind_ip1[1][np.where(ind_ip1[1] >= self.nx_global)] = self.nx_global - 1
+        ind_im1[1][np.where(ind_im1[1] < 0)] = 0
 
-        ipDiff[indOrig] = xGrid[indIp1] - xGrid[indIm1]
-        jpDiff[indOrig] = yGrid[indJp1] - yGrid[indJm1]
+        ip_diff[self.ind_orig] = x_grid[ind_ip1] - x_grid[ind_im1]
+        toposlpx[self.ind_orig] = (
+            (
+                self.hgt_grid_from_geogrid_n3[ind_ip1]
+                - self.hgt_grid_from_geogrid_n3[ind_im1]
+            )
+            * msftx
+            * rdx
+        ) / ip_diff[self.ind_orig]
+        hx = np.empty([self.ny_global, self.nx_global], np.float32)
+        hx[self.ind_orig] = toposlpx[self.ind_orig]
+        return hx
 
-        toposlpx[indOrig] = ((heightDest[indIp1] - heightDest[indIm1]) * msftx * rdx)/ipDiff[indOrig]
-        toposlpy[indOrig] = ((heightDest[indJp1] - heightDest[indJm1]) * msfty * rdy)/jpDiff[indOrig]
-        hx[indOrig] = toposlpx[indOrig]
-        hy[indOrig] = toposlpy[indOrig]
-        slopeOut[indOrig] = np.arctan((hx[indOrig] ** 2 + hy[indOrig] **2) ** 0.5)
-        slopeOut[np.where(slopeOut < 1E-4)] = 0.0
-        slp_azi[np.where(slopeOut < 1E-4)] = 0.0
-        indValidTmp = np.where(slopeOut >= 1E-4)
-        slp_azi[indValidTmp] = np.arctan2(hx[indValidTmp],hy[indValidTmp]) + math.pi
-        indValidTmp = np.where(cosaGrid >= 0.0)
-        slp_azi[indValidTmp] = slp_azi[indValidTmp] - np.arcsin(sinaGrid[indValidTmp])
-        indValidTmp = np.where(cosaGrid < 0.0)
-        slp_azi[indValidTmp] = slp_azi[indValidTmp] - (math.pi - np.arcsin(sinaGrid[indValidTmp]))
+    @cached_property
+    def hy(self) -> np.ndarray:
+        """Calculate the slope in the y direction from the height variable."""
+        rdy = 1.0 / self.dy_meters
+        msfty = 1.0
+        toposlpy = np.empty([self.ny_global, self.nx_global], np.float32)
+        jp_diff = np.empty([self.ny_global, self.nx_global], np.int32)
+        hy = np.empty([self.ny_global, self.nx_global], np.float32)
 
-        # Reset temporary arrays to None to free up memory
-        toposlpx = None
-        toposlpy = None
-        heightDest = None
-        sinaGrid = None
-        cosaGrid = None
-        indValidTmp = None
-        xTmp = None
-        yTmp = None
-        xGrid = None
-        ipDiff = None
-        jpDiff = None
-        indOrig = None
-        indJm1 = None
-        indJp1 = None
-        indIm1 = None
-        indIp1 = None
-        hx = None
-        hy = None
+        # Create index arrays that will be used to calculate slope.
+        y_tmp = np.arange(self.ny_global)
+        y_grid = np.repeat(y_tmp[:, np.newaxis], self.nx_global, axis=1)
+        ind_jp1 = ((self.ind_orig[0] + 1), (self.ind_orig[1]))
+        ind_jm1 = ((self.ind_orig[0] - 1), (self.ind_orig[1]))
+        ind_jp1[0][np.where(ind_jp1[0] >= self.ny_global)] = self.ny_global - 1
+        ind_jm1[0][np.where(ind_jm1[0] < 0)] = 0
 
-        return slopeOut,slp_azi
+        jp_diff[self.ind_orig] = y_grid[ind_jp1] - y_grid[ind_jm1]
+        toposlpy[self.ind_orig] = (
+            (
+                self.hgt_grid_from_geogrid_n3[ind_jp1]
+                - self.hgt_grid_from_geogrid_n3[ind_jm1]
+            )
+            * msfty
+            * rdy
+        ) / jp_diff[self.ind_orig]
+        hy[self.ind_orig] = toposlpy[self.ind_orig]
+        return hy
 
-    def calc_slope_gridded(self,idTmp,ConfigOptions):
-        """
-        Function to calculate slope grids needed for incoming shortwave radiation downscaling
-        later during the program. This calculates the slopes for grid cells
-        :param idTmp:
-        :param ConfigOptions:
-        :return:
-        """
-        idTmp = Dataset(ConfigOptions.geogrid,'r')
+    @cached_property
+    def x_lower_bound(self) -> float:
+        """Get the local x lower bound for this processor."""
+        return self.esmf_grid.lower_bounds[ESMF.StaggerLoc.CENTER][1]
 
+    @cached_property
+    def x_upper_bound(self) -> float:
+        """Get the local x upper bound for this processor."""
+        return self.esmf_grid.upper_bounds[ESMF.StaggerLoc.CENTER][1]
+
+    @cached_property
+    def y_lower_bound(self) -> float:
+        """Get the local y lower bound for this processor."""
+        return self.esmf_grid.lower_bounds[ESMF.StaggerLoc.CENTER][0]
+
+    @cached_property
+    def y_upper_bound(self) -> float:
+        """Get the local y upper bound for this processor."""
+        return self.esmf_grid.upper_bounds[ESMF.StaggerLoc.CENTER][0]
+
+    @cached_property
+    def nx_local(self) -> int:
+        """Get the local x dimension size for this processor."""
+        return self.x_upper_bound - self.x_lower_bound
+
+    @cached_property
+    def ny_local(self) -> int:
+        """Get the local y dimension size for this processor."""
+        return self.y_upper_bound - self.y_lower_bound
+
+    @cached_property
+    def sina_grid_from_geogrid_n3(self) -> np.ndarray:
+        """Get the SINALPHA grid for the gridded domain directly from the geogrid file."""
         try:
-            lons = idTmp.variables[ConfigOptions.lon_var][:]
-            lats = idTmp.variables[ConfigOptions.lat_var][:]
-        except:
-            ConfigOptions.errMsg = "Unable to extract gridded coordinates " + \
-                                   "in " + ConfigOptions.geogrid
-            raise Exception
+            return self.check_grid(self.sinalpha_var[0, :, :])
+        except Exception as e:
+            self.config_options.errMsg = f"Unable to extract {self.config_options.sinalpha_var} from: {self.config_options.geogrid}"
+            log_critical(self.config_options, self.mpi_config)
+            raise e
+
+    def check_grid(self, grid: np.ndarray) -> np.ndarray:
+        """Check to make sure the grid dimensions match the expected dimensions for the gridded domain."""
+        if grid.shape[0] != self.ny_global or grid.shape[1] != self.nx_global:
+            self.config_options.errMsg = (
+                f"Grid dimensions mismatch in: {self.config_options.geogrid}"
+            )
+            log_critical(self.config_options, self.mpi_config)
+            raise ValueError(self.config_options.errMsg)
+        return grid
+
+    @cached_property
+    def cosa_grid_from_geogrid_n3(self) -> np.ndarray:
+        """Get the COSALPHA grid for the gridded domain directly from the geogrid file."""
         try:
-            dx = np.empty((idTmp.variables[ConfigOptions.lat_var].shape[0],idTmp.variables[ConfigOptions.lon_var].shape[0]),dtype=float)
-            dy = np.empty((idTmp.variables[ConfigOptions.lat_var].shape[0],idTmp.variables[ConfigOptions.lon_var].shape[0]),dtype=float)
-            dx[:] = idTmp.variables[ConfigOptions.lon_var].dx
-            dy[:] = idTmp.variables[ConfigOptions.lat_var].dy
-        except:
-            ConfigOptions.errMsg = "Unable to extract dx and dy distances " + \
-                                   "in " + ConfigOptions.geogrid
-            raise Exception
+            return self.check_grid(self.cosalpha_var[0, :, :])
+        except Exception as e:
+            self.config_options.errMsg = f"Unable to extract {self.config_options.cosalpha_var} from: {self.config_options.geogrid}"
+            log_critical(self.config_options, self.mpi_config)
+            raise e
+
+    @cached_property
+    def hgt_grid_from_geogrid_n3(self) -> np.ndarray:
+        """Get the HGT_M grid for the gridded domain directly from the geogrid file."""
         try:
-            heights = idTmp.variables[ConfigOptions.hgt_var][:]
-        except:
-            ConfigOptions.errMsg = "Unable to extract heights of grid cells " + \
-                                   "in " + ConfigOptions.geogrid
-            raise Exception
-
-        idTmp.close()
-
-        # calculate grid coordinates dx distances in meters
-        # based on general geospatial formula approximations
-        # on a spherical grid
-        dz_init = np.diff(heights,axis=0)
-        dz = np.empty((dx.shape),dtype=float)
-        dz[0:dz_init.shape[0],0:dz_init.shape[1]] = dz_init
-        dz[dz_init.shape[0]:,:] = dz_init[-1,:]
-
-        slope = dz/np.sqrt((dx**2)+(dy**2))
-        slp_azi = (180/np.pi)*np.arctan(dx/dy)
-
-        # Reset temporary arrays to None to free up memory
-        lons = None
-        lats = None
-        heights = None
-        dx = None
-        dy = None
-        dz = None
-
-        return slope, slp_azi
+            return self.check_grid(self.hgt_var[0, :, :])
+        except Exception as e:
+            self.config_options.errMsg = f"Unable to extract {self.config_options.hgt_var} from: {self.config_options.geogrid}"
+            log_critical(self.config_options, self.mpi_config)
+            raise e
 
 
-    def initialize_destination_geo_unstructured(self,ConfigOptions,MpiConfig):
-        """
+class HydrofabricGeoMeta(GeoMeta):
+    """Class for handling information about the hydrofabric domain forcing."""
+
+    def __init__(self, config_options: ConfigOptions, mpi_config: MpiConfig):
+        """Initialize HydrofabricGeoMeta class variables.
+
         Initialization function to initialize ESMF through ESMPy,
-        calculate the global parameters of the WRF-Hydro grid
+        calculate the global parameters of the hydrofabric
         being processed to, along with the local parameters
         for this particular processor.
         :return:
         """
-        # Open the geogrid file and extract necessary information
-        # to create ESMF fields.
-        if MpiConfig.rank == 0:
-            try:
-                idTmp = Dataset(ConfigOptions.geogrid,'r')
-            except:
-                ConfigOptions.errMsg = "Unable to open the unstructured " + \
-                                       "mesh file: " + ConfigOptions.geogrid
-                raise Exception
+        super().__init__(config_options, mpi_config)
+        for attr in GEOMOD[__class__.__name__]:
+            setattr(self, attr, None)
 
-            try:
-                self.nx_global = idTmp.variables[ConfigOptions.nodecoords_var].shape[0]
-            except:
-                ConfigOptions.errMsg = "Unable to extract X dimension size " + \
-                                       "in " + ConfigOptions.geogrid
-                raise Exception
+    @cached_property
+    def lat_bounds(self) -> np.ndarray:
+        """Get the latitude bounds for the hydrofabric domain."""
+        bounds = self.get_bound(1)
+        if bounds is not None:
+            return bounds.values
 
-            try:
-                self.ny_global = idTmp.variables[ConfigOptions.nodecoords_var].shape[0]
-            except:
-                ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
-                                       "in " + ConfigOptions.geogrid
-                raise Exception
+    @cached_property
+    def lon_bounds(self) -> np.ndarray:
+        """Get the longitude bounds for the hydrofabric domain."""
+        bounds = self.get_bound(0)
+        if bounds is not None:
+            return bounds.values
 
-            try:
-                self.nx_global_elem = idTmp.variables[ConfigOptions.elemcoords_var].shape[0]
-            except:
-                ConfigOptions.errMsg = "Unable to extract X dimension size " + \
-                                       "in " + ConfigOptions.geogrid
-                raise Exception
+    def get_bound(self, dim: int) -> np.ndarray:
+        """Get the longitude or latitude bounds for the hydrofabric domain."""
+        if self.mpi_config.rank == 0:
+            if self.config_options.aws:
+                return self.get_geogrid_var(self.config_options.nodecoords_var)[:, dim]
 
-            try:
-                self.ny_global_elem = idTmp.variables[ConfigOptions.elemcoords_var].shape[0]
-            except:
-                ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
-                                       "in " + ConfigOptions.geogrid
-                raise Exception
+    @broadcast
+    @cached_property
+    def elementcoords_global(self) -> np.ndarray:
+        """Get the global element coordinates for the hydrofabric domain."""
+        return self.get_geogrid_var(self.config_options.elemcoords_var).values
 
+    @broadcast
+    @cached_property
+    def nx_global(self) -> int:
+        """Get the global x dimension size for the hydrofabric domain."""
+        return self.elementcoords_global.shape[0]
+
+    @broadcast
+    @cached_property
+    def ny_global(self) -> int:
+        """Get the global y dimension size for the hydrofabric domain.
+
+        Same as nx_global.
+        """
+        return self.nx_global
+
+    @cached_property
+    def esmf_grid(self) -> ESMF.Mesh:
+        """Create the ESMF Mesh object for the hydrofabric domain."""
+        return esmf_mesh_retry(
+            self.mpi_config,
+            self.config_options,
+            err_handler,
+            filename=self.config_options.geogrid,
+            filetype=ESMF.FileFormat.ESMFMESH,
+        )
+
+    @cached_property
+    def latitude_grid(self) -> np.ndarray:
+        """Get the latitude grid for the hydrofabric domain."""
+        return self.esmf_grid.coords[1][1]
+
+    @cached_property
+    def longitude_grid(self) -> np.ndarray:
+        """Get the longitude grid for the hydrofabric domain."""
+        return self.esmf_grid.coords[1][0]
+
+    @cached_property
+    def pet_element_inds(self) -> np.ndarray:
+        """Get the PET element indices for the hydrofabric domain."""
+        try:
+            tree = spatial.KDTree(self.elementcoords_global)
+            return tree.query(
+                np.column_stack([self.longitude_grid, self.latitude_grid])
+            )[1]
+        except Exception as e:
+            LOG.critical(
+                f"Failed to open mesh file: {self.config_options.geogrid} "
+                f"due to {str(e)}"
+            )
+            raise e
+
+    @cached_property
+    def element_ids(self) -> np.ndarray:
+        """Get the element IDs for the hydrofabric domain."""
+        return self.element_ids_global[self.pet_element_inds]
+
+    @broadcast
+    @cached_property
+    def element_ids_global(self) -> np.ndarray:
+        """Get the global element IDs for the hydrofabric domain."""
+        return self.get_geogrid_var(self.config_options.element_id_var).values
+
+    @broadcast
+    @cached_property
+    def heights_global(self) -> np.ndarray:
+        """Get the global heights for the hydrofabric domain."""
+        return self.get_geogrid_var(self.config_options.hgt_var)
+
+    @cached_property
+    def height(self) -> np.ndarray:
+        """Get the height grid for the hydrofabric domain."""
+        if self.config_options.hgt_var is not None:
+            return self.heights_global[self.pet_element_inds]
+
+    @cached_property
+    def slope(self) -> np.ndarray:
+        """Get the slopes for the hydrofabric domain."""
+        if self.slopes_global is not None:
+            return self.slopes_global[self.pet_element_inds]
+
+    @cached_property
+    def slp_azi(self) -> np.ndarray:
+        """Get the slope azimuths for the hydrofabric domain."""
+        if self.slp_azi_global is not None:
+            return self.slp_azi_global[self.pet_element_inds]
+
+    @cached_property
+    def mesh_inds(self) -> np.ndarray:
+        """Get the mesh indices for the hydrofabric domain."""
+        return self.pet_element_inds
+
+    @broadcast
+    @cached_property
+    def slopes_global(self) -> np.ndarray:
+        """Get the global slopes for the hydrofabric domain."""
+        return self.get_geogrid_var(self.config_options.slope_var)
+
+    @cached_property
+    def slp_azi_global(self) -> np.ndarray:
+        """Get the global slope azimuths for the hydrofabric domain."""
+        return self.get_geogrid_var(self.config_options.slope_azimuth_var)
+
+    @cached_property
+    def nx_local(self) -> int:
+        """Get the local x dimension size for this processor."""
+        return len(self.esmf_grid.coords[1][1])
+
+    @cached_property
+    def ny_local(self) -> int:
+        """Get the local y dimension size for this processor."""
+        return len(self.esmf_grid.coords[1][1])
+
+
+class UnstructuredGeoMeta(GeoMeta):
+    """Class for handling information about the hydrofabric domain forcing."""
+
+    def __init__(self, config_options: ConfigOptions, mpi_config: MpiConfig) -> None:
+        """Initialize HydrofabricGeoMeta class variables.
+
+        Initialization function to initialize ESMF through ESMPy,
+        calculate the global parameters of the unstructured mesh
+        being processed to, along with the local parameters
+        for this particular processor.
+        :return:
+        """
+        super().__init__(config_options, mpi_config)
+        for attr in GEOMOD[__class__.__name__]:
+            setattr(self, attr, None)
+
+    @broadcast
+    @cached_property
+    def nx_global(self) -> int:
+        """Get the global x dimension size for the unstructured domain."""
+        return self.get_geogrid_var(self.config_options.nodecoords_var).shape[0]
+
+    @broadcast
+    @cached_property
+    def ny_global(self) -> int:
+        """Get the global y dimension size for the unstructured domain."""
+        return self.get_geogrid_var(self.config_options.nodecoords_var).shape[0]
+
+    @broadcast
+    @cached_property
+    def nx_global_elem(self) -> int:
+        """Get the global x dimension size for the unstructured domain elements."""
+        return self.get_esmf_var(self.config_options.elemcoords_var).shape[0]
+
+    @broadcast
+    @cached_property
+    def ny_global_elem(self) -> int:
+        """Get the global y dimension size for the unstructured domain elements."""
+        return self.get_esmf_var(self.config_options.elemcoords_var).shape[0]
+
+    @cached_property
+    def lon_bounds(self) -> np.ndarray:
+        """Get the longitude bounds for the unstructured domain."""
+        bounds = self.get_bound(0)
+        if bounds is not None:
+            return bounds.values
+
+    @cached_property
+    def lat_bounds(self) -> np.ndarray:
+        """Get the latitude bounds for the unstructured domain."""
+        bounds = self.get_bound(1)
+        if bounds is not None:
+            return bounds.values
+
+    def get_bound(self, dim: int) -> np.ndarray:
+        """Get the longitude or latitude bounds for the unstructured domain."""
+        if self.mpi_config.rank == 0:
             # Flag to grab entire array for AWS slicing
-            if(ConfigOptions.aws):
-                self.lat_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,1]
-                self.lon_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,0]
+            if self.config_options.aws:
+                return self.get_esmf_var(self.config_options.nodecoords_var)[:][:, dim]
 
-        #MpiConfig.comm.barrier()
+    @cached_property
+    def esmf_grid(self) -> ESMF.Mesh:
+        """Create the ESMF grid object for the unstructured domain.
 
-        # Broadcast global dimensions to the other processors.
-        self.nx_global = MpiConfig.broadcast_parameter(self.nx_global,ConfigOptions, param_type=int)
-        self.ny_global = MpiConfig.broadcast_parameter(self.ny_global,ConfigOptions, param_type=int)
-        self.nx_global_elem = MpiConfig.broadcast_parameter(self.nx_global_elem,ConfigOptions, param_type=int)
-        self.ny_global_elem = MpiConfig.broadcast_parameter(self.ny_global_elem,ConfigOptions, param_type=int)
-
-        #MpiConfig.comm.barrier()
-
-        if MpiConfig.rank == 0:
-            # Close the geogrid file
-            try:
-                idTmp.close()
-            except:
-                ConfigOptions.errMsg = "Unable to close geogrid Mesh file: " + ConfigOptions.geogrid
-                raise Exception
-
+        Removed argument coord_sys=ESMF.CoordSys.SPH_DEG since we are always reading from a file
+        From ESMF documentation
+        If you create a mesh from a file (like NetCDF/ESMF-Mesh), coord_sys is ignored. The mesh’s coordinate system should be embedded in the file or inferred.
+        """
         try:
-            self.esmf_grid = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH,coord_sys=ESMF.CoordSys.SPH_DEG)
-        except:
-            ConfigOptions.errMsg = "Unable to create ESMF Mesh from " \
-                                   "geogrid file: " + ConfigOptions.geogrid
-            raise Exception
+            return ESMF.Mesh(
+                filename=self.config_options.geogrid, filetype=ESMF.FileFormat.ESMFMESH
+            )
+        except Exception as e:
+            self.config_options.errMsg = f"Unable to create ESMF Mesh from geogrid file: {self.config_options.geogrid}"
+            log_critical(self.config_options, self.mpi_config)
+            raise e
 
-        #MpiConfig.comm.barrier()
+    @cached_property
+    def latitude_grid(self) -> np.ndarray:
+        """Get the latitude grid for the unstructured domain.
 
-        # Obtain the local boundaries for this processor.
-        self.get_processor_bounds(ConfigOptions)
+        Place the local lat/lon grid slices from the parent geogrid file into
+        the ESMF lat/lon grids that have already been seperated by processors.
+        """
+        return self.esmf_grid.coords[0][1]
 
-        # Place the local lat/lon grid slices from the parent geogrid file into
-        # the ESMF lat/lon grids that have already been seperated by processors.
-        try:
-            self.latitude_grid = self.esmf_grid.coords[0][1]
-            self.latitude_grid_elem = self.esmf_grid.coords[1][1]
-            varSubTmp = None
-            varTmp = None
-        except:
-            ConfigOptions.errMsg = "Unable to subset node latitudes from ESMF Mesh object"
-            raise Exception
-        try:
-            self.longitude_grid = self.esmf_grid.coords[0][0]
-            self.longitude_grid_elem = self.esmf_grid.coords[1][0]
-            varSubTmp = None
-            varTmp = None
-        except:
-            ConfigOptions.errMsg = "Unable to subset XLONG_M from geogrid file into ESMF Mesh object"
-            raise Exception
+    @cached_property
+    def latitude_grid_elem(self) -> np.ndarray:
+        """Get the latitude grid for the unstructured domain elements.
 
-        idTmp = Dataset(ConfigOptions.geogrid,'r')
+        Place the local lat/lon grid slices from the parent geogrid file into
+        the ESMF lat/lon grids that have already been seperated by processors.
+        """
+        return self.esmf_grid.coords[1][1]
 
+    @cached_property
+    def longitude_grid(self) -> np.ndarray:
+        """Get the longitude grid for the unstructured domain.
+
+        Place the local lat/lon grid slices from the parent geogrid file into
+        the ESMF lat/lon grids that have already been seperated by processors.
+        """
+        return self.esmf_grid.coords[0][0]
+
+    @cached_property
+    def longitude_grid_elem(self) -> np.ndarray:
+        """Get the longitude grid for the unstructured domain elements.
+
+        Place the local lat/lon grid slices from the parent geogrid file into
+        the ESMF lat/lon grids that have already been seperated by processors.
+        """
+        return self.esmf_grid.coords[1][0]
+
+    @cached_property
+    def pet_element_inds(self) -> np.ndarray:
+        """Get the local node indices for the unstructured domain elements."""
         # Get lat and lon global variables for pet extraction of indices
-        nodecoords_global = idTmp.variables[ConfigOptions.nodecoords_var][:].data
-        elementcoords_global = idTmp.variables[ConfigOptions.elemcoords_var][:].data
-
+        elementcoords_global = self.get_var(
+            self.geogrid_ds, self.config_options.elemcoords_var
+        )[:].data
         # Find the corresponding local indices to slice global heights and slope
         # variables that are based on the partitioning on the unstructured mesh
-        pet_nodecoords = np.empty((len(self.latitude_grid),2),dtype=float)
-        pet_elementcoords = np.empty((len(self.latitude_grid_elem),2),dtype=float)
-        pet_nodecoords[:,0] = self.longitude_grid
-        pet_nodecoords[:,1] = self.latitude_grid
-        pet_elementcoords[:,0] = self.longitude_grid_elem
-        pet_elementcoords[:,1] = self.latitude_grid_elem
+        pet_elementcoords = np.empty((len(self.latitude_grid_elem), 2), dtype=float)
+        pet_elementcoords[:, 0] = self.longitude_grid_elem
+        pet_elementcoords[:, 1] = self.latitude_grid_elem
+        return spatial.KDTree(elementcoords_global).query(pet_elementcoords)[1]
 
-        distance, pet_node_inds = spatial.KDTree(nodecoords_global).query(pet_nodecoords)
-        distance, pet_element_inds = spatial.KDTree(elementcoords_global).query(pet_elementcoords)
+    @cached_property
+    def pet_node_inds(self) -> np.ndarray:
+        """Get the local node indices for the unstructured domain nodes."""
+        # Get lat and lon global variables for pet extraction of indices
+        nodecoords_global = self.get_var(
+            self.geogrid_ds, self.config_options.nodecoords_var
+        )[:].data
+        # Find the corresponding local indices to slice global heights and slope
+        # variables that are based on the partitioning on the unstructured mesh
+        pet_nodecoords = np.empty((len(self.latitude_grid), 2), dtype=float)
+        pet_nodecoords[:, 0] = self.longitude_grid
+        pet_nodecoords[:, 1] = self.latitude_grid
 
-        # reset variables to free up memory
-        nodecoords_global = None
-        elementcoords_global = None
-        pet_nodecoords = None
-        pet_elementcoords = None
-        distance = None
+        return spatial.KDTree(nodecoords_global).query(pet_nodecoords)[1]
 
+    @cached_property
+    def slope(self) -> np.ndarray:
+        """Get the slope grid for the unstructured domain."""
+        # NOTE this is a note/commented out code from before refactor on 2/19/2026.
         # Not accepting cosalpha and sinalpha at this time for unstructured meshes, only
-        # accepting the pre-calculated slope and slope azmiuth variables if available, 
+        # accepting the pre-calculated slope and slope azmiuth variables if available,
         # otherwise calculate slope from height estimates
-        #if(ConfigOptions.cosalpha_var != None and ConfigOptions.sinalpha_var != None):
-            #self.cosa_grid = idTmp.variables[ConfigOptions.cosalpha_var][:].data[pet_node_inds]
-            #self.sina_grid = idTmp.variables[ConfigOptions.sinalpha_var][:].data[pet_node_inds]
-            #slopeTmp, slp_azi_tmp = self.calc_slope(idTmp,ConfigOptions)
-            #self.slope = slope_node_Tmp[pet_node_inds]
-            #self.slp_azi = slp_azi_node_tmp[pet_node_inds]
-        if(ConfigOptions.slope_var != None and ConfigOptions.slp_azi_var != None):
-            self.slope = idTmp.variables[ConfigOptions.slope_var][:].data[pet_node_inds]
-            self.slp_azi = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data[pet_node_inds]
-            self.slope_elem = idTmp.variables[ConfigOptions.slope_var_elem][:].data[pet_element_inds]
-            self.slp_azi_elem = idTmp.variables[ConfigOptions.slope_azimuth_var_elem][:].data[pet_element_inds]
-            
-            # Read in a scatter the mesh node elevation, which is used for downscaling purposes
-            self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_node_inds]
-            # Read in a scatter the mesh element elevation, which is used for downscaling purposes.
-            self.height_elem = idTmp.variables[ConfigOptions.hgt_elem_var][:].data[pet_element_inds]
+        # if(config_options.cosalpha_var != None and config_options.sinalpha_var != None):
+        # self.cosa_grid = esmf_ds.variables[config_options.cosalpha_var][:].data[pet_node_inds]
+        # self.sina_grid = esmf_ds.variables[config_options.sinalpha_var][:].data[pet_node_inds]
+        # slope_tmp, slp_azi_tmp = self.calc_slope(esmf_ds,config_options)
+        # self.slope = slope_node_tmp[pet_node_inds]
+        # self.slp_azi = slp_azi_node_tmp[pet_node_inds]
+        if (
+            self.config_options.slope_var is not None
+            and self.config_options.slp_azi_var is not None
+        ):
+            return self.get_geogrid_var(self.config_options.slope_var)[
+                self.pet_node_inds
+            ]
+        elif self.config_options.hgt_var is not None:
+            return (
+                self.dz_node
+                / np.sqrt((self.dx_node**2) + (self.dy_node**2))[self.pet_node_inds]
+            )
+        else:
+            raise ValueError(
+                "Unable to calculate slope grid for incoming shortwave radiation downscaling. No geospatial metadata variables provided to calculate slope."
+            )
 
-        elif(ConfigOptions.hgt_var != None):
+    @cached_property
+    def slp_azi(self) -> np.ndarray:
+        """Get the slope azimuth grid for the unstructured domain."""
+        if (
+            self.config_options.slope_var is not None
+            and self.config_options.slp_azi_var is not None
+        ):
+            return self.get_geogrid_var(self.config_options.slope_azimuth_var)[
+                self.pet_node_inds
+            ]
+        elif self.config_options.hgt_var is not None:
+            return (180 / np.pi) * np.arctan(self.dx_node / self.dy_node)[
+                self.pet_node_inds
+            ]
 
-            # Read in a scatter the mesh node elevation, which is used for downscaling purposes
-            self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_node_inds]
-       
-            # Read in a scatter the mesh element elevation, which is used for downscaling purposes.
-            self.height_elem = idTmp.variables[ConfigOptions.hgt_elem_var][:].data[pet_element_inds]
+    @cached_property
+    def slope_elem(self) -> np.ndarray:
+        """Get the slope grid for the unstructured domain elements."""
+        if (
+            self.config_options.slope_var is not None
+            and self.config_options.slp_azi_var is not None
+        ):
+            return self.get_geogrid_var(self.config_options.slope_var_elem)[:].data[
+                self.pet_element_inds
+            ]
+        elif self.config_options.hgt_var is not None:
+            return (
+                self.dz_elem
+                / np.sqrt((self.dx_elem**2) + (self.dy_elem**2))[self.pet_element_inds]
+            )
 
-            # Calculate the slope from the domain using elevation on the WRF-Hydro domain. This will
-            # be used for downscaling purposes.
-            try:
-                slope_node_Tmp, slp_azi_node_tmp, slope_elem_Tmp, slp_azi_elem_tmp = self.calc_slope_unstructured(idTmp,ConfigOptions)
-            except Exception:
-                raise Exception
-     
-            self.slope = slope_node_Tmp[pet_node_inds]
-            slope_node_Tmp = None
+    @cached_property
+    def slp_azi_elem(self) -> np.ndarray:
+        """Get the slope azimuth grid for the unstructured domain elements."""
+        if (
+            self.config_options.slope_var is not None
+            and self.config_options.slp_azi_var is not None
+        ):
+            return self.get_var(
+                self.geogrid_ds, self.config_options.slope_azimuth_var_elem
+            )[:].data[self.pet_element_inds]
+        elif self.config_options.hgt_var is not None:
+            return (180 / np.pi) * np.arctan(self.dx_elem / self.dy_elem)[
+                self.pet_element_inds
+            ]
 
-            self.slp_azi = slp_azi_node_tmp[pet_node_inds]
-            slp_azi__node_tmp = None
-        
-            self.slope_elem = slope_elem_Tmp[pet_element_inds]
-            slope_elem_Tmp = None
+    @cached_property
+    def height(self) -> np.ndarray:
+        """Get the height grid for the unstructured domain nodes."""
+        if (
+            self.config_options.slope_var is not None
+            and self.config_options.slp_azi_var is not None
+        ):
+            return self.get_geogrid_var(self.config_options.hgt_var)[:].data[
+                self.pet_node_inds
+            ]
+        elif self.config_options.hgt_var is not None:
+            return self.self.get_geogrid_var(self.config_options.hgt_var)[:].data[
+                self.pet_node_inds
+            ]
 
-            self.slp_azi_elem = slp_azi_elem_tmp[pet_element_inds]
-            slp_azi_elem_tmp = None
+    @cached_property
+    def height_elem(self) -> np.ndarray:
+        """Get the height grid for the unstructured domain elements."""
+        if (
+            self.config_options.slope_var is not None
+            and self.config_options.slp_azi_var is not None
+        ):
+            return self.get_geogrid_var(self.config_options.hgt_elem_var)[:].data[
+                self.pet_element_inds
+            ]
+        elif self.config_options.hgt_var is not None:
+            return self.get_geogrid_var(self.config_options.hgt_elem_var)[:].data[
+                self.pet_element_inds
+            ]
 
-        # save indices where mesh was partition for future scatter functions
-        self.mesh_inds = pet_node_inds
-        self.mesh_inds_elem = pet_element_inds
+    @cached_property
+    def node_lons(self) -> np.ndarray:
+        """Get the longitude grid for the unstructured domain nodes."""
+        return self.get_geogrid_var(self.config_options.nodecoords_var)[:][:, 0]
 
-        # reset variables to free up memory        
-        pet_node_inds = None
-        pet_element_inds = None
+    @cached_property
+    def node_lats(self) -> np.ndarray:
+        """Get the latitude grid for the unstructured domain nodes."""
+        return self.get_geogrid_var(self.config_options.nodecoords_var)[:][:, 1]
 
-    def calc_slope_unstructured(self,idTmp,ConfigOptions):
-        """
-        Function to calculate slope grids needed for incoming shortwave radiation downscaling
-        later during the program. This calculates the slopes for both nodes and elements
-        :param idTmp:
-        :param ConfigOptions:
-        :return:
-        """
+    @cached_property
+    def elem_lons(self) -> np.ndarray:
+        """Get the longitude grid for the unstructured domain elements."""
+        return self.get_geogrid_var(self.config_options.elemcoords_var)[:][:, 0]
 
-        idTmp = Dataset(ConfigOptions.geogrid,'r')
+    @cached_property
+    def elem_lats(self) -> np.ndarray:
+        """Get the latitude grid for the unstructured domain elements."""
+        return self.get_geogrid_var(self.config_options.elemcoords_var)[:][:, 1]
 
-        try:
-            node_lons = idTmp.variables[ConfigOptions.nodecoords_var][:][:,0]
-            node_lats = idTmp.variables[ConfigOptions.nodecoords_var][:][:,1]
-        except:
-            ConfigOptions.errMsg = "Unable to extract node coordinates " + \
-                                   "in " + ConfigOptions.geogrid
-            raise Exception
-        try:
-            elem_lons = idTmp.variables[ConfigOptions.elemcoords_var][:][:,0]
-            elem_lats = idTmp.variables[ConfigOptions.elemcoords_var][:][:,1]
-        except:
-            ConfigOptions.errMsg = "Unable to extract element coordinates " + \
-                                   "in " + ConfigOptions.geogrid
-            raise Exception
-        try:
-            elem_conn = idTmp.variables[ConfigOptions.elemconn_var][:][:,0]
-        except:
-            ConfigOptions.errMsg = "Unable to extract element connectivity " + \
-                                   "in " + ConfigOptions.geogrid
-            raise Exception
-        try:
-            node_heights = idTmp.variables[ConfigOptions.hgt_var][:]
-        except:
-            ConfigOptions.errMsg = "Unable to extract HGT_M from: " + ConfigOptions.geogrid
-            raise
+    @cached_property
+    def elem_conn(self) -> np.ndarray:
+        """Get the element connectivity for the unstructured domain."""
+        return self.get_geogrid_var(self.config_options.elemconn_var)[:][:, 0]
+
+    @cached_property
+    def node_heights(self) -> np.ndarray:
+        """Get the height grid for the unstructured domain nodes."""
+        node_heights = self.get_geogrid_var(self.config_options.hgt_var)[:]
 
         if node_heights.shape[0] != self.ny_global:
-            ConfigOptions.errMsg = "HGT_M dimension mismatch in: " + ConfigOptions.geogrid
+            self.config_options.errMsg = (
+                f"HGT_M dimension mismatch in: {self.config_options.geogrid}"
+            )
+            log_critical(self.config_options, self.mpi_config)
             raise Exception
+        return node_heights
 
-        try:
-            elem_heights = idTmp.variables[ConfigOptions.hgt_elem_var][:]
-        except:
-            ConfigOptions.errMsg = "Unable to extract HGT_M_ELEM from: " + ConfigOptions.geogrid
-            raise
+    @cached_property
+    def elem_heights(self) -> np.ndarray:
+        """Get the height grid for the unstructured domain elements."""
+        elem_heights = self.get_var(self.geogrid_ds, self.config_options.hgt_elem_var)[
+            :
+        ]
 
-        if elem_heights.shape[0] != len(elem_lons):
-            ConfigOptions.errMsg = "HGT_M_ELEM dimension mismatch in: " + ConfigOptions.geogrid
+        if elem_heights.shape[0] != len(self.elem_lons):
+            self.config_options.errMsg = (
+                f"HGT_M_ELEM dimension mismatch in: {self.config_options.geogrid}"
+            )
+            log_critical(self.config_options, self.mpi_config)
             raise Exception
+        return elem_heights
 
-        idTmp.close()
+    @cached_property
+    def dx_elem(self) -> np.ndarray:
+        """Calculate the dx distance in meters for the longitude variable for the unstructured domain elements."""
+        dx = (
+            np.diff(self.elem_lons)
+            * 40075160
+            * np.cos(self.elem_lats[0:-1] * np.pi / 180)
+            / 360
+        )
+        return np.append(dx, dx[-1])
 
-        # calculate node coordinate distances in meters
-        # based on general geospatial formula approximations
-        # on a spherical grid
-        dx = np.diff(node_lons)*40075160*np.cos(node_lats[0:-1]*np.pi/180)/360
-        dx = np.append(dx,dx[-1])
-        dy = np.diff(node_lats)*40008000/360
-        dy= np.append(dy,dy[-1])
-        dz = np.diff(node_heights)
-        dz= np.append(dz,dz[-1])
-    
-        slope_nodes = dz/np.sqrt((dx**2)+(dy**2))
-        slp_azi_nodes = (180/np.pi)*np.arctan(dx/dy)
+    @cached_property
+    def dy_elem(self) -> np.ndarray:
+        """Calculate the dy distance in meters for the latitude variable for the unstructured domain elements."""
+        dy = np.diff(self.elem_lats) * 40008000 / 360
+        return np.append(dy, dy[-1])
 
-        # calculate element coordinate distances in meters
-        # based on general geospatial formula approximations
-        # on a spherical grid
-        dx = np.diff(elem_lons)*40075160*np.cos(elem_lats[0:-1]*np.pi/180)/360
-        dx = np.append(dx,dx[-1])
-        dy = np.diff(elem_lats)*40008000/360
-        dy= np.append(dy,dy[-1])
-        dz = np.diff(elem_heights)
-        dz= np.append(dz,dz[-1])
+    @cached_property
+    def dz_elem(self) -> np.ndarray:
+        """Calculate the dz distance in meters for the height variable for the unstructured domain elements."""
+        dz = np.diff(self.elem_heights)
+        return np.append(dz, dz[-1])
 
-        slope_elem = dz/np.sqrt((dx**2)+(dy**2))
-        slp_azi_elem = (180/np.pi)*np.arctan(dx/dy)
+    @cached_property
+    def dx_node(self) -> np.ndarray:
+        """Calculate the dx distance in meters for the longitude variable for the unstructured domain nodes."""
+        dx = (
+            np.diff(self.node_lons)
+            * 40075160
+            * np.cos(self.node_lats[0:-1] * np.pi / 180)
+            / 360
+        )
+        return np.append(dx, dx[-1])
 
-        # Reset temporary arrays to None to free up memory
-        node_lons = None
-        node_lats = None
-        elem_lons = None
-        elem_lats = None
-        node_heights = None
-        elem_heights = None
-        dx = None
-        dy = None
-        dz = None
-        
-        return slope_nodes,slp_azi_nodes,slope_elem,slp_azi_elem
+    @cached_property
+    def dy_node(self) -> np.ndarray:
+        """Calculate the dy distance in meters for the latitude variable for the unstructured domain nodes."""
+        dy = np.diff(self.node_lats) * 40008000 / 360
+        return np.append(dy, dy[-1])
 
-    def initialize_destination_geo_hydrofabric(self,ConfigOptions,MpiConfig):
-        """
-        Initialization function to initialize ESMF through ESMPy,
-        calculate the global parameters of the WRF-Hydro grid
-        being processed to, along with the local parameters
-        for this particular processor.
-        :return:
-        """
-        # Flag to see if user specified an unstructured mesh hydrofabric file
-        if(ConfigOptions.geogrid != None):
+    @cached_property
+    def dz_node(self) -> np.ndarray:
+        """Calculate the dz distance in meters for the height variable for the unstructured domain nodes."""
+        dz = np.diff(self.node_heights)
+        return np.append(dz, dz[-1])
 
-            # Open the geogrid file and extract necessary information
-            # to create ESMF fields.
-            if (MpiConfig.rank == 0):
-                try:
-                    idTmp = Dataset(ConfigOptions.geogrid,'r')
-                except:
-                    ConfigOptions.errMsg = "Unable to open the unstructured " + \
-                                           "mesh file: " + ConfigOptions.geogrid
-                    raise Exception
+    @cached_property
+    def mesh_inds(self) -> np.ndarray:
+        """Get the local mesh node indices for the unstructured domain."""
+        return self.pet_node_inds
 
-                try:
-                    self.nx_global = idTmp.variables[ConfigOptions.elemcoords_var].shape[0]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract X dimension size " + \
-                                           "in " + ConfigOptions.geogrid
-                    raise Exception
+    @cached_property
+    def mesh_inds_elem(self) -> np.ndarray:
+        """Get the local mesh element indices for the unstructured domain."""
+        return self.pet_element_inds
 
-                try:
-                    self.ny_global = idTmp.variables[ConfigOptions.elemcoords_var].shape[0]
-                except:
-                    ConfigOptions.errMsg = "Unable to extract Y dimension size " + \
-                                           "in " + ConfigOptions.geogrid
-                    raise Exception
+    @cached_property
+    def nx_local(self) -> int:
+        """Get the local x dimension size for this processor."""
+        return len(self.esmf_grid.coords[0][1])
 
-                # Flag to grab entire array for AWS slicing
-                if(ConfigOptions.aws):
-                    self.lat_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,1]
-                    self.lon_bounds =  idTmp.variables[ConfigOptions.nodecoords_var][:][:,0]
+    @cached_property
+    def ny_local(self) -> int:
+        """Get the local y dimension size for this processor."""
+        return len(self.esmf_grid.coords[0][1])
 
+    @cached_property
+    def nx_local_elem(self) -> int:
+        """Get the local x dimension size for this processor."""
+        return len(self.esmf_grid.coords[1][1])
 
-            #MpiConfig.comm.barrier()
-
-            # Broadcast global dimensions to the other processors.
-            self.nx_global = MpiConfig.broadcast_parameter(self.nx_global,ConfigOptions, param_type=int)
-            self.ny_global = MpiConfig.broadcast_parameter(self.ny_global,ConfigOptions, param_type=int)
-
-            #MpiConfig.comm.barrier()
-
-            if MpiConfig.rank == 0:
-                # Close the geogrid file
-                try:
-                    idTmp.close()
-                except:
-                    ConfigOptions.errMsg = "Unable to close geogrid Mesh file: " + ConfigOptions.geogrid
-                    raise Exception
-
-            try:
-                self.esmf_grid = ESMF.Mesh(filename=ConfigOptions.geogrid,filetype=ESMF.FileFormat.ESMFMESH,coord_sys=ESMF.CoordSys.SPH_DEG)
-            except:
-                ConfigOptions.errMsg = "Unable to create ESMF Mesh from " \
-                                       "geogrid file: " + ConfigOptions.geogrid
-                raise Exception
-
-            #MpiConfig.comm.barrier()
-
-            # Obtain the local boundaries for this processor.
-            self.get_processor_bounds(ConfigOptions)
-
-            # Place the local lat/lon grid slices from the parent geogrid file into
-            # the ESMF lat/lon grids that have already been seperated by processors.
-            try:
-                self.latitude_grid = self.esmf_grid.coords[1][1]
-                varSubTmp = None
-                varTmp = None
-            except:
-                ConfigOptions.errMsg = "Unable to subset node latitudes from ESMF Mesh object"
-                raise Exception
-            try:
-                self.longitude_grid = self.esmf_grid.coords[1][0]
-                varSubTmp = None
-                varTmp = None
-            except:
-                ConfigOptions.errMsg = "Unable to subset node longitudes from ESMF Mesh object"
-
-            idTmp = Dataset(ConfigOptions.geogrid,'r')
-
-            # Get lat and lon global variables for pet extraction of indices
-            elementcoords_global = idTmp.variables[ConfigOptions.elemcoords_var][:].data
-
-            # Find the corresponding local indices to slice global heights and slope
-            # variables that are based on the partitioning on the unstructured mesh
-            pet_elementcoords = np.empty((len(self.latitude_grid),2),dtype=float)
-            pet_elementcoords[:,0] = self.longitude_grid
-            pet_elementcoords[:,1] = self.latitude_grid
-
-            distance, pet_element_inds = spatial.KDTree(elementcoords_global).query(pet_elementcoords)
-
-            # reset variables to free up memory
-            elementcoords_global = None
-            pet_elementcoords = None
-            distance = None
-
-            u, c = np.unique(pet_element_inds,return_counts=True)
-
-            # Read in a scatter the mesh node elevation, which is used for downscaling if available
-            if(ConfigOptions.hgt_var != None):
-                self.height = idTmp.variables[ConfigOptions.hgt_var][:].data[pet_element_inds]
-
-            if(ConfigOptions.slope_var != None and ConfigOptions.slp_azi_var != None):
-                self.slope = idTmp.variables[ConfigOptions.slope_var][:].data[pet_element_inds]
-                self.slp_azi = idTmp.variables[ConfigOptions.slope_azimuth_var][:].data[pet_element_inds]
-
-
-            self.element_ids = idTmp.variables[ConfigOptions.element_id_var][:].data[pet_element_inds]
-
-            self.element_ids_global = idTmp.variables[ConfigOptions.element_id_var][:].data
-
-            # save indices where mesh was partition for future scatter functions
-            self.mesh_inds = pet_element_inds
-
-            # reset variables to free up memory
-            pet_element_inds = None
-
-            idTmp.close()
+    @cached_property
+    def ny_local_elem(self) -> int:
+        """Get the local y dimension size for this processor."""
+        return len(self.esmf_grid.coords[1][1])

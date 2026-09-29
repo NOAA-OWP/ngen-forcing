@@ -1,3 +1,11 @@
+# 2026 Update
+
+**WARNING:** As of September 2026, many aspects of this file may be outdated relative to the latest NextGen/NWM v4 stack, but this file has been kept mostly intact for posterity.
+
+The Lumped Forcings Driver Docker image is deprecated and is not part of the current NextGen/NWM v4 image chain. The ExactExtract fork documented below remains a dependency of that legacy image.
+
+See the top-level repository [README.md](../README.md), [INSTALL.md](../INSTALL.md), and [DOCKER.md](../DOCKER.md) for the latest information.
+
 # Steps to install an Anaconda Python environment to utilize the NextGen Lumped Forcings Driver
 1. conda env create --name NextGen_Lumped_Forcings_Driver --file=environment.yml
 2. The remaining Python module dependency here for the NextGen Lumped Forcings driver is the special exactextract Python bindings developed by GitHub contributors within the ExactExtract GitHub repository. The python bindings can be install by downloading python packages and following instructions on the GitHub repository link here: https://github.com/jdalrym2/exactextract/tree/coverage-fraction-pybindings (This will directly link the ExactExtract python bindings to your python executable or anaconda environment).

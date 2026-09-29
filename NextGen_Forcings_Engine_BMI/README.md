@@ -1,3 +1,9 @@
+# 2026 Update
+
+**WARNING:** As of September 2026, many aspects of this file may be outdated relative to the latest NextGen/NWM v4 stack, but this file has been kept mostly intact for posterity.
+
+See the top-level repository [README.md](../README.md), [INSTALL.md](../INSTALL.md), and [DOCKER.md](../DOCKER.md) for the latest information.
+
 # NextGen Forcings Engine Dependencies
 •	Please see detailed description of Python environmental dependencies and packages within the pyproject.toml file in the root of this directory, or as specified within the requirements.txt or environment.yml file.
 
@@ -54,15 +60,25 @@
 
 # NextGen Forcings Engine Basic Model Interface Setup and Execution
 1.	Within your python environment, make sure to install the “bmipy” and “yaml” libraries to enable BMI functionality for the NextGen Forcings Engine to utilize. 
-2.	Within the “NextGen_Forcings_Engine_BMI” directory, there is a sub-directory called “BMI_NextGen_Configs” that contains all the BMI configuration files needed for a Medium range forecast ran by GFS that would support a gridded model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/Gridded/config.yml), an unstructured mesh coastal model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/gridded/config.yml), and a hydrofabric unstructured mesh ((./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/hydrofabric/config.yml) as a supported domain to extract regridded forcings in a BMI-complaint fashion. Copy over one of those config.yml files to the “NextGen_Forcings_Engine_BMI” main directory for BMI execution of the NextGen Forcings Engine. Inside each config.yml contains a set of standard NWMv3.0 Forcing Engine variables that allow a given user to utilize a variety of methods, which are further described in the “./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/README.md” file.
+2.	~~Within the “NextGen_Forcings_Engine_BMI” directory, there is a sub-directory called “BMI_NextGen_Configs” that contains all the BMI configuration files needed for a Medium range forecast ran by GFS that would support a gridded model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/Gridded/config.yml), an unstructured mesh coastal model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/gridded/config.yml), and a hydrofabric unstructured mesh ((./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/hydrofabric/config.yml) as a supported domain to extract regridded forcings in a BMI-complaint fashion. Copy over one of those config.yml files to the “NextGen_Forcings_Engine_BMI” main directory for BMI execution of the NextGen Forcings Engine. Inside each config.yml contains a set of standard NWMv3.0 Forcing Engine variables that allow a given user to utilize a variety of methods, which are further described in the “./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/README.md” file.~~
+
+  **2026 Update:** The current templates are in [BMI_NextGen_Configs/config_templates/](BMI_NextGen_Configs/config_templates/) and are consumed by [`nwm-msw-mgr`](https://github.com/NGWPC/nwm-msw-mgr). The older regional example configurations were last updated on September 4, 2024 and have not been tested in the NextGen/NWM v4 stack.
 3.	To test out the NextGen Forcings Engine BMI functionality, please see the “./NextGen_Forcings_Engine_BMI/README.md” file that highlights the utility of each of the BMI Python scripts as well as supporting sub-directories contained within the repository. 
+
+## Geogrid cleanup
+
+The standalone BMI runner accepts a caller-owned geogrid with `-geogrid /path/to/geogrid.nc`; it forwards this path to the BMI model constructor. During finalization, the engine preserves a geogrid supplied this way. This supports coastal forcing generation, where the caller-owned target geogrid may be reused after a run. When `-geogrid` is omitted, the engine uses `GeogridIn` from the forcing configuration, creates its per-run copy, and removes that temporary file during cleanup.
 
 # Overview bullet points for modifying the original NWM Forcings Engine into a BMI complaint NextGen Forcings Engine capable of handling any domain types
   •	To streamline the NWMv3.0 Forcings engine into a Basic Model Interface application, we’ve had to initialize the BMI model using the same approach highlighted in the “genForcing.py” module and then directly reconfigure the forecast module (forecastMod.py) workflow to streamline the ability to update and produce gridded forcings for the WRFHydro domain based on a specified time stamp within the standard BMI functionality (“model_update_until”). This is all completed within the “model.py” module, which essentially mimics the “forecastMod.py” module within the “core” directory as a BMI-compliant module. 
 
+  •	**2026 Update**: `forecastMod.py` is no longer referenced by the `ngen-forcing` codebase nor the `ngen` stack, and has been deprecated with a `NotImplementedError`.
+
   •	Once source code modifications were implemented, we were able to demonstrate the ability for the NextGen Forcings Engine to advertise gridded and unstructured mesh forcings back to the NextGen model engine.
 
   •	We've optimized the NextGen Forcings Engine source code within the BMI to include I/O functionality for producing netcdf forcing files across any domain configuration (gridded, hydrofabric, unstructured) and also clear out data production within its scratch directory once the BMI execution is complete. 
+
+  •	**2026 Update:** The pytest suite exercises selected hydrofabric configurations. Current coastal workflows use the gridded discretization. The unstructured discretization has not been run with the latest NextGen/NWM v4 stack.
 
 
 # NextGen Forcings Engine Initialization Phase Workflow Overview
@@ -102,11 +118,17 @@
  - ./NWM_Params/: An empty sub-directory that will eventually contain supporting climatology files that will support implementing various bias calibration and downscaling technqius that are only associated with the original WRF-Hydro domain (aka NOAH-OWP Modular).
  - ./Unit_Test_Output/: An sub-directory that is essentially the current scratch directory setup within each of the config.yml files to temporary place I/O commands and the log file of the progress of the NextGen Forcings Engine
 
+**2026 Update:** The `BMI_NextGen_Configs/` and `NextGen_Domains/` descriptions above do not represent current tested support, and `Unit_Test_Output/` no longer exists.
+
 # About
-This is an implementation of a Python-based model that fulfills the Python language BMI interface and can be used in the Framework. It is intended to serve as a control for testing purposes, freeing the framework from dependency on any real-world model in order to test BMI related functionality.
+~~This is an implementation of a Python-based model that fulfills the Python language BMI interface and can be used in the Framework. It is intended to serve as a control for testing purposes, freeing the framework from dependency on any real-world model in order to test BMI related functionality.~~
+
+**2026 Update:** This is the BMI implementation of the NextGen Forcings Engine used by the current NextGen/NWM v4 stack, not a control model. See [tests/README.md](../tests/README.md) for the current golden-file pytest suite and test coverage.
 
 ## Test the complete BMI functionality
-`python run_bmi_unit_test.py`
+~~`python run_bmi_unit_test.py`~~
+
+**2026 Update:** See [tests/README.md](../tests/README.md) for the current golden-file pytest suite and test coverage.
 
 ## Run the BMI model in a standalone mode
 `python run_bmi_model.py`

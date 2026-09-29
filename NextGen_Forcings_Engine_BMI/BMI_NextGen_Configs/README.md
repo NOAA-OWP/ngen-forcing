@@ -1,5 +1,15 @@
 # NextGen Forcings Engine Forcing Engine Configuration File
 
+## 2026 Update
+
+**WARNING:** As of September 2026, many aspects of this file may be outdated relative to the latest NextGen/NWM v4 stack, but this file has been kept mostly intact for posterity.
+
+**2026 Update:** The templates in [config_templates/](config_templates/) are consumed by the NextGen/NWM v4 stack through [`nwm-msw-mgr`](https://github.com/NGWPC/nwm-msw-mgr). The older regional example configuration files were last updated on September 4, 2024 and have not been tested in the NextGen/NWM v4 stack.
+
+See the top-level repository [README.md](../../README.md), [INSTALL.md](../../INSTALL.md), and [DOCKER.md](../../DOCKER.md) for the latest information.
+
+## Original Content
+
 Input options to the forcing engine include:
 1. Choices for input forcing files to use.
 2. Options for specifying BMI start time and forecast intervals for input files.
@@ -141,6 +151,8 @@ Specify the optional land spatial metadata file. If found, coordinate projection
 This tells the NextGen Forcings Engine BMI which grid type the engine is initalizing as a BMI instance. This is a required field and the proper string values should be "gridded", "hydrofabric", or "unstructured".
 - Example- GRID_TYPE: "gridded"
 
+**2026 Update:** The pytest suite exercises selected hydrofabric configurations. Current coastal workflows use the gridded discretization. The unstructured discretization has not been run with the latest NextGen/NWM v4 stack.
+
 ### LONVAR
 This variable is the naming convention of the longitude variable within the "GeogridIn" file the user has specified. Variable naming convention ONLY for gridded domain configurations. This is required so the NextGen Forcings Engine BMI can dyanmically initialize the domain geogrid as an ESMF regridding object. In the case for "gridded" domain configuration options and a user specifying downscaling options while only specifying a height variable feature on the grid, this netcdf variable (LONVAR) is then EXPECTED to contain a netcdf metadata attribute called "dx" that specifies the grid spacing in the longtiudinal direction. Otherwise, it will throw an error and not be able to calculate the slope and tilt of each grid cell. 
 - Example- LONVAR: "XLONG_M"
@@ -281,6 +293,7 @@ Choose a set of supplemental precipitation file(s) to layer into the final LDASI
 12. CONUS Stage IV NWS Precip
 13. MRMS PrecipFlag precipitation classification file
 14. Custom Frequency Supplementary Precipitation product (sub-hourly precip)
+15. NBM Puerto Rico
 - Example- SuppPcp: [1, 5, 13]
 
 ### SuppPcpForcingTypes
