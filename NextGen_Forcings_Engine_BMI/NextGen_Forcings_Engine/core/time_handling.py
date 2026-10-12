@@ -2790,23 +2790,23 @@ def find_hourly_mrms_radar_neighbors(
     elif supplemental_precip.keyValue in [2, 5, 6, 10]:
         tmp_file1 = (
             f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass2_00.00/"
-            f"{date_path1}/MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path1}"
+            f"MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path1}"
             f"-{hour1}0000{supplemental_precip.file_ext}{gz_ext}"
         )
         tmp_file2 = (
             f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass2_00.00/"
-            f"{date_path2}/MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path2}"
+            f"MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path2}"
             f"-{hour2}0000{supplemental_precip.file_ext}{gz_ext}"
         )
         if not (os.path.isfile(tmp_file1) or os.path.isfile(tmp_file2)):
             tmp_file1 = (
                 f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass1_00.00/"
-                f"{date_path1}/MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path1}"
+                f"MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path1}"
                 f"-{hour1}0000{supplemental_precip.file_ext}{gz_ext}"
             )
             tmp_file2 = (
                 f"{supplemental_precip.inDir}/MultiSensor_QPE_01H_Pass1_00.00/"
-                f"{date_path2}/MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path2}"
+                f"MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path2}"
                 f"-{hour2}0000{supplemental_precip.file_ext}{gz_ext}"
             )
     else:
