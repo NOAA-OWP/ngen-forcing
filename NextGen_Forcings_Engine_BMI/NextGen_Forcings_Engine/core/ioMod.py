@@ -348,7 +348,7 @@ class OutputObj:
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
 
-                if ConfigOptions.project == "noaa_owp":
+                if ConfigOptions.project == "noaa_owp" and ConfigOptions.grid_type == "hydrofabric":
                     # Create a time variable
                     try:
                         self.idOut.createVariable('Time', 'double', ('catchment-id','time'))
@@ -1024,7 +1024,7 @@ class OutputObj:
                 # Populate time variables
                 dEpoch = datetime.datetime(1970, 1, 1)
                 dtValid = ConfigOptions.current_time - dEpoch
-                if ConfigOptions.project == "noaa_owp":
+                if ConfigOptions.project == "noaa_owp" and ConfigOptions.grid_type == "hydrofabric":
                     idOut.variables["Time"][:,int(ConfigOptions.bmi_time_index)] = int(
                         dtValid.days * 24.0 * 60
                     ) + int(math.floor(dtValid.seconds / 60.0))
