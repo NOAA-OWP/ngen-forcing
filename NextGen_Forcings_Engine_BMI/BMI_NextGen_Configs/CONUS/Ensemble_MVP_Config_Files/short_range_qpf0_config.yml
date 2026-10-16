@@ -11,6 +11,7 @@ SubOutputHour: 0
 SubOutFreq: 0
 ScratchDir: "./Scratch/Short_Range_QPF0"
 RegridWeightsDir: "./Scratch/Short_Range_QPF0"
+OutDir: "./Scratch/Short_Range_QPF0/NextGen_Output"
 Output: 1
 compressOutput: 0
 floatOutput: 0

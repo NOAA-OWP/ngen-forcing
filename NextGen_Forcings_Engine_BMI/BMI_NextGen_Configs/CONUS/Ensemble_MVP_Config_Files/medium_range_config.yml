@@ -11,6 +11,7 @@ SubOutputHour: 120
 SubOutFreq: 180
 ScratchDir: "./Scratch/Medium_Range"
 RegridWeightsDir: "./Scratch/Medium_Range"
+OutDir: "./Scratch/Medium_Range/NextGen_Output"
 Output: 1
 compressOutput: 0
 floatOutput: 0

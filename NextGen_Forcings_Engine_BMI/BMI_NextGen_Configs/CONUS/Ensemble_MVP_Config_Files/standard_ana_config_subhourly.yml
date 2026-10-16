@@ -11,6 +11,7 @@ SubOutputHour: 0
 SubOutFreq: 0
 ScratchDir: "./Scratch/AnA_SubHourly"
 RegridWeightsDir: "./Scratch/AnA_SubHourly"
+OutDir: "./Scratch/AnA_SubHourly/NextGen_Output"
 Output: 1
 compressOutput: 0
 floatOutput: 0

@@ -960,7 +960,7 @@ class NextGen_Forcing_Engine_BMI_model(Bmi):
                     + ".nc"
                 )
                 self._output_obj.outPath = os.path.join(
-                    self._job_meta.scratch_dir, filename
+                    self._job_meta.OutDir, filename
                 )
 
             self._output_obj.init_forcing_file(

@@ -69,6 +69,7 @@ class ConfigOptions:
         self.sub_output_hour = None
         self.sub_output_freq = None
         self.scratch_dir = None
+        self.OutDir = None
         self.useCompression = 0
         self.useFloats = 0
         self.num_output_steps = None
@@ -617,6 +618,23 @@ class ConfigOptions:
             err_out_screen(
                 "Please choose a Forcing Output value of 0 (No output) or 1 (output)."
             )
+
+        # Read in Output directory pathway if specified, otherwise default to Scratch directory
+        try:
+            self.OutDir = cfg_bmi["OutDir"]
+        except configparser.NoOptionError as e:
+            self.OutDir = self.scratch_dir
+        except ValueError as e:
+            err_out_screen(
+                "Improper OutDir specified in the configuration file.", e
+            )
+        os.makedirs(self.OutDir, exist_ok=True)
+
+        # Flag for logging statement and to be specified and create directory if user requests a forcing file output
+        if self.forcing_output == 1:
+            os.makedirs(self.OutDir, exist_ok=True)
+            LOG.debug(f"Output directory pathway for NextGen forcings file: {self.OutDir}")
+
 
         # Read AnA flag option
         try:
