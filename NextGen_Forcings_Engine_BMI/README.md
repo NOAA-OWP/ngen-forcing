@@ -1,118 +1,197 @@
-# NextGen Forcings Engine Dependencies
-•	Please see detailed description of Python environmental dependencies and packages within the pyproject.toml file in the root of this directory, or as specified within the requirements.txt or environment.yml file.
+# NextGen Forcings Engine BMI Overview
 
-•	Install wgrib2 NCAR tool (Download and compile wgrib2 executable from NCAR (https://github.com/NOAA-EMC/wgrib2). Once you compile the wgrib2 executable and shared libraries, then you can either link the Linux variable “WGRIB2” to the wgrib2 executable (export WGRIB2=/pathway/to/wgrib2_executable) OR install the pywgrib2 Python module as described here (https://www.cpc.ncep.noaa.gov/products/wesley/wgrib2/pywgrib2_s_install.html). Either method will work for the NextGen Forcings to utilize the wgrib2 tool internally to convert wgrib2 files into netcdf files.   
+The **NextGen Forcings Engine BMI** workflow is a meteorological forcing provider for the NextGen Water Resources Modeling Framework. It can be integrated directly as a supporting Basic Model Interface (BMI) forcing provider within a given NextGen formulation or executed as a standalone workflow to produce NextGen-compatible forcing files (NetCDF4 or catchment CSV files).
 
-•	NOAA RDHPCS Hera cluster recommended Rocky8 modules required to link the NextGen Forcings Engine python environment and its MPI communicator to cluster compute nodes/cpus:  
-  1. intel/2022.1.2
-  2. impi/2022.1.2
-  3. netcdf-hdf5parallel/4.7.4
-  4. Any ESMF version >= 8.1.0 (contains ESMPy python bindings to wrap with the module installation). Ensure to manually install your own intel dependencies within your anaconda environment that will be properly linked to your ESMF libraries.
+This application streamlines forcing file production for all National Water Model (NWM) v3.1 operational configurations across gridded domains, unstructured meshes, and the NextGen hydrofabric geopackage.
 
-# Steps for directly installing the NextGen Forcings Engine onto your own local Python environment using Anaconda (no supercomputer implementation)
-2. Execute the following command to create a new Python environment containing all required NextGen Forcings Engine dependencies listed within the .yml file, assuming you're already in the same directory as the environment.yml file located in this directory: conda env create --name NextGen_Forcings_Engine --file=environments.yml
+---
 
-# Steps for Installing the NextGen Forcings Engine on the RDHPCS Hera Cluster with ESMF Library Dependencies
-1.	You will first need to load the ESMF libraries precompiled on the Hera cluster, followed by its respective intel MPI compilers that were used to compile the ESMF code on the supercomputer. Otherwise, allow the anaconda environment installer to build/link intel libraries to your Python environment for non-supercomputer clusters. The following options below are loading the correct compilers up on the RDHPCS Hera Cluster:
-• module load intel/2022.1.2
-• module load impi/2022.1.2
-• module load netcdf-hdf5parallel/4.7.4
-• export FC=mpiifort, export CXX=mpiicpc, export CC=mpiicc
+## Workflow Execution Pipeline
 
-3.	Download and install and ESMF version release >= 8.1.0 from the GitHub repository (https://github.com/esmf-org/esmf). Instructions below highlight method to manually install and link ESMF libraries to intel libraries on a given supercomputer cluster.
-  • unzip esmf zipped file downloaded from the GitHub repository, cd into esmf-release-VERSION directory.
-  • export ESMF_DIR=/pathway/to/esmf-release-VERSION
-  • export ESMF_COMPILER=intel
-  • export ESMF_COMM=intelmpi
-  • export ESMF_OPENMP=ON
-  • export netcdf variables to force ESMF to build with netcdf capabilities (export ESMF_NETCDF=”split”, export ESMF_NETCDF_INCLUDE=$NETCDF_INCLUDE_PATHWAY, export ESMF_NETCDF_LIBPATH=$NETCDF_LIB_PATHWAY,export ESMF_NETCDF_LIBS="-lnetcdff -lnetcdf")
-  • gmake
-  • gmake install
-  • gmake installcheck
-
-4.	*** Need wgrib2 tool as well **** Download and  wgrib2 executable from GitHub (https://github.com/NOAA-EMC/wgrib2),
-  • Unzip the wgrib2 tar ball, go into directory and edit "CMakeLists.txt" file and include USE_NETCDF4=ON, BUILD_SHARED_LIB=ON options
-  • export CC=gcc; FC=gfortran
-  • follow cmake build instructions as stated in the GitHub repository README.md file
-  • export WGRIB2=/pathway/to/executable (or compile your anaconda environment with pywgrib2_s python module using instructions here https://www.cpc.ncep.noaa.gov/products/wesley/wgrib2/pywgrib2_s_install.html)
-
-7. Install a new Python environment to link the intel (if you've just compiled wgrib2 executable, reload your compiler pathways as shown here export FC=mpiifort, export CXX=mpiicpc, export CC=mpiicc):
-  • conda create -n ngen_engine -c conda-forge python numpy pandas bmipy pyyaml
-  • conda activate ngen_engine (this will load the python and pip executables, which will be used to install Hera precompiled libraries).
-6.	Install mpi4py python libraries using pip install that will configure the mpi4py library to the Hera intel compilers:
-  • pip install --no-cache-dir mpi4py”
-8.	Install python “setuptools” to properly configure the correct python setup tools needed to setup and install ESMF packages for the anaconda environment.This step is only necessary if you are manually installing/linking ESMF libraries to your Python environment on a supercomputer:
-  • pip install setuptools==58.2.0 (Only if you're using the earlier versions of ESMF (8.1.0), otherwise not likely needed to build the ESMF Python module
-9.	 Install netcdf4 libraries to be able to load NWM domain files and meteorological datasets to execute the NWMv3.0 Forcings Engine: 
-  • pip install --no-cache-dir netCDF4
-10.	Install scipy libraries to load up interpolation methods that are utilized within the NextGen Forcings Engine:
-  • pip install scipy
-11.	cd to esmf-release-VERSION/src/addon/ESMPy directory. This is where the setup.py python script is located to install ESMF libraries onto your anaconda environment. Execute the following steps to link the ESMPy Python module to your anaconda environment:
-  • Export ESMFMKFILE=/pathway/to/directory/esmf-release-8.1.0/lib/libO/Linux.intel.64.intel.default/esmf.mk
-  • pip install . (earlier versions of ESMF (8.1) have different instructions on compiling the ESMF Python module and should follow accordingly based on their own Python documentation steps)
-12.	ESMF packages should be properly installed and linked to the intel compiler libraries for MPI capabilities. Open a python command line and “import ESMF” to make sure that the ESMF libraries were properly install on the anaconda environment. If it succeeds, then you should be good to go!
-
-# NextGen Forcings Engine Basic Model Interface Setup and Execution
-1.	Within your python environment, make sure to install the “bmipy” and “yaml” libraries to enable BMI functionality for the NextGen Forcings Engine to utilize. 
-2.	Within the “NextGen_Forcings_Engine_BMI” directory, there is a sub-directory called “BMI_NextGen_Configs” that contains all the BMI configuration files needed for a Medium range forecast ran by GFS that would support a gridded model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/Gridded/config.yml), an unstructured mesh coastal model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/gridded/config.yml), and a hydrofabric unstructured mesh ((./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/hydrofabric/config.yml) as a supported domain to extract regridded forcings in a BMI-complaint fashion. Copy over one of those config.yml files to the “NextGen_Forcings_Engine_BMI” main directory for BMI execution of the NextGen Forcings Engine. Inside each config.yml contains a set of standard NWMv3.0 Forcing Engine variables that allow a given user to utilize a variety of methods, which are further described in the “./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/README.md” file.
-3.	To test out the NextGen Forcings Engine BMI functionality, please see the “./NextGen_Forcings_Engine_BMI/README.md” file that highlights the utility of each of the BMI Python scripts as well as supporting sub-directories contained within the repository. 
-
-# Overview bullet points for modifying the original NWM Forcings Engine into a BMI complaint NextGen Forcings Engine capable of handling any domain types
-  •	To streamline the NWMv3.0 Forcings engine into a Basic Model Interface application, we’ve had to initialize the BMI model using the same approach highlighted in the “genForcing.py” module and then directly reconfigure the forecast module (forecastMod.py) workflow to streamline the ability to update and produce gridded forcings for the WRFHydro domain based on a specified time stamp within the standard BMI functionality (“model_update_until”). This is all completed within the “model.py” module, which essentially mimics the “forecastMod.py” module within the “core” directory as a BMI-compliant module. 
-
-  •	Once source code modifications were implemented, we were able to demonstrate the ability for the NextGen Forcings Engine to advertise gridded and unstructured mesh forcings back to the NextGen model engine.
-
-  •	We've optimized the NextGen Forcings Engine source code within the BMI to include I/O functionality for producing netcdf forcing files across any domain configuration (gridded, hydrofabric, unstructured) and also clear out data production within its scratch directory once the BMI execution is complete. 
+```text
+[ config.yml ] 
+      │
+      ▼
+[ ESMF Mesh Production (Target NextGen Hydrofabric / Domain) ]
+      │
+      ▼
+[ Forcing File Download (Based on NWMv3.0 Operational Config) ]
+      │
+      ▼
+[ ESMF Bilinear Regridding (Grid Cells, Nodes, Elements) ]
+      │
+      ├──► NextGen-Compatible Lumped Forcing Files (NetCDF or Catchment CSVs)
+      └──► BMI Advertisement of Regridded Output Fields (via Catchment IDs)
+```
 
 
-# NextGen Forcings Engine Initialization Phase Workflow Overview
-1.	 Read in NWM configuration file (config.py): Initialize “ConfigOptions” class, read in configuration file and assign respective class variables directory pathways, configuration type, and user input/output options.
-2.	Read in “nwm_version” and “nwm_config” arguments and assign class variables for output directory information with Log file and output files (forcing engine version and operational configuration used for script execution). 
-3.	Initialize MPI communications (parallel.py) class variables and then assign the MPI information (MPI_COMM_WORLD) for class variables (MPI rank, MPI size).
-4.	Initialize WRF-Hydro geospatial object (geoMod.py), which contains class information about the modeling domain, local processor grid boundaries, and ESMF grid objects/fields to be used in regridding. The domain netcdf data is first opened, reads in coordinates and grid spacing, broadcasts data to processors which can then initialize their ESMF grid, and then reads internal domain netcdf data (including calculating slope grids) to be scattered accordingly to processors within MPI communicator.
-5.	The WRF-Hydro geospatial object then reads in coordinate reference system/coordinates geospatial metadata and coordinates ONLY to main process (rank 0), which can be used for netcdf output files later on when they are created for the given user. 
-6.	Initializes output object (ioMod.py), which creates class variables and “local slabs” to hold output grids for each given processor (ny_local, nx_local) as well as initializing the output netcdf file fields if the user requested the regridded output.
-7.	Initializes input object (forcingInputMod.py) input forcing classes. These objects will contain information about our source products (I.E. data type, grid sizes, etc). Information will be mapped based on options specified by the user. In addition, input ESMF grid objects will be created to hold data for downscaling and regridding purposes. Essentially, each processor will initialize their own empty arrays for forcings variables to get regridded/filled and then bias correct/downscale based on the given operational configuration. 
-8.	If we have a specified supplementary precipitation dataset for a given operational configuration, then we must initialize the supplementary precip (suppPrecipMod.py) class, which will process the precipitation dataset configurations, its regridding technique, and the file type/variable inputs for a given supplementary dataset.
-9.	With all classes initialized for the Forcing Engine, we can now call the BMI NextGen Forcings Engine model (model.py) to process the operational configuration and forecast data into regridded hourly output files configured to the NWM domain coordinate reference system and metadata.
-# NextGen Forcings Engine Workflow to Process Operational Forecast Data Overview
-1.	If user selected supplementary precipitation option for forcing dataset, then the script calls the module to provide disaggregation functionality (dissaggregateMod.py). This module reads in user configuration options for the supplementary precipitation data and then determines whether or not if the precipitation data is hourly or 6-hourly intervals. If the data is indeed 6-hourly accumulated precipitation, then the module will return the disaggregate function, which will essentially read the data and interpolate the precipitation data down to hourly intervals and set the forcing precipitation input array for ESMF regridding in the following steps.
-2.	Calculate forecast cycle number, create output forecast directory and log file for forecast cycle (if needed) and configure AnA cycle for look back period based on operational configuration and current forecast cycle time (if needed).
-3.	Loop through each output timestep
-  a.	Reset final grids to missing values, get current timestep, output timestep, and previous timestep as well as operational configuration flags.
-  b.	Loop over each of the input forcing specified, find the previous and next input cycle files, and regrid the forcing variable to the final output grids for a given timestep (forcingInputMod.py). For timesteps that require interpolation, two sets of input forcing grids will be regridded if we have come across new files and the process flag has been reset (regrid.py)
-  c.	The given grib2 file is converted to a netcdf file and then regridded based on the predefined ESMF object for the NWM grid. Precipitation data is then converted from average precipitation rates to instantaneous precipitation rates for a given dataset through time interpolation objects (time_handling.py). Set any pixel cells outside the input domain to the global missing value.
-  d.	Run temporal interpolation on the grids down to the NWM hourly forcing scale required, followed by running bias correction and downscaling grid objects respectively if applicable for a given operational dataset. 
-  e.	Layer in regridded forcings for the given meteorological produce to expected output netcdf format and file configuration.
-  f.	If there is a supplemental precipitation dataset available, then calculate the neighboring precipitation files to use (previous, next) for the given output timestep, regrid the supplemental precipitation data based on its ESMF regrid object, call “disaggregate_fun” (dissagregateMod.py) to disaggregate 6hr precip data to 1hr precip data (if necessary), run temporal interpolation on the grids, and relayer (replace) precipitation forcing output on the netcdf output object already generated for given timestep.
-4.	Once the forecast cycle has been completed; close the log file and loop through the next forecast cycle number if necessary for given operational configuration. 
-5.	If forecast cycle is complete then the NWMv3.0 Forcings Engine finalizes the log file and shuts down the MPI communications. 
+## Component Directories
 
-# Testing BMI Python modules.
- - ./NextGen_Forcings_Engine/model.py: This file is the "NextGen Forcings Engine Driver" it takes inputs and gives an output
- - ./NextGen_Forcings_Engine/bmi_model.py: This is the Basic Model Interface that talks with the model. This is the NextGen Forcings Engine BMI class.
- - run_bmi_model.py: This is a file that mimics the framework, in the sense that it initializes the model with the BMI function. Then it runs the model with the BMI Update function, etc.
- - run_bmi_unit_test.py: This is a file that runs each BMI unit test to make sure that the BMI is complete and functioning as expected.
- - config.yml: This is a configuration file that the BMI reads to set inital_time (initial value of current_model_time) and all the required variables needed to drive the NextGen Forcings Engine.
- - environment.yml: Environment file with the required Python libraries needed to run the model with BMI and the NextGen Forcings Engine. Create the environment with this command: `conda env create -f environment.yml`, then activate it with `conda activate bmi_test`
- - slurm.job: Example Python submission script for a slurm job manager that is utilized to execute a MPI Python script (NextGen Forcings Engine) on the NOAA RDHPCS Hera supercomputer.
- - ./NextGen_Forcings_Engine/core/: The sub-directory containing all the support Python modules required to execute the NextGen Forcings Engine driver within model.py script.
- - ./BMI_NextGen_Configs/: A sub-directory containing all the current config.yml BMI file setupts that will allow a a user to driver the NextGen BMI Forcings Engine for a gridded domain, a coastal-model unstructured mesh domain, and a NextGen hydrofabric (VPU 06) unstructured mesh domain. 
- - ./NextGen_Domains/: A sub-directory that contains a sample domain geogrid file for a gridded domain, a coastal-model unstructured mesh domain, and a NextGen hydrofabric (VPU 06) unstructured mesh domain that can all be utitlized currently to regrid forcings for a Medium Range forecast simulation driver by GFS forcings.
- - ./NWM_Params/: An empty sub-directory that will eventually contain supporting climatology files that will support implementing various bias calibration and downscaling technqius that are only associated with the original WRF-Hydro domain (aka NOAH-OWP Modular).
- - ./Unit_Test_Output/: An sub-directory that is essentially the current scratch directory setup within each of the config.yml files to temporary place I/O commands and the log file of the progress of the NextGen Forcings Engine
+| Directory | Description |
+| :--- | :--- |
+| `Forcing_Extraction_Scripts` | Contains domain-specific scripts (CONUS, Alaska, Puerto Rico, Hawaii) to download required meteorological forcing data products from AWS S3 buckets or NOMADS servers for each regional NWM v3.1 setup. |
+| `ESMF_Mesh_Domain_Configuration_Production` | Utility scripts focused on converting raw model domain file formats (NextGen Hydrofabric Geopackages, D-FlowFM, SCHISM) into ESMF-mesh-compliant NetCDF files. |
+| `BMI_NextGen_Configs/` | Contains `config.yml` templates pre-configured for NWM v3.1 operational runs across gridded, coastal unstructured, and hydrofabric domains. |
+| `NextGen_Domains/` | Contains sample domain geogrid files for gridded domains, coastal unstructured meshes, and the NextGen Hydrofabric (VPU 06). |
+| `NWM_Params/` | Directory designated for supporting climatology files used in bias calibration and downscaling routines. |
+| `NextGen_Forcings_Engine/` | Directory harboring the NextGen Forcings Engine BMI code (`bmi_model.py`), model implementation (`model.py`), and supporting Python tools for the Forcing Engine. |
+| `NextGen_Forcings_Engine/core/` | Core Python supporting modules required by `model.py` to drive regridding, interpolation, and I/O. |
 
-# About
-This is an implementation of a Python-based model that fulfills the Python language BMI interface and can be used in the Framework. It is intended to serve as a control for testing purposes, freeing the framework from dependency on any real-world model in order to test BMI related functionality.
+---
 
-## Test the complete BMI functionality
-`python run_bmi_unit_test.py`
+## Setup and Execution Guide
 
-## Run the BMI model in a standalone mode
-`python run_bmi_model.py`
+1. **Construct Required Python Environment**
+   Navigate to the [Environment Setup](#environment-setup) within this README.md file and follow instructions accordingly. 
 
-## Sample output
-'model time', 'U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT' 
-3600 -0.34978889998563434 1.9576997889275944 353.8881030867496 635.9115803301148 299.8541540030717 0.01014856288865672 101253.80092868667 0.0
-7200 -0.55664622087895 1.7230866051531413 351.70806444209256 446.07219911115914 299.7995647600879 0.01005461030680388 101259.55711493774 0.0
-10800 -0.2516353004284137 1.4639377367413153 347.3662126755073 221.91463406286712 299.4248073664293 0.01016205978429921 101303.53098399537 0.0
+1. **Configure Execution Options**:
+   Navigate to `./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files` and select the appropriate template for your domain and NWM v3.1 configuration. Copy the selected `config.yml` into the working directory containing `bmi_wrapper.py`.
+
+2. **Execute the BMI Workflow**:
+   Run the driver script via `mpirun` specifying the path to your configuration file, output directory, and total MPI processes:
+
+   ```bash
+   mpirun -n 1 python bmi_wrapper.py ./short_range_config.yml -output_path ./Scratch/Short_Range -np 2
+
+* **`./short_range_config.yml`**: Pathway to the target configuration file.
+   * **`-output_path ./Scratch/Short_Range`**: Directory path for downloaded forcing inputs and regridded outputs.
+   * **`-np 2`**: Number of internal MPI worker processes allocated to the Forcings Engine.
+
+---
+
+## Core System Architecture
+
+### 1. Initialization Phase (`model.py`)
+1. **Option Parsing (`config.py`)**: Reads the input configuration file, initializes `ConfigOptions`, and sets operational parameters, directory pathways, and operational flags.
+2. **Execution Metadata**: Captures operational arguments (`nwm_version`, `nwm_config`) and sets logging pathways.
+3. **Parallel Context (`parallel.py`)**: Sets up MPI communicator ranks and sizes (`MPI_COMM_WORLD`).
+4. **Domain Processing (`geoMod.py`)**: Opens the modeling domain NetCDF/Geopackage, reads spatial coordinates and grid spacing, and broadcasts local processor grid boundaries and ESMF grid objects to worker ranks.
+5. **Coordinate Reference Metadata**: Rank 0 extracts global CRS and geospatial metadata needed for NetCDF output generation.
+6. **I/O Grid Allocation (`ioMod.py`)**: Allocates local slabs (`ny_local`, `nx_local`) on each rank to hold output array slices and initializes output NetCDF dataset structures.
+7. **Input Class Allocation (`forcingInputMod.py`)**: Maps source data product characteristics (grid size, variables, projection) and creates ESMF input grid/mesh objects for downscaling and regridding.
+8. **Supplemental Precip Setup (`suppPrecipMod.py`)**: Initializes supplemental precipitation dataset variables, disaggregation flags, and input ESMF regrid objects if enabled.
+9. **BMI Execution Invocation**: Passes configured classes to `model.py` to drive time-stepping execution.
+
+### 2. Operational Forecast Regridding Loop
+1. **Supplemental Disaggregation Check (`disaggregateMod.py`)**: If supplemental 6-hourly accumulation data is supplied, disaggregates fields down to 1-hourly intervals prior to regridding.
+2. **Forecast Cycle Configuration (`time_handling.py`)**: Computes current cycle numbers, creates output forecast directories, and configures lookback windows for Analysis and Assimilation (AnA) runs.
+3. **Timestep Processing Loop**:
+   * **Reset Grids**: Re-initializes destination arrays to missing values (`globalNdv`).
+   * **Input Regridding (`forcingInputMod.py` / `regrid.py`)**: Identifies surrounding input cycle files, converts incoming GRIB2 files to NetCDF via `$WGRIB2`, and regrids forcing variables using predefined ESMF bilinear objects.
+   * **Unit Conversion & Masking**: Converts average precipitation rates to instantaneous rates and sets unmapped out-of-domain cells to missing values.
+   * **Post-Processing (`timeInterpMod.py` / `bias_correction.py` / `downscale.py`)**: Applies temporal interpolation to the target timestep, followed by bias correction and terrain downscaling routines where applicable.
+   * **Supplemental Layering (`layeringMod.py` / `suppPrecipMod.py`)**: Regrids supplemental precipitation fields, applies temporal disaggregation/interpolation, and overlays (relayers) the result onto the output object.
+4. **Finalization (`ioMod.py`)**: Closes dataset handles, writes output NetCDF/CSV files or advertises fields via BMI pointers, purges scratch directories, and terminates the MPI communicator.
+
+---
+
+## Key Workflow Files
+
+* **`./NextGen_Forcings_Engine/bmi_model.py`**: The main BMI class definition exposing standard BMI control endpoints.
+* **`./NextGen_Forcings_Engine/model.py`**: The core execution driver that controls data movement and transformation logic.
+* **`bmi_wrapper.py`**: The primary entry-point script that automates ESMF mesh generation, forcing extraction, and execution.
+* **`run_bmi_model.py`**: Lightweight script demonstrating standalone initialization, update, and finalization calls.
+* **`run_bmi_unit_test.py`**: Comprehensive unit-test suite verifying BMI interface compliance.
+* **`environment.yml`**: Conda environment definition containing all library dependencies (ESMF, NetCDF4, PyProj, Dask, mpi4py).
+
+---
+
+## Environment Setup
+
+> [!IMPORTANT]  
+> **HPC System Notice:** Building this environment on HPC systems requires linking Python bindings (`mpi4py`, `netCDF4`, `ESMF`) against the cluster’s system-installed MPI and NetCDF libraries. Simple Conda binary installs will often fail or create runtime ABI conflicts.
+
+### Option 1: Standard Local Setup (Workstations / Single Nodes)
+For local testing or non-HPC Linux environments using standard Conda binaries:
+
+```bash
+conda env create -f environment.yml
+conda activate bmi_test
+```
+
+### Option 2: HPC System Setup (Module-Linked Build)
+
+On HPC systems (e.g., Slurm/PBS clusters), load the system compiler, MPI, and NetCDF modules before creating the environment to ensure `mpi4py` and `ESMF` build against the host interconnect.
+
+#### 1. Load System Modules
+Load your cluster's designated toolchain (adjust module names based on your cluster environment):
+
+```bash
+module purge
+module load gcc/11.x          # or intel/compiler
+module load openmpi/4.x       # or mpich / mvapich2 / cray-mpich
+module load netcdf-c/4.x
+module load netcdf-fortran/4.x
+```
+
+#### 2. Create Base Conda Environment
+Create a clean Conda environment containing the supporting Python packages (data manipulation, plotting, GIS, BMI interfaces) available via `conda-forge`. Crucially, we *exclude* `mpi4py`, `netCDF4`, `esmf`, and `esmpy` from this step, as they must be compiled against system libraries later.
+
+```bash
+# Create the base environment with core, non-compiled dependencies
+conda create -n bmi_test -c conda-forge \
+  python=3.10 \
+  numpy \
+  scipy \
+  pandas \
+  xarray \
+  dask \
+  zarr \
+  s3fs \
+  geopandas \
+  shapely \
+  pyproj \
+  cfgrib \
+  beautifulsoup4 \
+  matplotlib \
+  bokeh \
+  pyyaml \
+  ruamel.yaml \
+  python-dotenv \
+  bmipy
+
+# Activate the new environment
+conda activate bmi_test
+```
+
+#### 3. Compile `mpi4py` Against System MPI
+Build `mpi4py` from source using the system's active `mpicc` wrapper:
+
+```bash
+MPICC=$(which mpicc) pip install --no-binary mpi4py mpi4py
+```
+
+#### 4. Compile & Link Parallel NetCDF4 (`netcdf4-python`)
+Because the code base leverages parallel NetCDF I/O alongside MPI directives, `netCDF4` must be built from source against your HPC system's parallel-enabled NetCDF-C library (rather than using standard non-MPI Conda binaries):
+
+```bash
+# Point to your system's active NetCDF installation directory
+export NETCDF4_DIR=$NETCDF_ROOT   # Or path from: nc-config --prefix
+
+# Compile netCDF4 from source linking against system NetCDF + MPI
+NETCDF4_DIR=$NETCDF4_DIR pip install --no-binary netcdf4 netcdf4
+```
+
+#### 5. Build & Link ESMF (ESMPy)
+For proper parallel regridding, `esmpy` must be compiled or linked against the active system `ESMF` library build.
+
+##### If ESMF is pre-configured on your system:
+Load the module and install the Python bindings matching the system library version:
+
+```bash
+module load esmf
+pip install esmpy --no-deps
+```
+
+##### If ESMF is NOT installed or configured:
+If your cluster administrator has not provided a pre-built `esmf` module, you must install or compile the core C++/Fortran ESMF library first:
+
+* **Build from Source (Recommended for HPC performance):** Follow the official [ESMF Building and Installing Guide](https://earthsystemmodeling.org/docs/release/latest/ESMF_refdoc/node9.html) to build the library directly against your cluster's native MPI implementation and compiler suite. Once built, export the library path prior to installing `esmpy`:
+  ```bash
+  export ESMFMKFILE=/path/to/installed/esmf/lib/esmf.mk
+  pip install esmpy --no-deps
+```
+  
+*Note: Verify your build by confirming `python -c "import mpi4py, esmpy; print('MPI and ESMF loaded successfully')"` executes without library linking errors inside an interactive compute node (`srun` / `qsub`).*
+
+

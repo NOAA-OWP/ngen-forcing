@@ -12,7 +12,7 @@ from pathlib import Path
 import mpi4py
 import numpy as np
 
-import bmi_model  # This is the BMI that we will be running
+from NextGen_Forcings_Engine import bmi_model  # This is the BMI that we will be running
 
 # setup a "success counter" for number of passing and failing bmi functions
 # keep track of function def fails (vs function call)
@@ -36,7 +36,7 @@ def bmi_except(fstring):
         fail_count += 1
         fail_list.append(fstring)
 
-bmi=bmi_model.NWMv3_Forcing_Engine_BMI_model()
+bmi=bmi_model.NextGen_Forcing_Engine_BMI_model()
 
 print("\nBEGIN BMI UNIT TEST\n*******************\n");
 

@@ -1,13 +1,13 @@
-"""
-Temporal interpolation input forcings to the current output timestep.
-"""
+"""Temporal interpolation input forcings to the current output timestep."""
+
 import numpy as np
 
 from . import err_handler
 
 
-def no_interpolation(input_forcings,ConfigOptions,MpiConfig):
-    """
+def no_interpolation(input_forcings, ConfigOptions, MpiConfig):
+    """No temporal interpolation.
+
     Function for simply setting the final regridded fields to the
     input forcings that are from the next input forcing frequency.
     :param input_forcings:
@@ -15,32 +15,43 @@ def no_interpolation(input_forcings,ConfigOptions,MpiConfig):
     :param MpiConfig:
     :return:
     """
-    if(ConfigOptions.grid_type == 'gridded'):
-        # Check to make sure we have valid grids.
-        if input_forcings.regridded_forcings2 is None:
-            input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings[:,:,:] = input_forcings.regridded_forcings2[:,:,:]
-    elif(ConfigOptions.grid_type == 'unstructured'):
-        # Check to make sure we have valid grids.
-        if input_forcings.regridded_forcings2 is None:
-            input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings2[:,:]
-        # Check to make sure we have valid grids for elements.
-        if input_forcings.regridded_forcings2_elem is None:
-            input_forcings.final_forcings_elem[:, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings_elem[:,:] = input_forcings.regridded_forcings2_elem[:,:]
-    elif(ConfigOptions.grid_type == 'hydrofabric'):
-        # Check to make sure we have valid grids.
-        if input_forcings.regridded_forcings2 is None:
-            input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings2[:,:]
+    with np.errstate(invalid='ignore'):
+        if ConfigOptions.grid_type == "gridded":
+            # Check to make sure we have valid grids.
+            if input_forcings.regridded_forcings2 is None:
+                input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings[:, :, :] = input_forcings.regridded_forcings2[
+                    :, :, :
+                ]
+        elif ConfigOptions.grid_type == "unstructured":
+            # Check to make sure we have valid grids.
+            if input_forcings.regridded_forcings2 is None:
+                input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings[:, :] = input_forcings.regridded_forcings2[
+                    :, :
+                ]
+            # Check to make sure we have valid grids for elements.
+            if input_forcings.regridded_forcings2_elem is None:
+                input_forcings.final_forcings_elem[:, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings_elem[:, :] = (
+                    input_forcings.regridded_forcings2_elem[:, :]
+                )
+        elif ConfigOptions.grid_type == "hydrofabric":
+            # Check to make sure we have valid grids.
+            if input_forcings.regridded_forcings2 is None:
+                input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings[:, :] = input_forcings.regridded_forcings2[
+                    :, :
+                ]
 
-def no_interpolation_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
-    """
+
+def no_interpolation_supp_pcp(supplemental_precip, ConfigOptions, MpiConfig):
+    """No temporal interpolation for supplemental precipitation.
+
     Function for simply setting the final regridded supplemental precipitation
     to the supplemental precipitation grids from the next precip frequency that
     is available.
@@ -49,32 +60,42 @@ def no_interpolation_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
     :param MpiConfig:
     :return:
     """
-    if(ConfigOptions.grid_type == 'gridded'):
-        if supplemental_precip.regridded_precip2 is not None:
-            supplemental_precip.final_supp_precip[:,:] = supplemental_precip.regridded_precip2[:,:]
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip[:,:] = ConfigOptions.globalNdv
-    elif(ConfigOptions.grid_type == 'unstructured'):
-        if supplemental_precip.regridded_precip2 is not None:
-            supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip2[:]
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
-        if supplemental_precip.regridded_precip2_elem is not None:
-            supplemental_precip.final_supp_precip_elem[:] = supplemental_precip.regridded_precip2_elem[:]
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip_elem[:] = ConfigOptions.globalNdv
-    elif(ConfigOptions.grid_type == 'hydrofabric'):
-        if supplemental_precip.regridded_precip2 is not None:
-            supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip2[:]
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
+    with np.errstate(invalid='ignore'): 
+        if ConfigOptions.grid_type == "gridded":
+            if supplemental_precip.regridded_precip2 is not None:
+                supplemental_precip.final_supp_precip[:, :] = (
+                    supplemental_precip.regridded_precip2[:, :]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip[:, :] = ConfigOptions.globalNdv
+        elif ConfigOptions.grid_type == "unstructured":
+            if supplemental_precip.regridded_precip2 is not None:
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
+            if supplemental_precip.regridded_precip2_elem is not None:
+                supplemental_precip.final_supp_precip_elem[:] = (
+                    supplemental_precip.regridded_precip2_elem[:]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip_elem[:] = ConfigOptions.globalNdv
+        elif ConfigOptions.grid_type == "hydrofabric":
+            if supplemental_precip.regridded_precip2 is not None:
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
 
-def nearest_neighbor(input_forcings,ConfigOptions,MpiConfig):
-    """
+def nearest_neighbor(input_forcings, ConfigOptions, MpiConfig):
+    """Nearest neighbor temporal interpolation.
+
     Function for setting the current output regridded forcings to the nearest
     input forecast step.
     :param input_forcings:
@@ -84,7 +105,10 @@ def nearest_neighbor(input_forcings,ConfigOptions,MpiConfig):
     """
     # If we are running CFSv2 with bias correction, bypass as temporal interpolation is done
     # internally (NWM-only).
-    if ConfigOptions.runCfsNldasBiasCorrect and input_forcings.productName == "CFSv2_6Hr_Global_GRIB2":
+    if (
+        ConfigOptions.runCfsNldasBiasCorrect
+        and input_forcings.product_name == "CFSv2_6Hr_Global_GRIB2"
+    ):
         if MpiConfig.rank == 0:
             ConfigOptions.statusMsg = "Bypassing temporal interpolation routine due to NWM bias correction for CFSv2"
             err_handler.log_msg(ConfigOptions, MpiConfig)
@@ -98,64 +122,82 @@ def nearest_neighbor(input_forcings,ConfigOptions,MpiConfig):
     # and the next forecast output step.
     dtFromNext = ConfigOptions.current_output_date - input_forcings.fcst_date2
 
-    if(ConfigOptions.grid_type == 'gridded'):
+    if ConfigOptions.grid_type == "gridded":
         if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
             # Default to the regridded states from the next forecast output step.
             if input_forcings.regridded_forcings2 is None:
                 input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings[:,:,:] = input_forcings.regridded_forcings2[:,:,:]
+                input_forcings.final_forcings[:, :, :] = (
+                    input_forcings.regridded_forcings2[:, :, :]
+                )
         else:
             # Default to the regridded states from the previous forecast output
             # step.
             if input_forcings.regridded_forcings1 is None:
                 input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings[:,:,:] = input_forcings.regridded_forcings1[:,:,:]
-    elif(ConfigOptions.grid_type == 'unstructured'):
+                input_forcings.final_forcings[:, :, :] = (
+                    input_forcings.regridded_forcings1[:, :, :]
+                )
+    elif ConfigOptions.grid_type == "unstructured":
         if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
             # Default to the regridded states from the next forecast output step.
             if input_forcings.regridded_forcings2 is None:
                 input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings2[:,:]
+                input_forcings.final_forcings[:, :] = (
+                    input_forcings.regridded_forcings2[:, :]
+                )
         else:
             # Default to the regridded states from the previous forecast output
             # step.
             if input_forcings.regridded_forcings1 is None:
                 input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings1[:,:]
+                input_forcings.final_forcings[:, :] = (
+                    input_forcings.regridded_forcings1[:, :]
+                )
         if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
             # Default to the regridded states from the next forecast output step.
             if input_forcings.regridded_forcings2_elem is None:
                 input_forcings.final_forcings_elem[:, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings_elem[:,:] = input_forcings.regridded_forcings2_elem[:,:]
+                input_forcings.final_forcings_elem[:, :] = (
+                    input_forcings.regridded_forcings2_elem[:, :]
+                )
         else:
             # Default to the regridded states from the previous forecast output
             # step.
             if input_forcings.regridded_forcings1_elem is None:
                 input_forcings.final_forcings_elem[:, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings_elem[:,:] = input_forcings.regridded_forcings1_elem[:,:]
-    elif(ConfigOptions.grid_type == 'hydrofabric'):
+                input_forcings.final_forcings_elem[:, :] = (
+                    input_forcings.regridded_forcings1_elem[:, :]
+                )
+    elif ConfigOptions.grid_type == "hydrofabric":
         if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
             # Default to the regridded states from the next forecast output step.
             if input_forcings.regridded_forcings2 is None:
                 input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings2[:,:]
+                input_forcings.final_forcings[:, :] = (
+                    input_forcings.regridded_forcings2[:, :]
+                )
         else:
             # Default to the regridded states from the previous forecast output
             # step.
             if input_forcings.regridded_forcings1 is None:
                 input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
             else:
-                input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings1[:,:]
+                input_forcings.final_forcings[:, :] = (
+                    input_forcings.regridded_forcings1[:, :]
+                )
 
-def nearest_neighbor_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
-    """
+
+def nearest_neighbor_supp_pcp(supplemental_precip, ConfigOptions, MpiConfig):
+    """Nearest neighbor temporal interpolation for supplemental precipitation.
+
     Function for setting the current output regridded supplemental precipitation
     to the nearest supplemental precipitation input step.
     :param supplemental_precip:
@@ -163,61 +205,84 @@ def nearest_neighbor_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
     :param MpiConfig:
     :return:
     """
-    if supplemental_precip.regridded_precip2 is not None and supplemental_precip.regridded_precip1 is not None:
+    if (
+        supplemental_precip.regridded_precip2 is not None
+        and supplemental_precip.regridded_precip1 is not None
+    ):
         # Calculate the difference between the current ouptut timestep,
         # and the previous supplemental input step.
-        dtFromPrevious = ConfigOptions.current_output_step - supplemental_precip.pcp_date1
+        dtFromPrevious = (
+            ConfigOptions.current_output_step - supplemental_precip.pcp_date1
+        )
 
         # Calculate the difference between the current output timestep,
         # and the next supplemental input step.
         dtFromNext = ConfigOptions.current_output_date - supplemental_precip.pcp_date2
 
-        if(ConfigOptions.grid_type == 'gridded'):
+        if ConfigOptions.grid_type == "gridded":
             if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
                 # Default to the regridded states from the next forecast output step.
-                supplemental_precip.final_supp_precip[:,:] = supplemental_precip.regridded_precip2[:,:]
+                supplemental_precip.final_supp_precip[:, :] = (
+                    supplemental_precip.regridded_precip2[:, :]
+                )
             else:
                 # Default to the regridded states from the previous forecast output
                 # step.
-                supplemental_precip.final_supp_precip[:,:] = supplemental_precip.regridded_precip1[:,:]
-        elif(ConfigOptions.grid_type == 'unstructured'):
+                supplemental_precip.final_supp_precip[:, :] = (
+                    supplemental_precip.regridded_precip1[:, :]
+                )
+        elif ConfigOptions.grid_type == "unstructured":
             if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
                 # Default to the regridded states from the next forecast output step.
-                supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip2[:]
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
             else:
                 # Default to the regridded states from the previous forecast output
                 # step.
-                supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip1[:]
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip1[:]
+                )
             if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
                 # Default to the regridded states from the next forecast output step.
-                supplemental_precip.final_supp_precip_elem[:] = supplemental_precip.regridded_precip2_elem[:]
+                supplemental_precip.final_supp_precip_elem[:] = (
+                    supplemental_precip.regridded_precip2_elem[:]
+                )
             else:
                 # Default to the regridded states from the previous forecast output
                 # step.
-                supplemental_precip.final_supp_precip_elem[:] = supplemental_precip.regridded_precip1_elem[:]
-        elif(ConfigOptions.grid_type == 'hydrofabric'):
+                supplemental_precip.final_supp_precip_elem[:] = (
+                    supplemental_precip.regridded_precip1_elem[:]
+                )
+        elif ConfigOptions.grid_type == "hydrofabric":
             if abs(dtFromNext.total_seconds()) <= abs(dtFromPrevious.total_seconds()):
                 # Default to the regridded states from the next forecast output step.
-                supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip2[:]
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
             else:
                 # Default to the regridded states from the previous forecast output
                 # step.
-                supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip1[:]
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip1[:]
+                )
 
         else:
-            if(ConfigOptions.grid_type == 'gridded'):
+            if ConfigOptions.grid_type == "gridded":
                 # We have missing files.
                 supplemental_precip.final_supp_precip[:, :] = ConfigOptions.globalNdv
-            elif(ConfigOptions.grid_type == 'unstructured'):
+            elif ConfigOptions.grid_type == "unstructured":
                 # We have missing files.
                 supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
                 supplemental_precip.final_supp_precip_elem[:] = ConfigOptions.globalNdv
-            elif(ConfigOptions.grid_type == 'hydrofabric'):
+            elif ConfigOptions.grid_type == "hydrofabric":
                 # We have missing files.
                 supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
 
-def weighted_average(input_forcings,ConfigOptions,MpiConfig):
-    """
+
+def weighted_average(input_forcings, ConfigOptions, MpiConfig):
+    """Weighted average temporal interpolation for supplemental precipitation.
+
     Function for setting the current output regridded fields as a weighted
     average between the previous output step and the next output step.
     :param input_forcings:
@@ -226,7 +291,7 @@ def weighted_average(input_forcings,ConfigOptions,MpiConfig):
     :return:
     """
     # Check to make sure we have valid grids.
-    if(ConfigOptions.grid_type == 'gridded'):
+    if ConfigOptions.grid_type == "gridded":
         if input_forcings.regridded_forcings2 is None:
             input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
             return
@@ -234,7 +299,7 @@ def weighted_average(input_forcings,ConfigOptions,MpiConfig):
             input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
             return
     # Check to make sure we have valid grids.
-    elif(ConfigOptions.grid_type == 'unstructured'):
+    elif ConfigOptions.grid_type == "unstructured":
         if input_forcings.regridded_forcings2 is None:
             input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
             return
@@ -248,7 +313,7 @@ def weighted_average(input_forcings,ConfigOptions,MpiConfig):
             input_forcings.final_forcings_elem[:, :] = ConfigOptions.globalNdv
             return
     # Check to make sure we have valid grids.
-    elif(ConfigOptions.grid_type == "hydrofabric"):
+    elif ConfigOptions.grid_type == "hydrofabric":
         if input_forcings.regridded_forcings2 is None:
             input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
             return
@@ -257,32 +322,44 @@ def weighted_average(input_forcings,ConfigOptions,MpiConfig):
             return
     # If we are running CFSv2 with bias correction, bypass as temporal interpolation is done
     # internally (NWM-only).
-    if ConfigOptions.runCfsNldasBiasCorrect and input_forcings.productName == "CFSv2_6Hr_Global_GRIB2":
+    if (
+        ConfigOptions.runCfsNldasBiasCorrect
+        and input_forcings.product_name == "CFSv2_6Hr_Global_GRIB2"
+    ):
         if MpiConfig.rank == 0:
             ConfigOptions.statusMsg = "Bypassing temporal interpolation routine due to NWM bias correction for CFSv2"
             err_handler.log_msg(ConfigOptions, MpiConfig)
         return
 
-    if(ConfigOptions.grid_type == 'gridded'):
-
+    if ConfigOptions.grid_type == "gridded":
         # Calculate the difference between the current output timestep,
         # and the previous input forecast output step. Use this to calculate a fraction
         # of the previous forcing output to use in the final output for this step.
         dtFromPrevious = ConfigOptions.current_output_date - input_forcings.fcst_date1
-        weight1 = 1-(abs(dtFromPrevious.total_seconds())/(input_forcings.outFreq*60.0))
+        weight1 = 1 - (
+            abs(dtFromPrevious.total_seconds()) / (input_forcings.outFreq * 60.0)
+        )
 
         # Calculate the difference between the current output timesetp,
         # and the next forecast output step. Use this to calculate a fraction of
         # the next forcing output to use in the final output for this step.
         dtFromNext = ConfigOptions.current_output_date - input_forcings.fcst_date2
-        weight2 = 1-(abs(dtFromNext.total_seconds())/(input_forcings.outFreq*60.0))
+        weight2 = 1 - (
+            abs(dtFromNext.total_seconds()) / (input_forcings.outFreq * 60.0)
+        )
 
         # Calculate where we have missing data in either the previous or next forcing dataset.
-        ind1Ndv = np.where(input_forcings.regridded_forcings1 == ConfigOptions.globalNdv)
-        ind2Ndv = np.where(input_forcings.regridded_forcings2 == ConfigOptions.globalNdv)
+        ind1Ndv = np.where(
+            input_forcings.regridded_forcings1 == ConfigOptions.globalNdv
+        )
+        ind2Ndv = np.where(
+            input_forcings.regridded_forcings2 == ConfigOptions.globalNdv
+        )
 
-        input_forcings.final_forcings[:,:,:] = input_forcings.regridded_forcings1[:,:,:]*weight1 + \
-            input_forcings.regridded_forcings2[:,:,:]*weight2
+        input_forcings.final_forcings[:, :, :] = (
+            input_forcings.regridded_forcings1[:, :, :] * weight1
+            + input_forcings.regridded_forcings2[:, :, :] * weight2
+        )
 
         # Set any pixel cells that were missing for either window to missing value.
         input_forcings.final_forcings[ind1Ndv] = ConfigOptions.globalNdv
@@ -292,30 +369,45 @@ def weighted_average(input_forcings,ConfigOptions,MpiConfig):
         ind1Ndv = None
         ind2Ndv = None
 
-    elif(ConfigOptions.grid_type == 'unstructured'):
-
+    elif ConfigOptions.grid_type == "unstructured":
         # Calculate the difference between the current output timestep,
         # and the previous input forecast output step. Use this to calculate a fraction
         # of the previous forcing output to use in the final output for this step.
         dtFromPrevious = ConfigOptions.current_output_date - input_forcings.fcst_date1
-        weight1 = 1-(abs(dtFromPrevious.total_seconds())/(input_forcings.outFreq*60.0))
+        weight1 = 1 - (
+            abs(dtFromPrevious.total_seconds()) / (input_forcings.outFreq * 60.0)
+        )
 
         # Calculate the difference between the current output timesetp,
         # and the next forecast output step. Use this to calculate a fraction of
         # the next forcing output to use in the final output for this step.
         dtFromNext = ConfigOptions.current_output_date - input_forcings.fcst_date2
-        weight2 = 1-(abs(dtFromNext.total_seconds())/(input_forcings.outFreq*60.0))
+        weight2 = 1 - (
+            abs(dtFromNext.total_seconds()) / (input_forcings.outFreq * 60.0)
+        )
 
         # Calculate where we have missing data in either the previous or next forcing dataset.
-        ind1Ndv = np.where(input_forcings.regridded_forcings1 == ConfigOptions.globalNdv)
-        ind2Ndv = np.where(input_forcings.regridded_forcings2 == ConfigOptions.globalNdv)
-        ind1Ndv_elem = np.where(input_forcings.regridded_forcings1_elem == ConfigOptions.globalNdv)
-        ind2Ndv_elem = np.where(input_forcings.regridded_forcings2_elem == ConfigOptions.globalNdv)
+        ind1Ndv = np.where(
+            input_forcings.regridded_forcings1 == ConfigOptions.globalNdv
+        )
+        ind2Ndv = np.where(
+            input_forcings.regridded_forcings2 == ConfigOptions.globalNdv
+        )
+        ind1Ndv_elem = np.where(
+            input_forcings.regridded_forcings1_elem == ConfigOptions.globalNdv
+        )
+        ind2Ndv_elem = np.where(
+            input_forcings.regridded_forcings2_elem == ConfigOptions.globalNdv
+        )
 
-        input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings1[:,:]*weight1 + \
-            input_forcings.regridded_forcings2[:,:]*weight2
-        input_forcings.final_forcings_elem[:,:] = input_forcings.regridded_forcings1_elem[:,:]*weight1 + \
-            input_forcings.regridded_forcings2_elem[:,:]*weight2
+        input_forcings.final_forcings[:, :] = (
+            input_forcings.regridded_forcings1[:, :] * weight1
+            + input_forcings.regridded_forcings2[:, :] * weight2
+        )
+        input_forcings.final_forcings_elem[:, :] = (
+            input_forcings.regridded_forcings1_elem[:, :] * weight1
+            + input_forcings.regridded_forcings2_elem[:, :] * weight2
+        )
 
         # Set any pixel cells that were missing for either window to missing value.
         input_forcings.final_forcings[ind1Ndv] = ConfigOptions.globalNdv
@@ -329,26 +421,35 @@ def weighted_average(input_forcings,ConfigOptions,MpiConfig):
         ind1Ndv_elem = None
         ind2Ndv_elem = None
 
-    elif(ConfigOptions.grid_type == 'hydrofabric'):
-
+    elif ConfigOptions.grid_type == "hydrofabric":
         # Calculate the difference between the current output timestep,
         # and the previous input forecast output step. Use this to calculate a fraction
         # of the previous forcing output to use in the final output for this step.
         dtFromPrevious = ConfigOptions.current_output_date - input_forcings.fcst_date1
-        weight1 = 1-(abs(dtFromPrevious.total_seconds())/(input_forcings.outFreq*60.0))
+        weight1 = 1 - (
+            abs(dtFromPrevious.total_seconds()) / (input_forcings.outFreq * 60.0)
+        )
 
         # Calculate the difference between the current output timesetp,
         # and the next forecast output step. Use this to calculate a fraction of
         # the next forcing output to use in the final output for this step.
         dtFromNext = ConfigOptions.current_output_date - input_forcings.fcst_date2
-        weight2 = 1-(abs(dtFromNext.total_seconds())/(input_forcings.outFreq*60.0))
+        weight2 = 1 - (
+            abs(dtFromNext.total_seconds()) / (input_forcings.outFreq * 60.0)
+        )
 
         # Calculate where we have missing data in either the previous or next forcing dataset.
-        ind1Ndv = np.where(input_forcings.regridded_forcings1 == ConfigOptions.globalNdv)
-        ind2Ndv = np.where(input_forcings.regridded_forcings2 == ConfigOptions.globalNdv)
+        ind1Ndv = np.where(
+            input_forcings.regridded_forcings1 == ConfigOptions.globalNdv
+        )
+        ind2Ndv = np.where(
+            input_forcings.regridded_forcings2 == ConfigOptions.globalNdv
+        )
 
-        input_forcings.final_forcings[:,:] = input_forcings.regridded_forcings1[:,:]*weight1 + \
-            input_forcings.regridded_forcings2[:,:]*weight2
+        input_forcings.final_forcings[:, :] = (
+            input_forcings.regridded_forcings1[:, :] * weight1
+            + input_forcings.regridded_forcings2[:, :] * weight2
+        )
 
         # Set any pixel cells that were missing for either window to missing value.
         input_forcings.final_forcings[ind1Ndv] = ConfigOptions.globalNdv
@@ -358,8 +459,10 @@ def weighted_average(input_forcings,ConfigOptions,MpiConfig):
         ind1Ndv = None
         ind2Ndv = None
 
-def weighted_average_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
-    """
+
+def weighted_average_supp_pcp(supplemental_precip, ConfigOptions, MpiConfig):
+    """Weighted average temporal interpolation for supplemental precipitation.
+
     Function for setting the current output regridded supplemental precipitation fields
     as an average between the previous and next input supplemental precipitation timesteps.
     :param supplemental_precip:
@@ -367,27 +470,45 @@ def weighted_average_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
     :param MpiConfig:
     :return:
     """
-
-    if(ConfigOptions.grid_type == 'gridded'):
-        if supplemental_precip.regridded_precip2 is not None and supplemental_precip.regridded_precip1 is not None:
+    if ConfigOptions.grid_type == "gridded":
+        if (
+            supplemental_precip.regridded_precip2 is not None
+            and supplemental_precip.regridded_precip1 is not None
+        ):
             # Calculate the difference between the current output timestep,
             # and the previous input supp pcp step. Use this to calculate a fraction
             # of the previous supp pcp to use in the final output for this step.
-            dtFromPrevious = ConfigOptions.current_output_date - supplemental_precip.pcp_date1
-            weight1 = 1 - (abs(dtFromPrevious.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromPrevious = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date1
+            )
+            weight1 = 1 - (
+                abs(dtFromPrevious.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate the difference between the current output timesetp,
             # and the next input supp pcp step. Use this to calculate a fraction of
             # the next forcing supp pcp to use in the final output for this step.
-            dtFromNext = ConfigOptions.current_output_date - supplemental_precip.pcp_date2
-            weight2 = 1 - (abs(dtFromNext.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromNext = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date2
+            )
+            weight2 = 1 - (
+                abs(dtFromNext.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate where we have missing data in either the previous or next forcing dataset.
-            ind1Ndv = np.where(supplemental_precip.regridded_precip1 == ConfigOptions.globalNdv)
-            ind2Ndv = np.where(supplemental_precip.regridded_precip2 == ConfigOptions.globalNdv)
+            ind1Ndv = np.where(
+                supplemental_precip.regridded_precip1 == ConfigOptions.globalNdv
+            )
+            ind2Ndv = np.where(
+                supplemental_precip.regridded_precip2 == ConfigOptions.globalNdv
+            )
 
-            supplemental_precip.final_supp_precip[:,:] = supplemental_precip.regridded_precip1[:,:] * weight1 + \
-                                                         supplemental_precip.regridded_precip2[:,:] * weight2
+            supplemental_precip.final_supp_precip[:, :] = (
+                supplemental_precip.regridded_precip1[:, :] * weight1
+                + supplemental_precip.regridded_precip2[:, :] * weight2
+            )
 
             # Set any pixel cells that were missing for either window to missing value.
             supplemental_precip.final_supp_precip[ind1Ndv] = ConfigOptions.globalNdv
@@ -399,26 +520,45 @@ def weighted_average_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
         else:
             # We have missing files.
             supplemental_precip.final_supp_precip[:, :] = ConfigOptions.globalNdv
-    elif(ConfigOptions.grid_type == 'unstructured'):
-        if supplemental_precip.regridded_precip2 is not None and supplemental_precip.regridded_precip1 is not None:
+    elif ConfigOptions.grid_type == "unstructured":
+        if (
+            supplemental_precip.regridded_precip2 is not None
+            and supplemental_precip.regridded_precip1 is not None
+        ):
             # Calculate the difference between the current output timestep,
             # and the previous input supp pcp step. Use this to calculate a fraction
             # of the previous supp pcp to use in the final output for this step.
-            dtFromPrevious = ConfigOptions.current_output_date - supplemental_precip.pcp_date1
-            weight1 = 1 - (abs(dtFromPrevious.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromPrevious = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date1
+            )
+            weight1 = 1 - (
+                abs(dtFromPrevious.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate the difference between the current output timesetp,
             # and the next input supp pcp step. Use this to calculate a fraction of
             # the next forcing supp pcp to use in the final output for this step.
-            dtFromNext = ConfigOptions.current_output_date - supplemental_precip.pcp_date2
-            weight2 = 1 - (abs(dtFromNext.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromNext = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date2
+            )
+            weight2 = 1 - (
+                abs(dtFromNext.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate where we have missing data in either the previous or next forcing dataset.
-            ind1Ndv = np.where(supplemental_precip.regridded_precip1 == ConfigOptions.globalNdv)
-            ind2Ndv = np.where(supplemental_precip.regridded_precip2 == ConfigOptions.globalNdv)
+            ind1Ndv = np.where(
+                supplemental_precip.regridded_precip1 == ConfigOptions.globalNdv
+            )
+            ind2Ndv = np.where(
+                supplemental_precip.regridded_precip2 == ConfigOptions.globalNdv
+            )
 
-            supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip1[:] * weight1 + \
-                                                         supplemental_precip.regridded_precip2[:] * weight2
+            supplemental_precip.final_supp_precip[:] = (
+                supplemental_precip.regridded_precip1[:] * weight1
+                + supplemental_precip.regridded_precip2[:] * weight2
+            )
 
             # Set any pixel cells that were missing for either window to missing value.
             supplemental_precip.final_supp_precip[ind1Ndv] = ConfigOptions.globalNdv
@@ -431,29 +571,52 @@ def weighted_average_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
             # We have missing files.
             supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
 
-        if supplemental_precip.regridded_precip2_elem is not None and supplemental_precip.regridded_precip1_elem is not None:
+        if (
+            supplemental_precip.regridded_precip2_elem is not None
+            and supplemental_precip.regridded_precip1_elem is not None
+        ):
             # Calculate the difference between the current output timestep,
             # and the previous input supp pcp step. Use this to calculate a fraction
             # of the previous supp pcp to use in the final output for this step.
-            dtFromPrevious = ConfigOptions.current_output_date - supplemental_precip.pcp_date1
-            weight1 = 1 - (abs(dtFromPrevious.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromPrevious = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date1
+            )
+            weight1 = 1 - (
+                abs(dtFromPrevious.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate the difference between the current output timesetp,
             # and the next input supp pcp step. Use this to calculate a fraction of
             # the next forcing supp pcp to use in the final output for this step.
-            dtFromNext = ConfigOptions.current_output_date - supplemental_precip.pcp_date2
-            weight2 = 1 - (abs(dtFromNext.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromNext = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date2
+            )
+            weight2 = 1 - (
+                abs(dtFromNext.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate where we have missing data in either the previous or next forcing dataset.
-            ind1Ndv = np.where(supplemental_precip.regridded_precip1_elem == ConfigOptions.globalNdv)
-            ind2Ndv = np.where(supplemental_precip.regridded_precip2_elem == ConfigOptions.globalNdv)
+            ind1Ndv = np.where(
+                supplemental_precip.regridded_precip1_elem == ConfigOptions.globalNdv
+            )
+            ind2Ndv = np.where(
+                supplemental_precip.regridded_precip2_elem == ConfigOptions.globalNdv
+            )
 
-            supplemental_precip.final_supp_precip_elem[:] = supplemental_precip.regridded_precip1_elem[:] * weight1 + \
-                                                         supplemental_precip.regridded_precip2_elem[:] * weight2
+            supplemental_precip.final_supp_precip_elem[:] = (
+                supplemental_precip.regridded_precip1_elem[:] * weight1
+                + supplemental_precip.regridded_precip2_elem[:] * weight2
+            )
 
             # Set any pixel cells that were missing for either window to missing value.
-            supplemental_precip.final_supp_precip_elem[ind1Ndv] = ConfigOptions.globalNdv
-            supplemental_precip.final_supp_precip_elem[ind2Ndv] = ConfigOptions.globalNdv
+            supplemental_precip.final_supp_precip_elem[ind1Ndv] = (
+                ConfigOptions.globalNdv
+            )
+            supplemental_precip.final_supp_precip_elem[ind2Ndv] = (
+                ConfigOptions.globalNdv
+            )
 
             # Reset for memory efficiency.
             ind1Ndv = None
@@ -462,26 +625,45 @@ def weighted_average_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
             # We have missing files.
             supplemental_precip.final_supp_precip_elem[:] = ConfigOptions.globalNdv
 
-    elif(ConfigOptions.grid_type == 'hydrofabric'):
-        if supplemental_precip.regridded_precip2 is not None and supplemental_precip.regridded_precip1 is not None:
+    elif ConfigOptions.grid_type == "hydrofabric":
+        if (
+            supplemental_precip.regridded_precip2 is not None
+            and supplemental_precip.regridded_precip1 is not None
+        ):
             # Calculate the difference between the current output timestep,
             # and the previous input supp pcp step. Use this to calculate a fraction
             # of the previous supp pcp to use in the final output for this step.
-            dtFromPrevious = ConfigOptions.current_output_date - supplemental_precip.pcp_date1
-            weight1 = 1 - (abs(dtFromPrevious.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromPrevious = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date1
+            )
+            weight1 = 1 - (
+                abs(dtFromPrevious.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate the difference between the current output timesetp,
             # and the next input supp pcp step. Use this to calculate a fraction of
             # the next forcing supp pcp to use in the final output for this step.
-            dtFromNext = ConfigOptions.current_output_date - supplemental_precip.pcp_date2
-            weight2 = 1 - (abs(dtFromNext.total_seconds()) / (supplemental_precip.input_frequency * 60.0))
+            dtFromNext = (
+                ConfigOptions.current_output_date - supplemental_precip.pcp_date2
+            )
+            weight2 = 1 - (
+                abs(dtFromNext.total_seconds())
+                / (supplemental_precip.input_frequency * 60.0)
+            )
 
             # Calculate where we have missing data in either the previous or next forcing dataset.
-            ind1Ndv = np.where(supplemental_precip.regridded_precip1 == ConfigOptions.globalNdv)
-            ind2Ndv = np.where(supplemental_precip.regridded_precip2 == ConfigOptions.globalNdv)
+            ind1Ndv = np.where(
+                supplemental_precip.regridded_precip1 == ConfigOptions.globalNdv
+            )
+            ind2Ndv = np.where(
+                supplemental_precip.regridded_precip2 == ConfigOptions.globalNdv
+            )
 
-            supplemental_precip.final_supp_precip[:] = supplemental_precip.regridded_precip1[:] * weight1 + \
-                                                         supplemental_precip.regridded_precip2[:] * weight2
+            supplemental_precip.final_supp_precip[:] = (
+                supplemental_precip.regridded_precip1[:] * weight1
+                + supplemental_precip.regridded_precip2[:] * weight2
+            )
 
             # Set any pixel cells that were missing for either window to missing value.
             supplemental_precip.final_supp_precip[ind1Ndv] = ConfigOptions.globalNdv
@@ -495,9 +677,9 @@ def weighted_average_supp_pcp(supplemental_precip,ConfigOptions,MpiConfig):
             supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
 
 
+def gfs_pcp_time_interp(input_forcings, ConfigOptions, MpiConfig):
+    """Calculate instantaneous precipitation rate from GFS average rates.
 
-def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
-    """
     Function that will calculate an instantaneous precipitation rate, representative
     of the latest forecast GFS hour, or range of GFS forecast hours. This is
     done as GFS has a quirky way of outputting precipitation rates.
@@ -527,9 +709,9 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
     #     of the second three hour period. It's not necessarily instantaneous,
     #     but we will treat it as such.
 
-    if(ConfigOptions.grid_type == "gridded"):
+    if ConfigOptions.grid_type == "gridded":
         if input_forcings.fcst_hour2 <= 120:
-            if input_forcings.fcst_hour2%6 == 1:
+            if input_forcings.fcst_hour2 % 6 == 1:
                 # We are on the first hour of a six-hour period. We can treat
                 # the precipitation rate as instantaneous for this hour.
                 instPcpGlobal = input_forcings.globalPcpRate2
@@ -538,21 +720,25 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
             else:
                 # We need to calculate the difference from the previous
                 # avg window to get an instantaneous value for this hour.
-                total1 = input_forcings.globalPcpRate1 * (3600.0 * (input_forcings.fcst_hour1%6))
-                if input_forcings.fcst_hour2%6 == 0:
+                total1 = input_forcings.globalPcpRate1 * (
+                    3600.0 * (input_forcings.fcst_hour1 % 6)
+                )
+                if input_forcings.fcst_hour2 % 6 == 0:
                     # We have a 0-6, 6-12, 12-18 avg rate....
                     total2 = input_forcings.globalPcpRate2 * (3600.0 * 6)
                 else:
                     # We have 0-5, 0-4, etc
-                    total2 = input_forcings.globalPcpRate2 * (3600.0 * (input_forcings.fcst_hour2%6))
-                instPcpGlobal = (total2 - total1)/3600.0
+                    total2 = input_forcings.globalPcpRate2 * (
+                        3600.0 * (input_forcings.fcst_hour2 % 6)
+                    )
+                instPcpGlobal = (total2 - total1) / 3600.0
                 # Reset variables to free up memory
                 total1 = None
                 total2 = None
         else:
             # We are in Situation #2 which currently runs out until the end of the
             # end of the GFS forecast cycle of 384 hours.
-            if input_forcings.fcst_hour2%6 == 3:
+            if input_forcings.fcst_hour2 % 6 == 3:
                 # We are on the first 3 hours of a six hour period. Simply treat the average
                 # precipitation rate for this time period as the instantaneous precipitation
                 # rate.
@@ -562,7 +748,7 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
             else:
                 total1 = input_forcings.globalPcpRate1 * (3600.0 * 3.0)
                 total2 = input_forcings.globalPcpRate2 * (3600.0 * 6.0)
-                instPcpGlobal = (total2 - total1)/(3600.0 * 3.0)
+                instPcpGlobal = (total2 - total1) / (3600.0 * 3.0)
                 # Reset variables to free up memory.
                 total1 = None
                 total2 = None
@@ -573,9 +759,9 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
 
         return instPcpGlobal
 
-    elif(ConfigOptions.grid_type == "unstructured"):
+    elif ConfigOptions.grid_type == "unstructured":
         if input_forcings.fcst_hour2 <= 120:
-            if input_forcings.fcst_hour2%6 == 1:
+            if input_forcings.fcst_hour2 % 6 == 1:
                 # We are on the first hour of a six-hour period. We can treat
                 # the precipitation rate as instantaneous for this hour.
                 instPcpGlobal = input_forcings.globalPcpRate2
@@ -587,19 +773,27 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
             else:
                 # We need to calculate the difference from the previous
                 # avg window to get an instantaneous value for this hour.
-                total1 = input_forcings.globalPcpRate1 * (3600.0 * (input_forcings.fcst_hour1%6))
-                total1_elem = input_forcings.globalPcpRate1_elem * (3600.0 * (input_forcings.fcst_hour1%6))
-                if input_forcings.fcst_hour2%6 == 0:
+                total1 = input_forcings.globalPcpRate1 * (
+                    3600.0 * (input_forcings.fcst_hour1 % 6)
+                )
+                total1_elem = input_forcings.globalPcpRate1_elem * (
+                    3600.0 * (input_forcings.fcst_hour1 % 6)
+                )
+                if input_forcings.fcst_hour2 % 6 == 0:
                     # We have a 0-6, 6-12, 12-18 avg rate....
                     total2 = input_forcings.globalPcpRate2 * (3600.0 * 6)
                     total2_elem = input_forcings.globalPcpRate2_elem * (3600.0 * 6)
                 else:
                     # We have 0-5, 0-4, etc
-                    total2 = input_forcings.globalPcpRate2 * (3600.0 * (input_forcings.fcst_hour2%6))
-                    total2_elem = input_forcings.globalPcpRate2_elem * (3600.0 * (input_forcings.fcst_hour2%6))
+                    total2 = input_forcings.globalPcpRate2 * (
+                        3600.0 * (input_forcings.fcst_hour2 % 6)
+                    )
+                    total2_elem = input_forcings.globalPcpRate2_elem * (
+                        3600.0 * (input_forcings.fcst_hour2 % 6)
+                    )
 
-                instPcpGlobal = (total2 - total1)/3600.0
-                instPcpGlobal_elem = (total2_elem - total1_elem)/3600.0
+                instPcpGlobal = (total2 - total1) / 3600.0
+                instPcpGlobal_elem = (total2_elem - total1_elem) / 3600.0
                 # Reset variables to free up memory
                 total1 = None
                 total2 = None
@@ -608,7 +802,7 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
         else:
             # We are in Situation #2 which currently runs out until the end of the
             # end of the GFS forecast cycle of 384 hours.
-            if input_forcings.fcst_hour2%6 == 3:
+            if input_forcings.fcst_hour2 % 6 == 3:
                 # We are on the first 3 hours of a six hour period. Simply treat the average
                 # precipitation rate for this time period as the instantaneous precipitation
                 # rate.
@@ -623,8 +817,8 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
                 total2 = input_forcings.globalPcpRate2 * (3600.0 * 6.0)
                 total1_elem = input_forcings.globalPcpRate1_elem * (3600.0 * 3.0)
                 total2_elem = input_forcings.globalPcpRate2_elem * (3600.0 * 6.0)
-                instPcpGlobal = (total2 - total1)/(3600.0 * 3.0)
-                instPcpGlobal_elem = (total2_elem - total1_elem)/(3600.0 * 3.0)
+                instPcpGlobal = (total2 - total1) / (3600.0 * 3.0)
+                instPcpGlobal_elem = (total2_elem - total1_elem) / (3600.0 * 3.0)
                 # Reset variables to free up memory.
                 total1 = None
                 total2 = None
@@ -637,9 +831,9 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
 
         return instPcpGlobal, instPcpGlobal_elem
 
-    elif(ConfigOptions.grid_type == "hydrofabric"):
+    elif ConfigOptions.grid_type == "hydrofabric":
         if input_forcings.fcst_hour2 <= 120:
-            if input_forcings.fcst_hour2%6 == 1:
+            if input_forcings.fcst_hour2 % 6 == 1:
                 # We are on the first hour of a six-hour period. We can treat
                 # the precipitation rate as instantaneous for this hour.
                 instPcpGlobal = input_forcings.globalPcpRate2
@@ -648,21 +842,25 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
             else:
                 # We need to calculate the difference from the previous
                 # avg window to get an instantaneous value for this hour.
-                total1 = input_forcings.globalPcpRate1 * (3600.0 * (input_forcings.fcst_hour1%6))
-                if input_forcings.fcst_hour2%6 == 0:
+                total1 = input_forcings.globalPcpRate1 * (
+                    3600.0 * (input_forcings.fcst_hour1 % 6)
+                )
+                if input_forcings.fcst_hour2 % 6 == 0:
                     # We have a 0-6, 6-12, 12-18 avg rate....
                     total2 = input_forcings.globalPcpRate2 * (3600.0 * 6)
                 else:
                     # We have 0-5, 0-4, etc
-                    total2 = input_forcings.globalPcpRate2 * (3600.0 * (input_forcings.fcst_hour2%6))
-                instPcpGlobal = (total2 - total1)/3600.0
+                    total2 = input_forcings.globalPcpRate2 * (
+                        3600.0 * (input_forcings.fcst_hour2 % 6)
+                    )
+                instPcpGlobal = (total2 - total1) / 3600.0
                 # Reset variables to free up memory
                 total1 = None
                 total2 = None
         else:
             # We are in Situation #2 which currently runs out until the end of the
             # end of the GFS forecast cycle of 384 hours.
-            if input_forcings.fcst_hour2%6 == 3:
+            if input_forcings.fcst_hour2 % 6 == 3:
                 # We are on the first 3 hours of a six hour period. Simply treat the average
                 # precipitation rate for this time period as the instantaneous precipitation
                 # rate.
@@ -672,7 +870,7 @@ def gfs_pcp_time_interp(input_forcings,ConfigOptions,MpiConfig):
             else:
                 total1 = input_forcings.globalPcpRate1 * (3600.0 * 3.0)
                 total2 = input_forcings.globalPcpRate2 * (3600.0 * 6.0)
-                instPcpGlobal = (total2 - total1)/(3600.0 * 3.0)
+                instPcpGlobal = (total2 - total1) / (3600.0 * 3.0)
                 # Reset variables to free up memory.
                 total1 = None
                 total2 = None

@@ -1,28 +1,24 @@
-"""
-High-level module file that will handle supplemental analysis/observed precipitation grids
-that will replace precipitation in the final output files.
-"""
+"""High-level module file that will handle supplemental analysis/observed precipitation grids that will replace precipitation in the final output files."""
+
 import numpy as np
 
-from . import time_handling
-from . import regrid
-from . import timeInterpMod
+from . import regrid, time_handling, timeInterpMod
 
 
 class supplemental_precip:
-    """
+    """Supplemental precipitation abstract class.
+
     This is an abstract class that will define all the parameters
     of a single supplemental precipitation product.
     """
+
     def __init__(self):
-        """
-        Initializing all attributes and objects to None.
-        """
+        """Initializie all attributes and objects to None."""
         self.keyValue = None
         self.inDir = None
         self.enforce = None
-        self.productName = None
-        self.fileType = None
+        self.product_name = None
+        self.file_type = None
         self.nx_global = None
         self.ny_global = None
         self.nx_local = None
@@ -56,6 +52,10 @@ class supplemental_precip:
         self.final_supp_precip_elem = None
         self.file_in1 = None
         self.file_in2 = None
+        self.file_in1_grib2 = None
+        self.file_in2_grib2 = None
+        self.file_in1_bc = None
+        self.file_in2_bc = None
         self.rqiMethod = None
         self.rqiThresh = None
         self.rqi_file_in1 = None
@@ -72,6 +72,10 @@ class supplemental_precip:
         self.grib_levels = None
         self.grib_vars = None
         self.tmpFile = None
+        self.tmpFile2 = None
+        self.tmpFile1_mrms_subhourly_timesteps = None
+        self.tmpFile2_mrms_subhourly_timesteps = None
+        self.mrms_subhourly_timesteps = None
         self.userCycleOffset = None
         self.global_x_lower = None
         self.global_y_lower = None
@@ -80,7 +84,8 @@ class supplemental_precip:
         self.has_cache = False
 
     def define_product(self):
-        """
+        """Define the product name based on the mapping forcing key value.
+
         Function to define the product name based on the mapping
         forcing key value.
         :return:
@@ -99,9 +104,11 @@ class supplemental_precip:
             11: "AK_Stage_IV_Precip-MRMS",
             12: "CONUS_Stage_IV_Precip-MRMS",
             13: "MRMS PrecipFlag",
-            14: "Custom_Freq_Supp_Pcp"
+            14: "Custom_Freq_Supp_Pcp",
+            15: "NBM_CORE_PR_APCP",
+            16: "MRMS_Subhourly_Cycling",
         }
-        self.productName = product_names[self.keyValue]
+        self.product_name = product_names[self.keyValue]
 
         ## DEFINED IN CONFIG
         # product_types = {
@@ -111,13 +118,13 @@ class supplemental_precip:
         #     4: "GRIB2",
         #     5: "GRIB2"
         # }
-        # self.fileType = product_types[self.keyValue]
-        if self.fileType == 'GRIB1':
-            self.file_ext = '.grb'
-        elif self.fileType == 'GRIB2':
-            self.file_ext = '.grib2'
-        elif self.fileType == 'NETCDF':
-            self.file_ext = '.nc'
+        # self.file_type = product_types[self.keyValue]
+        if self.file_type == "GRIB1":
+            self.file_ext = ".grb"
+        elif self.file_type == "GRIB2":
+            self.file_ext = ".grib2"
+        elif self.file_type == "NETCDF":
+            self.file_ext = ".nc"
 
         grib_vars_in = {
             1: None,
@@ -133,49 +140,55 @@ class supplemental_precip:
             11: None,
             12: None,
             13: None,
-            14: None
+            14: None,
+            15: None,
+            16: None,
         }
         self.grib_vars = grib_vars_in[self.keyValue]
 
         grib_levels_in = {
-            1: ['BLAH'],
-            2: ['BLAH'],
-            3: ['BLAH'],
-            4: ['BLAH'],
-            5: ['BLAH'],
-            6: ['BLAH'],
-            7: ['BLAH'],
-            8: ['BLAH'],
-            9: ['BLAH'],
-            10: ['BLAH'],
-            11: ['BLAH'],
-            12: ['BLAH'],
-            13: ['BLAH'],
-            14: ['BLAH']
+            1: ["BLAH"],
+            2: ["BLAH"],
+            3: ["BLAH"],
+            4: ["BLAH"],
+            5: ["BLAH"],
+            6: ["BLAH"],
+            7: ["BLAH"],
+            8: ["BLAH"],
+            9: ["BLAH"],
+            10: ["BLAH"],
+            11: ["BLAH"],
+            12: ["BLAH"],
+            13: ["BLAH"],
+            14: ["BLAH"],
+            15: ["BLAH"],
+            16: ["BLAH"],
         }
         self.grib_levels = grib_levels_in[self.keyValue]
 
         netcdf_variables = {
-            1: ['RadarOnlyQPE01H_0mabovemeansealevel'],
-            2: ['GaugeCorrQPE01H_0mabovemeansealevel'],
-            3: ['APCP_surface'],
-            4: ['APCP_surface'],
-            5: ['MultiSensorQPE01H_0mabovemeansealevel'],
-            6: ['MultiSensorQPE01H_0mabovemeansealevel'],
-            7: ['sbcv2_lwf'],
-            8: ['APCP_surface'],
-            9: ['APCP_surface'],
-            10: ['MultiSensorQPE01H_0mabovemeansealevel'],
-            11: [], #Set dynamically since we have have Stage IV and MRMS
-            12: [], #Set dynamically since we have have Stage IV and MRMS
-            13: ['PrecipFlag_0mabovemeansealevel'],
-            14: ['PrecipFlag_0mabovemeansealevel']
+            1: ["RadarOnlyQPE01H_0mabovemeansealevel"],
+            2: ["MultiSensorQPE01H_0mabovemeansealevel"],
+            3: ["APCP_surface"],
+            4: ["APCP_surface"],
+            5: ["MultiSensorQPE01H_0mabovemeansealevel"],
+            6: ["MultiSensorQPE01H_0mabovemeansealevel"],
+            7: ["sbcv2_lwf"],
+            8: ["APCP_surface"],
+            9: ["APCP_surface"],
+            10: ["MultiSensorQPE01H_0mabovemeansealevel"],
+            11: [],  # Set dynamically since we have have Stage IV and MRMS
+            12: [],  # Set dynamically since we have have Stage IV and MRMS
+            13: ["PrecipFlag_0mabovemeansealevel"],
+            14: ["PrecipFlag_0mabovemeansealevel"],
+            15: ["APCP_surface"],
+            16: ["MultiSensorQPE01H_0mabovemeansealevel"],
         }
         self.netcdf_var_names = netcdf_variables[self.keyValue]
 
         netcdf_rqi_variables = {
-            1: ['RadarQualityIndex_0mabovemeansealevel'],
-            2: ['RadarQualityIndex_0mabovemeansealevel'],
+            1: ["RadarQualityIndex_0mabovemeansealevel"],
+            2: ["RadarQualityIndex_0mabovemeansealevel"],
             3: None,
             4: None,
             5: None,
@@ -187,30 +200,35 @@ class supplemental_precip:
             11: None,
             12: None,
             13: None,
-            14: None
+            14: None,
+            15: None,
+            16: None,
         }
         self.rqi_netcdf_var_names = netcdf_rqi_variables[self.keyValue]
 
         output_variables = {
-            1: 3,       # RAINRATE
+            1: 3,  # RAINRATE
             2: 3,
             3: 3,
             4: 3,
             5: 3,
             6: 3,
-            7: 8,        # LQFRAC
+            7: 8,  # LQFRAC
             8: 3,
             9: 3,
             10: 3,
             11: 3,
             12: 3,
             13: 8,
-            14: 3
+            14: 3,
+            15: 3,
+            16: 3,
         }
         self.output_var_idx = output_variables[self.keyValue]
 
-    def calc_neighbor_files(self,ConfigOptions,dCurrent,MpiConfig):
-        """
+    def calc_neighbor_files(self, ConfigOptions, dCurrent, MpiConfig):
+        """Calculate neighbor supplemental precipitation files.
+
         Function that will calculate the last/next expected
         supplemental precipitation file based on the current time step that
         is being processed.
@@ -234,7 +252,9 @@ class supplemental_precip:
             11: time_handling.find_ak_ext_ana_precip_neighbors,
             12: time_handling.find_conus_ext_ana_precip_neighbors,
             13: time_handling.find_hourly_mrms_precip_flag,
-            14: time_handling.find_custom_freq_neighbors
+            14: time_handling.find_custom_freq_neighbors,
+            15: time_handling.find_hourly_nbm_neighbors,
+            16: time_handling.find_hourly_mrms_subhourly_neighbors,
         }
 
         find_neighbor_files[self.keyValue](self, ConfigOptions, dCurrent, MpiConfig)
@@ -242,13 +262,14 @@ class supplemental_precip:
         #    find_neighbor_files[self.keyValue](self,ConfigOptions,dCurrent,MpiConfig)
         # except TypeError:
         #    ConfigOptions.errMsg = "Unable to execute find_neighbor_files for " \
-        #                           "supplemental precipitation: " + self.productName
+        #                           "supplemental precipitation: " + self.product_name
         #    raise
         # except:
         #    raise
 
-    def regrid_inputs(self,ConfigOptions,wrfHyroGeoMeta,MpiConfig):
-        """
+    def regrid_inputs(self, ConfigOptions, wrfHyroGeoMeta, MpiConfig):
+        """Polymorphic function that will regrid input forcings to the supplemental precipitation grids for this particular timestep.
+
         Polymorphic function that will regrid input forcings to the
         supplemental precipitation grids for this particular timestep. For
         timesteps that require interpolation, two sets of input
@@ -269,22 +290,25 @@ class supplemental_precip:
             7: regrid.regrid_sbcv2_liquid_water_fraction,
             8: regrid.regrid_hourly_nbm,
             9: regrid.regrid_hourly_nbm,
-            10: regrid.regrid_mrms_hourly, 
-            11: regrid.regrid_ak_ext_ana_pcp,  
+            10: regrid.regrid_mrms_hourly,
+            11: regrid.regrid_ak_ext_ana_pcp,
             12: regrid.regrid_conus_ext_ana_pcp,
             13: regrid.regrid_mrms_precip_flag,
-            14: regrid.regrid_mrms_hourly
+            14: regrid.regrid_mrms_hourly,
+            15: regrid.regrid_hourly_nbm,
+            16: regrid.regrid_mrms_subhourly,
         }
-        regrid_inputs[self.keyValue](self,ConfigOptions,wrfHyroGeoMeta,MpiConfig)
-        #try:
+        regrid_inputs[self.keyValue](self, ConfigOptions, wrfHyroGeoMeta, MpiConfig)
+        # try:
         #    regrid_inputs[self.keyValue](self,ConfigOptions,MpiConfig)
-        #except:
+        # except:
         #    ConfigOptions.errMsg = "Unable to execute regrid_inputs for " + \
-        #        "input forcing: " + self.productName
+        #        "input forcing: " + self.product_name
         #    raise
 
-    def temporal_interpolate_inputs(self,ConfigOptions,MpiConfig):
-        """
+    def temporal_interpolate_inputs(self, ConfigOptions, MpiConfig):
+        """Polymorphic function that will run temporal interpolation of the supplemental precipitation grids that have been regridded.
+
         Polymorphic function that will run temporal interpolation of
         the supplemental precipitation grids that have been regridded. This is
         especially important for supplemental precips that have large output
@@ -297,19 +321,21 @@ class supplemental_precip:
         temporal_interpolate_inputs = {
             0: timeInterpMod.no_interpolation_supp_pcp,
             1: timeInterpMod.nearest_neighbor_supp_pcp,
-            2: timeInterpMod.weighted_average_supp_pcp
+            2: timeInterpMod.weighted_average_supp_pcp,
         }
-        temporal_interpolate_inputs[self.timeInterpOpt](self,ConfigOptions,MpiConfig)
-        #temporal_interpolate_inputs[self.keyValue](self,ConfigOptions,MpiConfig)
-        #try:
+        temporal_interpolate_inputs[self.timeInterpOpt](self, ConfigOptions, MpiConfig)
+        # temporal_interpolate_inputs[self.keyValue](self,ConfigOptions,MpiConfig)
+        # try:
         #    temporal_interpolate_inputs[self.timeInterpOpt](self,ConfigOptions,MpiConfig)
-        #except:
+        # except:
         #    ConfigOptions.errMsg = "Unable to execute temporal_interpolate_inputs " + \
-        #        " for input forcing: " + self.productName
+        #        " for input forcing: " + self.product_name
         #    raise
 
-def initDict(ConfigOptions,GeoMetaWrfHydro):
-    """
+
+def initDict(ConfigOptions, GeoMetaWrfHydro):
+    """Initialize the supplemental precipitation input dictionary.
+
     Initial function to create an supplemental dictionary, which
     will contain an abstract class for each supplemental precip product.
     This gets called one time by the parent calling program.
@@ -319,36 +345,60 @@ def initDict(ConfigOptions,GeoMetaWrfHydro):
     # Initialize an empty dictionary
     InputDict = {}
 
-    for supp_pcp_tmp in range(0,ConfigOptions.number_supp_pcp):
+    for supp_pcp_tmp in range(0, ConfigOptions.number_supp_pcp):
         supp_pcp_key = ConfigOptions.supp_precip_forcings[supp_pcp_tmp]
         InputDict[supp_pcp_key] = supplemental_precip()
         InputDict[supp_pcp_key].keyValue = supp_pcp_key
-        InputDict[supp_pcp_key].regridOpt = ConfigOptions.regrid_opt_supp_pcp[supp_pcp_tmp]
-        InputDict[supp_pcp_key].enforce = ConfigOptions.supp_precip_mandatory[supp_pcp_tmp]
-        InputDict[supp_pcp_key].timeInterpOpt = ConfigOptions.suppTemporalInterp[supp_pcp_tmp]
+        InputDict[supp_pcp_key].regridOpt = ConfigOptions.regrid_opt_supp_pcp[
+            supp_pcp_tmp
+        ]
+        InputDict[supp_pcp_key].enforce = ConfigOptions.supp_precip_mandatory[
+            supp_pcp_tmp
+        ]
+        InputDict[supp_pcp_key].timeInterpOpt = ConfigOptions.suppTemporalInterp[
+            supp_pcp_tmp
+        ]
 
         InputDict[supp_pcp_key].inDir = ConfigOptions.supp_precip_dirs[supp_pcp_tmp]
-        InputDict[supp_pcp_key].fileType = ConfigOptions.supp_precip_file_types[supp_pcp_tmp]
+        InputDict[supp_pcp_key].file_type = ConfigOptions.supp_precip_file_types[
+            supp_pcp_tmp
+        ]
         InputDict[supp_pcp_key].define_product()
 
-        if(ConfigOptions.grid_type=='gridded'):
+        if ConfigOptions.grid_type == "gridded":
             # Initialize the local final grid of values
-            InputDict[supp_pcp_key].final_supp_precip = np.empty([GeoMetaWrfHydro.ny_local,
-                                                                  GeoMetaWrfHydro.nx_local],np.float64)
-            InputDict[supp_pcp_key].regridded_mask = np.empty([GeoMetaWrfHydro.ny_local,
-                                                               GeoMetaWrfHydro.nx_local], np.float32)
-        elif(ConfigOptions.grid_type=='unstructured'):
+            InputDict[supp_pcp_key].final_supp_precip = np.empty(
+                [GeoMetaWrfHydro.ny_local, GeoMetaWrfHydro.nx_local], np.float64
+            )
+            InputDict[supp_pcp_key].regridded_mask = np.empty(
+                [GeoMetaWrfHydro.ny_local, GeoMetaWrfHydro.nx_local], np.float32
+            )
+        elif ConfigOptions.grid_type == "unstructured":
             # Initialize the local final grid of values
-            InputDict[supp_pcp_key].final_supp_precip = np.empty([GeoMetaWrfHydro.ny_local],np.float64)
-            InputDict[supp_pcp_key].regridded_mask = np.empty([GeoMetaWrfHydro.ny_local], np.float32)
-            InputDict[supp_pcp_key].final_supp_precip_elem = np.empty([GeoMetaWrfHydro.ny_local_elem],np.float64)
-            InputDict[supp_pcp_key].regridded_mask_elem = np.empty([GeoMetaWrfHydro.ny_local_elem], np.float32)
-        elif(ConfigOptions.grid_type=='hydrofabric'):
+            InputDict[supp_pcp_key].final_supp_precip = np.empty(
+                [GeoMetaWrfHydro.ny_local], np.float64
+            )
+            InputDict[supp_pcp_key].regridded_mask = np.empty(
+                [GeoMetaWrfHydro.ny_local], np.float32
+            )
+            InputDict[supp_pcp_key].final_supp_precip_elem = np.empty(
+                [GeoMetaWrfHydro.ny_local_elem], np.float64
+            )
+            InputDict[supp_pcp_key].regridded_mask_elem = np.empty(
+                [GeoMetaWrfHydro.ny_local_elem], np.float32
+            )
+        elif ConfigOptions.grid_type == "hydrofabric":
             # Initialize the local final grid of values
-            InputDict[supp_pcp_key].final_supp_precip = np.empty([GeoMetaWrfHydro.ny_local],np.float64)
-            InputDict[supp_pcp_key].regridded_mask = np.empty([GeoMetaWrfHydro.ny_local], np.float32)
+            InputDict[supp_pcp_key].final_supp_precip = np.empty(
+                [GeoMetaWrfHydro.ny_local], np.float64
+            )
+            InputDict[supp_pcp_key].regridded_mask = np.empty(
+                [GeoMetaWrfHydro.ny_local], np.float32
+            )
 
-        InputDict[supp_pcp_key].userCycleOffset = ConfigOptions.supp_input_offsets[supp_pcp_tmp]
+        InputDict[supp_pcp_key].userCycleOffset = ConfigOptions.supp_input_offsets[
+            supp_pcp_tmp
+        ]
 
         if ConfigOptions.rqiMethod is not None:
             InputDict[supp_pcp_key].rqiMethod = ConfigOptions.rqiMethod[supp_pcp_tmp]
@@ -358,4 +408,3 @@ def initDict(ConfigOptions,GeoMetaWrfHydro):
             InputDict[supp_pcp_key].rqiThresh = 1.0
 
     return InputDict
-

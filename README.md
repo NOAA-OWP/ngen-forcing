@@ -1,14 +1,50 @@
-# NextGen Forcings Engine Repository Overview
-Welcome to the NextGen Forcings Engine GitHub repository. This repository currently contains Python tools that allows the NextGen Water Resources Modeling Framework to be provide meteorological forcings data to NextGen formulations through either (1) csv catchment/netcdf files or (2) a Basic Model Interface (BMI) Forcings Engine. This repository also contains Forcings Extraction script repository that will allow a given user to extract all meteorological forcing data products required for National Water Model (NWM) version 3.0 operational configurations. Future endeavors for this repository will also evenetually provide users more Python tools that will implement various data assimilation techniques (dyanmic data, oceanic/freshwater circuluation models) for NextGen formulations within the framework. 
+# NextGen Forcings Engine
 
-# NextGen Lumped Forcings Driver Directory
-This directory contains Python modules and a driver script that will provide users lumped meteorological forcings for catchments within the NextGen hydrofabric. Users will be able to create NextGen formatted csv catchment files or a single netcdf file that can be ingested by the default NextGen Forcings Provider. Current Python modules can support Analaysis of Record and Calibration (AORC) data, GFS data, CFS data, and HRRR data products that are needed for standard NWM operational configurations (Reanlysis, Analysis and Assimilation, Short range, Medium range, and long range). Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
+Welcome to the **NextGen Forcings Engine** repository. This repository provides Python-based workflows that allow the NextGen Water Resources Modeling Framework to supply meteorological forcing data to NextGen formulations.
 
-# NextGen Forcings Engine BMI Directory
-This directory contains a BMI application that essentially streamlines the WRF-Hydro Forcings Engine into a BMI compliant data pipeline with universal regridding capabilites. This Python BMI tool can directly provide the NextGen model engine regridded meteorological forcings that are required for all NWMv3.0 operational configurations. BMI realization configuration files have already been constructed for all NWMv3.0 operational configurations to support gridded domains, unstructured meshes, and the NextGen hydrofabric. Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
+The engine supports two primary data delivery pipelines:
+1. **Lumped Catchment / NetCDF Files**: CSV catchment files or NetCDF files produced via exact rasterization.
+2. **Basic Model Interface (BMI)**: A BMI-compliant, real-time data pipeline for direct ingestion into NextGen formulations.
 
-# Forcing Extraction Scripts Directory
-This directory contains a series of scripts for each NWM domain subdirectory (CONUS, Alaska, Puerto Rico, Hawaii) that encompasses the required meteorological forcing data products needed for each regional NWMv3.0 operational configuration setup. Each script is a particular meteorlogical forcing data product that is available to download off the NOMADS server. Availability of each meteorlogical forcing data product varies, but a user can generally extract at least the last 24 hours of previous data products or forecast cycles available. Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
+---
 
-# ESMF Mesh Domain Configuration Production Directory
-This directory contains Python scripts that are only focused on coverting model domain file formats into a ESMF mesh compliant netcdf file that can be directly utilized by the NextGen Forcings Engine BMI. So far, this repository contains scripts to convert a NextGen hydrofabric geopackage or coastal model mesh file inputs (D-FlowFM, SCHISM) into ESMF mesh compliant netcdf files. Future updates to this repository will reflect more NextGen model formulations as they become available
+## Directory Overview
+
+| Directory | Workflow Type | Key Capabilities |
+| :--- | :--- | :--- |
+| `NextGen Lumped Forcings Driver` | Standalone Driver Script & Modules | Generates catchment-lumped forcing CSVs or single NetCDF files using the `ExactExtract` rasterization tool. |
+| `NextGen Forcings Engine BMI` | BMI Application Pipeline | Wraps and streamlines the [NCAR WRF-Hydro Forcings Engine](https://github.com/NCAR/WrfHydroForcing) into a BMI data pipeline with ESMF regridding. |
+
+---
+
+## 1. NextGen Lumped Forcings Driver Directory
+
+This directory contains Python modules and a driver script designed to extract and lump meteorological forcings across catchments within the NextGen hydrofabric using the `ExactExtract` rasterization method. 
+
+### Key Features
+* **Output Formats**: Generates NextGen-compatible CSV catchment files or a consolidated NetCDF file for ingestion by the default NextGen Forcings Provider.
+* **Supported Data Products**:
+  * **AORC**: Analysis of Record and Calibration (local disk or AWS S3 bucket)
+  * **GFS**: Global Forecast System
+  * **CFS**: Climate Forecast System
+  * **HRRR**: High-Resolution Rapid Refresh
+* **Configuration Support**: Supports standard National Water Model (NWM) operational configurations, including Reanalysis, Analysis & Assimilation (AnA), Short-Range, Medium-Range, and Long-Range.
+
+> **Documentation & Setup**: Setup, installation, and execution examples are further detailed in the `README.md` file within the directory.
+
+---
+
+## 2. NextGen Forcings Engine BMI Directory
+
+This directory houses a Python-based Basic Model Interface (BMI) wrapper that converts the legacy [WRF-Hydro Forcings Engine](https://github.com/NCAR/WrfHydroForcing) into a streamlined, BMI-compliant data pipeline.
+
+### Key Features
+* **Universal Regridding**: Utilizes the Earth System Modeling Framework (ESMF) regridding suite to dynamically map forcing fields directly to NextGen domains.
+* **Operational Capabilities**: Directly provides regridded forcing data required for all **NWM v3.1** operational configurations.
+* **Pre-configured Realizations**: Pre-built BMI realization configuration files are included for:
+  * Gridded domains
+  * Unstructured meshes
+  * NextGen hydrofabric
+* **Integrated Preprocessing**: Automatically handles forcing file extraction and ESMF mesh generation directly as a preprocessing workflow before Forcing Engine execution
+
+> **Documentation & Setup**: Setup, installation, and execution examples are further detailed in the `README.md` file within the directory.

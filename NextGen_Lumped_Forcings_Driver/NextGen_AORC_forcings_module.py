@@ -1,3 +1,8 @@
+import multiprocessing
+if multiprocessing.get_start_method(allow_none=True) != 'spawn':
+    multiprocessing.set_start_method('spawn', force=True)
+from multiprocessing import Process, Lock, Queue, Manager, current_process
+from multiprocessing.pool import ThreadPool
 import numpy as np
 import geopandas as gpd
 import netCDF4 as nc4
@@ -9,8 +14,6 @@ from pathlib import Path
 from os.path import join
 import argparse
 import pandas as pd
-from  multiprocessing import Process, Lock, Queue
-import multiprocessing
 import time
 import datetime
 import re
@@ -20,12 +23,121 @@ import ssl
 import xarray as xr
 import gc
 import wget
+import s3fs
+import dask
+import dask.array
+import sys
+import zarr
+import resource
+from osgeo import osr
+import json
+import shutil
+import threading
+from functools import lru_cache
 
+
+#dask.config.set(pool=ThreadPool(16))
+
+# Thread-safe cache with size limit
+class YearCache:
+    def __init__(self, max_size=10):
+        #self.mangager = Manager()
+        self.max_size = max_size
+        self._cache = {}
+        self._lock = threading.Lock()
+        
+    def get(self, year):
+        with self._lock:
+            return self._cache.get(year)
+            
+    def set(self, year, data):
+        with self._lock:
+            if len(self._cache) >= self.max_size and year not in self._cache:
+                # Remove least recently used year
+                lru_year = min(self._cache.keys())
+                del self._cache[lru_year]
+            self._cache[year] = data
+            
+    def contains(self, year):
+        with self._lock:
+            return year in self._cache
+
+_year_cache = YearCache(max_size=10)
+
+def get_spatial_indices(ds, bounds):
+    """Helper function to get indices for spatial subset"""
+    lat_mask = (ds.latitude >= bounds[1]) & (ds.latitude <= bounds[3])
+    lon_mask = (ds.longitude >= bounds[0]) & (ds.longitude <= bounds[2])
+    return {
+        'latitude': lat_mask,
+        'longitude': lon_mask
+    }
+
+def get_cached_subset(year, hyfabfile, AORC_met_vars):
+    cached_data = _year_cache.get(year)
+    if cached_data is not None:
+        return cached_data
+        
+    _s3 = s3fs.S3FileSystem(anon=True)
+    zarr_path = f"s3://noaa-nws-aorc-v1-1-1km/{year}.zarr"
+    store = s3fs.S3Map(root=zarr_path, s3=_s3, check=False)
+    
+    ds = xr.open_zarr(store)
+    ds_subset = subset_zarr_by_bounds(ds, hyfabfile)
+    ds_subset = ds_subset[AORC_met_vars]
+    
+    print(f"Computing cached subset for {year}...")
+    t0 = time.time()
+    ds_subset = ds_subset.compute(
+        scheduler='threads',
+        num_workers=24,
+        optimize_graph=True
+    )
+    t1 = time.time()
+    print(f"finished computing cached subset for {year}: {t1-t0:.3f}s")
+    
+    _year_cache.set(year, ds_subset)
+    return ds_subset
+
+def process_years_chunk(years_chunk, data, lock, shared_results, thread_num, 
+                       met_dataset_pathway, output_root, hyfabfile, weights,
+                       add_offset, scale_factor, AORC_met_vars, AORC_missing_value,
+                       aorc_ncfile, NN_table, gapfill, zarr_data):
+    """Process a chunk of years for a given thread"""
+    EE_df_final = pd.DataFrame()
+    time_subset = data["time_periods"]
+    
+    for year in years_chunk:
+        year_periods = time_subset[time_subset.year == year]
+        
+        for timestamp in year_periods:
+            EE_df = python_ExactExtract_zarr(
+                met_dataset_pathway,
+                hyfabfile,
+                add_offset,
+                scale_factor,
+                zarr_data['variables'],
+                NN_table,
+                gapfill,
+                timestamp.to_timestamp(),
+                len(time_subset)
+            )
+            EE_df_final = pd.concat([EE_df_final, EE_df])
+            
+    shared_results.append(EE_df_final)
+        
 def generate_nearest_neighbor_correction_table(NextGen_hyfabfile, AORC_file, add_offset, scale_factor, AORC_met_vars):
 
     # Quickly generate ExactExtract results to see if any catchments had missing data from AORC domain
-    EE_df = python_ExactExtract(AORC_file, NextGen_hyfabfile, add_offset, scale_factor, AORC_met_vars, None, False)
-
+    if AORC_file.startswith('s3://'):
+        _s3 = s3fs.S3FileSystem(anon=True)
+        store = s3fs.S3Map(root=AORC_file, s3=_s3, check=False)
+        ds = xr.open_dataset(store, engine='zarr', chunks={'time': 'auto'})
+        first_timestamp = pd.Timestamp(ds.time.values[0])
+        EE_df = python_ExactExtract_zarr(AORC_file, NextGen_hyfabfile, add_offset, scale_factor, AORC_met_vars, None, False, first_timestamp)
+        ds.close()
+    else:
+       EE_df = python_ExactExtract(AORC_file, NextGen_hyfabfile, add_offset, scale_factor, AORC_met_vars, None, False)
     # See if there is any missing catchment data for given hydrofabric file user specified 
     try:
 
@@ -82,7 +194,7 @@ def get_date_time(path):
     path = Path(path)
     name = path.stem
     date_time = name.split('.')[0]
-    date_time = date_time.split('_')[1]  #this index may depend on the naming format of the forcing data
+    date_time = date_time.split('_')[2]  #this index may depend on the naming format of the forcing data
     date_time = re.sub('\D','',date_time)
     return date_time
 
@@ -91,19 +203,18 @@ def process_csv_ids(data : dict, lock: Lock, num: int, csv_dir):
     cat_ids = np.unique(data['cat_ids'][:,0])
     num_cats = len(cat_ids)
 
-    print("Thread " + str(num) + " array shape is " + str(len(data['cat_ids'])) + " and number of unique ids is " + str(len(cat_ids)))
     # Loop through each catchment and create/save csv
     for i in range(num_cats):
         csv_df = pd.DataFrame([])
         csv_df['Time'] = data['Time'][i,:]
-        csv_df['RAINRATE'] = data["RAINRATE"][i,:]/3600.0
-        csv_df['Q2D'] = data['Q2D'][i,:]
-        csv_df['T2D'] = data['T2D'][i,:]
-        csv_df['U2D'] = data['U2D'][i,:]
-        csv_df['V2D'] = data['V2D'][i,:]
-        csv_df['LWDOWN'] = data['LWDOWN'][i,:]
-        csv_df['SWDOWN'] = data['SWDOWN'][i,:]
-        csv_df['PSFC'] = data['PSFC'][i,:]
+        csv_df['RAINRATE'] = data['APCP_surface'][i,:]/3600.0
+        csv_df['Q2D'] = data['SPFH_2maboveground'][i,:]
+        csv_df['T2D'] = data['TMP_2maboveground'][i,:]
+        csv_df['U2D'] = data['UGRD_10maboveground'][i,:]
+        csv_df['V2D'] = data['VGRD_10maboveground'][i,:]
+        csv_df['LWDOWN'] = data['DLWRF_surface'][i,:]
+        csv_df['SWDOWN'] = data['DSWRF_surface'][i,:]
+        csv_df['PSFC'] = data['PRES_surface'][i,:]
         csv_df = csv_df.sort_values(by=['Time'])
         NextGen_csv = join(csv_dir,str(data['cat_ids'][i,0])+'.csv')
         csv_df.to_csv(NextGen_csv,index=False)
@@ -114,7 +225,7 @@ def process_csv_ids(data : dict, lock: Lock, num: int, csv_dir):
             if(len(csv_df) != csv_length):
                 print(cat_ids[i] + ' likely missing some of time series')
 
-        print(str((i+1)/num_cats*100) + '% complete updating catchment csvs')
+        print(f'\rThread {num}: {(i+1)/num_cats*100:.1f}% complete updating catchment csvs', end='', flush=True)
     # collect the garbage within the thread before sending results back to main
     # thread to maximize our RAM as much as possible
     gc.collect()
@@ -125,20 +236,24 @@ def process_annual_csv_ids(data : dict, lock: Lock, num: int, csv_dir):
     num_cats = len(cat_ids)
     year = pd.DatetimeIndex([data['Time'][0]]).year[0]
 
-    print("Thread " + str(num) + " array shape is " + str(data.shape))
+    print(f"Thread {num}: Processing {len(data['cat_ids'])} records for {num_cats} unique catchments")
+    print(f"Thread {num}: Time range: {data['Time'].min()} to {data['Time'].max()}")
+    print(f"Thread {num}: Unique timestamps: {len(np.unique(data['Time']))}")
+
     # Loop through each catchment and create/save csv
+    
     for i in range(num_cats):
         idx = np.where(data['cat_ids'] == cat_ids[i])[0]
         csv_df = pd.DataFrame([])
         csv_df['Time'] = data['Time'][idx]
-        csv_df['RAINRATE'] = data["RAINRATE"][idx]/3600.0
-        csv_df['Q2D'] = data['Q2D'][idx]
-        csv_df['T2D'] = data['T2D'][idx]
-        csv_df['U2D'] = data['U2D'][idx]
-        csv_df['V2D'] = data['V2D'][idx]
-        csv_df['LWDOWN'] = data['LWDOWN'][idx]
-        csv_df['SWDOWN'] = data['SWDOWN'][idx]
-        csv_df['PSFC'] = data['PSFC'][idx]
+        csv_df['RAINRATE'] = data["APCP_surface"][idx]/3600.0
+        csv_df['Q2D'] = data['SPFH_2maboveground'][idx]
+        csv_df['T2D'] = data['TMP_2maboveground'][idx]
+        csv_df['U2D'] = data['UGRD_10maboveground'][idx]
+        csv_df['V2D'] = data['VGRD_10maboveground'][idx]
+        csv_df['LWDOWN'] = data['DLWRF_surface'][idx]
+        csv_df['SWDOWN'] = data['DSWRF_surface'][idx]
+        csv_df['PSFC'] = data['PRES_surface'][idx]
         csv_df = csv_df.sort_values(by=['Time'])
         NextGen_csv = join(csv_dir,str(cat_ids[i])+ '_' + str(year) + '.csv')
         csv_df.to_csv(NextGen_csv,index=False)
@@ -179,8 +294,6 @@ def process_cats(data : dict, lock: Lock, num: int, csv_dir):
 
         # Print how far thread is along with regridding all AORC data
         print("Thread is " + str((i+1)/num_cats*100) + '% complete for creating final csv catchment file')
-
-
 
 def create_ngen_cat_csv_CONUS(csv_dir, nextgen_cat_ids, num_processes):
     """
@@ -253,15 +366,14 @@ def create_ngen_cat_csv_annual(final_df, csv_dir, num_processes):
         data = {}
         data["cat_ids"] = id_groups[i]
         data["Time"] = time_groups[i]
-        data["RAINRATE"] = precip_groups[i]
-        data["Q2D"] = q_groups[i]
-        data["T2D"] = tmp_groups[i]
-        data["U2D"] = ugrd_groups[i]
-        data["V2D"] = vgrd_groups[i]
-        data["LWDOWN"] = lw_groups[i]
-        data["SWDOWN"] = sw_groups[i]
-        data["PSFC"] = pres_groups[i]
-
+        data["APCP_surface"] = precip_groups[i]  # Changed from RAINRATE
+        data["SPFH_2maboveground"] = q_groups[i] # Changed from Q2D
+        data["TMP_2maboveground"] = tmp_groups[i] # Changed from T2D
+        data["UGRD_10maboveground"] = ugrd_groups[i] # Changed from U2D
+        data["VGRD_10maboveground"] = vgrd_groups[i] # Changed from V2D
+        data["DLWRF_surface"] = lw_groups[i] # Changed from LWDOWN
+        data["DSWRF_surface"] = sw_groups[i] # Changed from SWDOWN
+        data["PRES_surface"] = pres_groups[i] # Changed from PSFC
         #append to the list
         process_data.append(data)
 
@@ -298,73 +410,136 @@ def create_ngen_cat_csv(final_df, csv_dir, num_catchments,num_forcing_files, num
     Create NextGen csv files with specified format
     """
     
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
     final_df['Time'] = pd.Timestamp("1970-01-01 00:00:00") + pd.TimedeltaIndex(final_df['time'].values,'s')
 
-    #generate the data objects for child processes for csv files
-    id_groups = np.array_split(np.reshape(final_df['cat-id'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    time_groups = np.array_split(np.reshape(final_df['Time'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    precip_groups = np.array_split(np.reshape(final_df['APCP_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    q_groups = np.array_split(np.reshape(final_df['SPFH_2maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    tmp_groups = np.array_split(np.reshape(final_df['TMP_2maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    ugrd_groups = np.array_split(np.reshape(final_df['UGRD_10maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    vgrd_groups = np.array_split(np.reshape(final_df['VGRD_10maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    lw_groups = np.array_split(np.reshape(final_df['DLWRF_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    sw_groups = np.array_split(np.reshape(final_df['DSWRF_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
-    pres_groups = np.array_split(np.reshape(final_df['PRES_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
 
-    # Delete main data at this point to save RAM
-    del(final_df)
+    # Check if we need to restructure data
+    expected_rows = num_catchments * num_forcing_files
+    actual_rows = len(final_df)
 
-    process_data = []
-    process_list = []
-    lock = Lock()
+    #print(f"final_df['cat-id'].values: {final_df['cat-id'].values}")
+    if actual_rows == expected_rows:
+        print("Data is already properly structured for reshaping")
+        #generate the data objects for child processes for csv files
+        id_groups = np.array_split(np.reshape(final_df['cat-id'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        time_groups = np.array_split(np.reshape(final_df['Time'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        precip_groups = np.array_split(np.reshape(final_df['APCP_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        q_groups = np.array_split(np.reshape(final_df['SPFH_2maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        tmp_groups = np.array_split(np.reshape(final_df['TMP_2maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        ugrd_groups = np.array_split(np.reshape(final_df['UGRD_10maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        vgrd_groups = np.array_split(np.reshape(final_df['VGRD_10maboveground'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        lw_groups = np.array_split(np.reshape(final_df['DLWRF_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        sw_groups = np.array_split(np.reshape(final_df['DSWRF_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
+        pres_groups = np.array_split(np.reshape(final_df['PRES_surface'].values,(num_catchments,num_forcing_files)), num_processes,axis=0)
 
-    # Collect garbage from main thread after partitioning data
-    gc.collect()
+    else:
+        print(f"Restructuring irregular data: {actual_rows} records -> {num_catchments}*{num_forcing_files} structure")
+        
+        # Get unique catchments and timestamps
+        unique_catchments = sorted(final_df['cat-id'].unique())
+        unique_times = sorted(final_df['time'].unique())
+        
+        # Verify dimensions match expected
+        if len(unique_catchments) != num_catchments:
+            print(f"Warning: Expected {num_catchments} catchments, found {len(unique_catchments)}")
+            num_catchments = len(unique_catchments)
+        if len(unique_times) != num_forcing_files:
+            print(f"Warning: Expected {num_forcing_files} timesteps, found {len(unique_times)}")
+            num_forcing_files = len(unique_times)
+        
+        # Create mapping dictionaries for fast lookup
+        cat_to_idx = {cat: i for i, cat in enumerate(unique_catchments)}
+        time_to_idx = {t: i for i, t in enumerate(unique_times)}
+        
+        # Initialize 2D arrays with proper fill values
+        cat_ids_2d = np.empty((num_catchments, num_forcing_files), dtype=object)
+        time_2d = np.empty((num_catchments, num_forcing_files), dtype=object)
+        apcp_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        spfh_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        tmp_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        ugrd_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        vgrd_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        dlwrf_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        dswrf_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        pres_2d = np.full((num_catchments, num_forcing_files), np.nan)
+        
+        # Fill 2D arrays
+        for _, row in final_df.iterrows():
+            cat_idx = cat_to_idx[row['cat-id']]
+            time_idx = time_to_idx[row['time']]
+            
+            cat_ids_2d[cat_idx, time_idx] = row['cat-id']
+            time_2d[cat_idx, time_idx] = row['Time']
+            apcp_2d[cat_idx, time_idx] = row['APCP_surface']
+            spfh_2d[cat_idx, time_idx] = row['SPFH_2maboveground']
+            tmp_2d[cat_idx, time_idx] = row['TMP_2maboveground']
+            ugrd_2d[cat_idx, time_idx] = row['UGRD_10maboveground']
+            vgrd_2d[cat_idx, time_idx] = row['VGRD_10maboveground']
+            dlwrf_2d[cat_idx, time_idx] = row['DLWRF_surface']
+            dswrf_2d[cat_idx, time_idx] = row['DSWRF_surface']
+            pres_2d[cat_idx, time_idx] = row['PRES_surface']
+        
+        print("Data restructuring complete")
+        
+        # Split the 2D arrays across processes
+        id_groups = np.array_split(cat_ids_2d, num_processes, axis=0)
+        time_groups = np.array_split(time_2d, num_processes, axis=0)
+        precip_groups = np.array_split(apcp_2d, num_processes, axis=0)
+        q_groups = np.array_split(spfh_2d, num_processes, axis=0)
+        tmp_groups = np.array_split(tmp_2d, num_processes, axis=0)
+        ugrd_groups = np.array_split(ugrd_2d, num_processes, axis=0)
+        vgrd_groups = np.array_split(vgrd_2d, num_processes, axis=0)
+        lw_groups = np.array_split(dlwrf_2d, num_processes, axis=0)
+        sw_groups = np.array_split(dswrf_2d, num_processes, axis=0)
+        pres_groups = np.array_split(pres_2d, num_processes, axis=0)
 
+    worker_args = []
     for i in range(num_processes):
-        # fill the dictionary with needed at
-        data = {}
-        data["cat_ids"] = id_groups[i]
-        data["Time"] = time_groups[i]
-        data["RAINRATE"] = precip_groups[i]
-        data["Q2D"] = q_groups[i]
-        data["T2D"] = tmp_groups[i]
-        data["U2D"] = ugrd_groups[i]
-        data["V2D"] = vgrd_groups[i]
-        data["LWDOWN"] = lw_groups[i]
-        data["SWDOWN"] = sw_groups[i]
-        data["PSFC"] = pres_groups[i]
+        data = {
+            "cat_ids": id_groups[i],
+            "Time": time_groups[i],
+            "APCP_surface": precip_groups[i],
+            "SPFH_2maboveground": q_groups[i],
+            "TMP_2maboveground": tmp_groups[i],
+            "UGRD_10maboveground": ugrd_groups[i],
+            "VGRD_10maboveground": vgrd_groups[i],
+            "DLWRF_surface": lw_groups[i],
+            "DSWRF_surface": sw_groups[i],
+            "PRES_surface": pres_groups[i]
+        }
+        worker_args.append((data, None, i, csv_dir))
 
-        #append to the list
-        process_data.append(data)
-
-        p = Process(target=process_csv_ids, args=(data, lock, i, csv_dir))
-
-        process_list.append(p)
-
-    # Delete variables to save RAM
-    del(id_groups)
-    del(time_groups)
-    del(precip_groups)
-    del(q_groups)
-    del(tmp_groups)
-    del(ugrd_groups)
-    del(vgrd_groups)
-    del(lw_groups)
-    del(sw_groups)
-    del(pres_groups)
-
-    # collect garbage from threads to save RAM
+    # Delete main data to save RAM
+    del(final_df)
     gc.collect()
 
-    #start all processes
-    for p in process_list:
-        p.start()
+    executor = ProcessPoolExecutor(max_workers=num_processes)
+    try:
+        print(f"Submitting {num_processes} CSV writing tasks...")
+        futures = [executor.submit(process_csv_ids, *args) for args in worker_args]
+        
+        # Wait for completion and handle any errors
+        for i, future in enumerate(futures):
+            try:
+                future.result()
+                #print(f"Process {i} completed successfully")
+            except Exception as e:
+                print(f"Process {i} failed with error: {e}")
 
-    #wait for termination
-    for p in process_list:
-        p.join()
+    finally:
+        # Explicit cleanup to prevent garbage collection issues
+        executor.shutdown(wait=True)
+        
+        # Force cleanup of internal thread pool
+        if hasattr(executor, '_threads'):
+            executor._threads.shutdown(wait=True)
+        
+        # Delete the executor reference
+        del executor
+
+    print("All CSV writing processes completed")
 
 def create_ngen_netcdf_CONUS(aorc_ncfile, netcdf_dir):
     """
@@ -534,42 +709,128 @@ def create_ngen_netcdf(aorc_ncfile, final_df, netcdf_dir, num_files, num_catchme
     print("Finish NextGen annual file creation")
 
 def Python_ExactExtract_Coverage_Fraction_Weights(aorc_file, hyfab_file, AORC_met_vars, output_dir):
-    # load AORC netcdf file into gdal dataframe to
-    # partition out meterological variables into rasters
-    aorc = gdal.Open(aorc_file)
-    # Get gdal sub-datasets, which will seperate each AORC
-    # variable into their own raster wrapper
-    nc_rasters = aorc.GetSubDatasets()
-    # Get variable name in netcdf file
-    variable = nc_rasters[-1][0].split(":")[-1]
-    # Get the gdal netcdf syntax for netcdf variable
-    # Example syntax: 'NETCDF:"AORC-OWP_2012050100z.nc4":APCP_surface'
-    nc_dataset_name = nc_rasters[-1][0]
-    # Define raster wrapper for AORC meteorological variable
-    # and specify nc_file attribute to be True. Otherwise,
-    # this function will expect a .tif file. Assign data for dict variable
-    rsw = GDALRasterWrapper(nc_dataset_name)
-    # For each AORC met variable, we must redefine the
-    # hydrofabric raster dataset to regrid forcings
-    # based on user operation below
-    dsw = GDALDatasetWrapper(hyfab_file)
-    # Define output writer and coverage fraction weights 
-    # output file
-    EE_coverage_fraction_csv = os.path.join(output_dir + "AORC_ExactExtract_Weights.csv")
-    writer = CoverageWriter(EE_coverage_fraction_csv, dsw)
+    
+    # Generate cache filename based on hydrofabric file
+    
+    #hyfab_test = os.path.splitext(os.path.basename(hyfab_file))[1]
+    #print(f"Hyfab_test = {hyfab_test}")
+    gage_id = output_dir.split('/')[-1]
 
-    # Process the data and produce the coverage fraction
-    # weights file between the hydrofabric and AORC data
-    processor = CoverageProcessor(dsw, writer, rsw)
-    processor.process()
+    hyfab_name = os.path.splitext(os.path.basename(hyfab_file))[0]
+    weights_file = os.path.join(os.path.dirname(output_dir), f"AORC_ExactExtract_Weights_{gage_id}.csv")
+    
+    # If weights already exist, return the path
+    if os.path.exists(weights_file):
+        print(f"Using existing weights file: {weights_file}")
+        return weights_file
 
-    # Flush changes to disk
-    writer = None
+    if aorc_file.startswith('s3://'): #is_zarr
+        
+        print("Calculating weights file.")
+    
+        # Set up zarr access
+        _s3 = s3fs.S3FileSystem(anon=True)
+        store = s3fs.S3Map(root=aorc_file, s3=_s3, check=False)
+        ds = xr.open_dataset(store, engine='zarr', chunks={'time': 'auto'})
+        
+        # Get grid information
+        lats = ds.latitude.values
+        lons = ds.longitude.values
+        
+        # Create temporary raster file for ExactExtract
+        temp_raster = os.path.join(output_dir, "temp_raster.tif")
+        
+        # Get the first variable's data for grid structure
+        var_data = ds[AORC_met_vars[0]].isel(time=0).values
+        
+        # Create geotransform for the raster
+        xmin, xmax = lons.min(), lons.max()
+        ymin, ymax = lats.min(), lats.max()
+        dx = (xmax - xmin) / (len(lons) - 1)
+        dy = (ymax - ymin) / (len(lats) - 1)
+        geotransform = [xmin, dx, 0, ymax, 0, -dy]
+        
+        # Create GDAL raster
+        driver = gdal.GetDriverByName('GTiff')
+        rows, cols = var_data.shape
+        dataset = driver.Create(temp_raster, cols, rows, 1, gdal.GDT_Float32)
+        dataset.SetGeoTransform(geotransform)
 
-    # Return the pathway of the coverage fraction weight file
-    return EE_coverage_fraction_csv
+        # Write data
+        dataset.GetRasterBand(1).WriteArray(var_data)
+        dataset.FlushCache()
+        dataset = None
+        ds.close()
+        
+        # Use existing ExactExtract functionality with temporary raster
+        rsw = GDALRasterWrapper(temp_raster)
+        dsw = GDALDatasetWrapper(hyfab_file)
+        writer = CoverageWriter(weights_file, dsw)
+        
+        # Process the data and produce weights file
+        processor = CoverageProcessor(dsw, writer, rsw)
+        processor.process()
+        
+        # Clean up
+        writer = None
+        os.remove(temp_raster)
+        
+    else:
+    
+        # load AORC netcdf file into gdal dataframe to
+        # partition out meterological variables into rasters
+        aorc = gdal.Open(aorc_file)
+        # Get gdal sub-datasets, which will seperate each AORC
+        # variable into their own raster wrapper
+        nc_rasters = aorc.GetSubDatasets()
+        # Get variable name in netcdf file
+        variable = nc_rasters[-1][0].split(":")[-1]
+        # Get the gdal netcdf syntax for netcdf variable
+        # Example syntax: 'NETCDF:"AORC-OWP_2012050100z.nc4":APCP_surface'
+        nc_dataset_name = nc_rasters[-1][0]
+        # Define raster wrapper for AORC meteorological variable
+        # and specify nc_file attribute to be True. Otherwise,
+        # this function will expect a .tif file. Assign data for dict variable
+        rsw = GDALRasterWrapper(nc_dataset_name)
+        # For each AORC met variable, we must redefine the
+        # hydrofabric raster dataset to regrid forcings
+        # based on user operation below
+        dsw = GDALDatasetWrapper(hyfab_file)
+        # Define output writer and coverage fraction weights 
+        # output file
+        #weights_file = os.path.join(output_dir + "AORC_ExactExtract_Weights.csv")
+        writer = CoverageWriter(weights_file, dsw)        
+        
+        # Original netCDF handling
+        aorc = gdal.Open(aorc_file)
+        nc_rasters = aorc.GetSubDatasets()
+        variable = nc_rasters[-1][0].split(":")[-1]
+        nc_dataset_name = nc_rasters[-1][0]
+        
+        # Use existing ExactExtract functionality
+        rsw = GDALRasterWrapper(nc_dataset_name)
+        dsw = GDALDatasetWrapper(hyfab_file)
+        writer = CoverageWriter(weights_file, dsw)
+        
+        processor = CoverageProcessor(dsw, writer, rsw)
+        processor.process()
+    
+        # Process the data and produce the coverage fraction
+        # weights file between the hydrofabric and AORC data
+        processor = CoverageProcessor(dsw, writer, rsw)
+        processor.process()
+
+        # Flush changes to disk
+        writer = None
+
+    # Both conditionals produce the same format weights file at weights_file path
+    if not os.path.exists(weights_file):
+        raise RuntimeError(f"Failed to generate weights file at {weights_file}")
+      
+    return weights_file    
 
 def python_ExactExtract_Manual_Weights(aorc_file, AORC_weights, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, NN_table, gapfill):
+    
     # load AORC netcdf file into gdal dataframe to
     # partition out meterological variables into rasters
     aorc = gdal.Open(aorc_file)
@@ -655,7 +916,191 @@ def python_ExactExtract_Manual_Weights(aorc_file, AORC_weights, add_offset, scal
 
     return csv_results
 
+
+
+def subset_zarr_by_bounds(ds, hyfabfile, buff=0.1):
+    """
+    Subset zarr data by geographical bounds with buffer
+    bounds: (minx, miny, maxx, maxy)
+    buff: degrees
+    """
+    t0 = time.time()
+    gdf = gpd.read_file(hyfabfile)
+    t1 = time.time()
+    print(f"Reading hyfabfile: {t1-t0:.3f}s")
+    
+    bounds = gdf.total_bounds    
+    
+    #t0=time.time()
+    bounds_with_buffer = (
+        bounds[0] - buff,
+        bounds[1] - buff, 
+        bounds[2] + buff,
+        bounds[3] + buff
+    )
+    t2=time.time()
+    print(f"Computing bounds: {t2-t1:.3f}s")
+    
+    #print(f"About to select with bounds: {bounds_with_buffer}")
+    #print(f"Dataset coords before selection: {ds.coords}")
+    
+    t3 = time.time()
+    subset=ds.sel(
+    #return ds.sel(
+        latitude=slice(bounds_with_buffer[1], bounds_with_buffer[3]),
+        longitude=slice(bounds_with_buffer[0], bounds_with_buffer[2])
+    )
+    t4 = time.time()
+    
+    print(f"Selection operation: {t4-t3:.3f}s")
+    
+    return subset
+    #t2 = time.time()
+    
+    #print(f"Bounds calc: {t1-t0:.3f}s")
+    #print(f"Selection op: {t2-t1:.3f}s")
+    #print(f"Subset shape: {subset.dims}")
+    
+    #lat_idx, lon_idx = get_spatial_indices(hyfabfile)
+    #return ds.isel(latitude=lat_idx, longitude=lon_idx)
+
+
+def python_ExactExtract_zarr(aorc_file, hyfabfile, add_offset, scale_factor, AORC_met_vars, NN_table, gapfill, timestamp=None, total_iterations=1):
+    # time logging for performance metrics
+    #t0 = time.time()
+    
+    if not hasattr(python_ExactExtract_zarr, "last_time"):
+        python_ExactExtract_zarr.last_time = time.time()
+        python_ExactExtract_zarr.elapsed_times = np.zeros(100)
+        python_ExactExtract_zarr.index = 0
+        python_ExactExtract_zarr.count = 0
+        python_ExactExtract_zarr.current_iteration = 0
+    
+    current_time = time.time()
+    elapsed = current_time - python_ExactExtract_zarr.last_time
+    
+    avg_time = np.mean(python_ExactExtract_zarr.elapsed_times)
+
+    #use cached subset
+    ds_subset = get_cached_subset(timestamp.year, hyfabfile, AORC_met_vars)
+
+    # Patch the dimension ordering of the latitude dimension to conform with 
+    # ExactExtract rasterization standards for the database input. Latitude 
+    # dimensionality must start at the northern boundary, while longitude
+    # values must start at the western boundary of a given grid input in 
+    # order for ExactExtract to properly calculate the correct weights for
+    # the given grid cell features
+    ds_subset = ds_subset.sel(latitude=slice(None, None, -1))
+    
+    all_vars_data = ds_subset.sel(time=timestamp.strftime('%Y-%m-%d %H:%M:%S'))
+    
+    lats = all_vars_data.latitude.values
+    lons = all_vars_data.longitude.values   
+        
+    # Set geotransform once
+    xmin, xmax = lons.min(), lons.max()
+    ymin, ymax = lats.min(), lats.max()
+    dx = (xmax - xmin) / (len(lons) - 1)
+    dy = (ymax - ymin) / (len(lats) - 1)
+    geotransform = [xmin, dx, 0, ymax, 0, -dy]
+    
+    # Create process-specific temporary directory
+    process_id = current_process().pid
+    temp_dir = f"/tmp/aorc_process_{process_id}"
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    try:
+        # Initialize dictionaries for raster wrappers and operations
+        rsw_dict = {}
+        op_dict = {}
+        
+        gdal_start = time.time()
+        # Loop over each meteorological variable
+        
+       
+        for i, var in enumerate(AORC_met_vars):
+            # Create temporary GeoTIFF for this variable
+            temp_file = os.path.join(temp_dir, f"var_{i}.tif")
+            driver = gdal.GetDriverByName('GTiff')
+            rows, cols = all_vars_data[var].shape
+            dataset = driver.Create(temp_file, cols, rows, 1, gdal.GDT_Float32)
+            
+            # Set projection and geotransform
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(4326)
+            dataset.SetProjection(srs.ExportToWkt())
+            dataset.SetGeoTransform(geotransform)
+            
+            # Write variable data
+            dataset.GetRasterBand(1).WriteArray(all_vars_data[var].values)
+            dataset.FlushCache()
+            dataset = None
+            
+            # Create raster wrapper and operation
+            rsw_dict[f"rsw{i}"] = GDALRasterWrapper(temp_file)
+            op_dict[f"op{i}"] = Operation.from_descriptor(f'mean({var})', raster=rsw_dict[f"rsw{i}"])
+            
+       
+        gdal_setup_end = time.time()
+        
+        # Process features
+        #process_start = time.time()
+        dsw = GDALDatasetWrapper.from_descriptor(f"{hyfabfile}[hyfabfile_final]", field_name='divide_id')
+        writer = MapWriter()
+        processor = FeatureSequentialProcessor(dsw, writer, list(op_dict.values()))
+        processor.process()  
+        #process_end = time.time()  
+
+        # Process results
+        #results_start = time.time()
+        csv_results = pd.DataFrame(writer.output.values(), columns=AORC_met_vars)
+        for i, column in enumerate(csv_results):
+            csv_results[column] = csv_results[column] * scale_factor[i] + add_offset[i]
+            #print(f"Scale factor: {scale_factor}, i: {i}")
+        
+          
+        csv_results['cat-id'] = writer.output.keys()
+        csv_results['time'] = (timestamp - pd.Timestamp("1970-01-01 00:00:00")).total_seconds()
+        
+        if(gapfill):
+            csv_results = nearest_neighbor_correction(csv_results, NN_table, AORC_met_vars)
+        
+        #results_end = time.time()
+        
+        #total_time = time.time() - t0
+        
+        #print(f"Dataset retrieval: {t1-t0:.3f}s")
+        #print(f"Spatial subsetting: {t2-t1:.3f}s")
+        #print(f"Time selection and compute: {t3-t2:.3f}s")
+        #print(f"GDAL setup: {gdal_setup_end-gdal_start:.3f}s")
+        #print(f"Feature processing: {process_end-process_start:.3f}s")
+        #print(f"Results processing: {results_end-results_start:.3f}s")
+        #print(f"Total function time: {total_time:.3f}s")
+        
+        # processing time metrics, continually updating
+        python_ExactExtract_zarr.elapsed_times[python_ExactExtract_zarr.index] = elapsed
+        python_ExactExtract_zarr.index = (python_ExactExtract_zarr.index + 1) % 100
+        python_ExactExtract_zarr.count = min(python_ExactExtract_zarr.count + 1, 100)
+       
+        avg_time = np.mean(python_ExactExtract_zarr.elapsed_times[:python_ExactExtract_zarr.count])
+        python_ExactExtract_zarr.current_iteration += 1
+        percent_done = (python_ExactExtract_zarr.current_iteration / total_iterations) * 100
+
+        output = f"\r Processed {timestamp}, current: {elapsed:.4f}s, Avg: {avg_time:.4f}s, {percent_done:3.1f}%"
+        print(f"\r{output:<60}", end='', flush=True)
+        python_ExactExtract_zarr.last_time = current_time
+        
+        return csv_results
+        
+    finally:
+        # Clean up resources
+        for rsw in rsw_dict.values():
+            del rsw
+        #ds.close()
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 def python_ExactExtract(aorc_file, hyfabfile, add_offset, scale_factor, AORC_met_vars, NN_table, gapfill):
+    
     # load AORC netcdf file into gdal dataframe to
     # partition out meterological variables into rasters
     aorc = gdal.Open(aorc_file)
@@ -665,6 +1110,7 @@ def python_ExactExtract(aorc_file, hyfabfile, add_offset, scale_factor, AORC_met
     # get datetime of forcing file to append
     # to ExactExtract csv output file
     date_time = get_date_time(aorc_file)
+    #print(f"date_time: {date_time}")
     # Define gdal writer to only return ExactExtract
     # regrid results as a python dict
     writer = MapWriter()
@@ -725,61 +1171,116 @@ def python_ExactExtract(aorc_file, hyfabfile, add_offset, scale_factor, AORC_met
 
     return csv_results
 
-def process_sublist(data : dict, lock: Lock,  EE_results, num: int, met_dataset_pathway, output_root, hyfabfile, weights, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, aorc_ncfile, NN_table, gapfill):
-    # Get number of files in each thread to loop through
-    num_files = len(data["url_forcing_files"])    
+def process_sublist(data : dict, lock: Lock, shared_results, num: int, met_dataset_pathway, output_root, hyfabfile, weights, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, aorc_ncfile, NN_table, gapfill, zarr_data):
 
-    # Initalize pandas dataframe to save the
-    # regridded AORC ExactExtract results from
-    # each AORC file we loop through
-    EE_df_final = pd.DataFrame()
-
-    # Read in ExactExtract coverage fraction weights file
-    weights = pd.read_csv(weights)
-    for i in range(num_files):
-        # extract forcing url file and file name
-        aorc_url_file = data["url_forcing_files"][i]
-        aorc_filename = data["aorc_filename"][i]
-
-        # Flag to indicate user requested to 
-        # download AORC data off ERRDAP server
-        if(met_dataset_pathway == None):
-            # Initalize AORC netcdf filename pathway
-            datafile_path = join(output_root, aorc_filename)
-
-            # Generate dummy certificate for quicker access to ERRDAP server
-            ssl._create_default_https_context = ssl._create_unverified_context
-
-            if(datafile_path != aorc_ncfile):
-                # Call wget to download AORC forcing file for ExactExtract regridding
-                filename = wget.download(aorc_url_file,out=output_root)
-
+    try:
+        if data.get('is_zarr', False):
+            EE_df_final = pd.DataFrame()
+            time_subset = data["time_periods"]
+            weights_data = data.get("weights_data") if data.get("weights_data") is not None else pd.read_csv(weights)
+            total_iterations=len(time_subset)
+            
+            print(f"Thread {num} processing zarr data at {time.strftime('%H:%M:%S')}.")
+            print(f"Thread {num} will process {total_iterations} time periods.")
+               
+            _s3 = s3fs.S3FileSystem(anon=True)
+            
+            for year in zarr_data['years']:
+                year_start = time.time()
+                store_path = f"s3://noaa-nws-aorc-v1-1-1km/{year}.zarr"
+                store = s3fs.S3Map(root=store_path, s3=_s3, check=False)
+                       
+                try:
+                    ds = xr.open_dataset(store, engine='zarr', chunks={'time': 'auto'})
+                         
+                    year_periods = time_subset[time_subset.year == year]
+                    CHUNK_SIZE = 24
+                       
+                    for chunk_start in range(0, len(year_periods), CHUNK_SIZE):
+                        chunk_end = min(chunk_start + CHUNK_SIZE, len(year_periods))
+                        chunk_periods = year_periods[chunk_start:chunk_end]
+                           
+                        chunk_start_time = pd.Timestamp(chunk_periods[0].to_timestamp())
+                        chunk_end_time = pd.Timestamp(chunk_periods[-1].to_timestamp())
+                          
+                           
+                        for timestamp in chunk_periods:
+                            EE_df = python_ExactExtract_zarr(
+                                met_dataset_pathway, #aorc_file
+                                hyfabfile, 
+                                add_offset,
+                                scale_factor,
+                                zarr_data['variables'], #AORC_met_vars
+                                NN_table,
+                                gapfill,
+                                timestamp.to_timestamp(),
+                                total_iterations
+                            )
+                            EE_df_final = pd.concat([EE_df_final, EE_df])
+                               
+                finally:
+                    if 'ds' in locals():
+                        ds.close()
+                        del ds
+                    if 'store' in locals():
+                        del store
+                    gc.collect()
+                       
+            shared_results.append(EE_df_final)
         else:
-            # Initalize AORC netcdf filename pathway
-            datafile_path = join(met_dataset_pathway, aorc_filename)
+            # existing non-zarr processing:
+            # Get number of files in each thread to loop through
+            num_files = len(data["url_forcing_files"])    
 
+            # Initalize pandas dataframe to save the
+            # regridded AORC ExactExtract results from
+            # each AORC file we loop through
+            EE_df_final = pd.DataFrame()
 
-        print("Thread " + str(num) + " executing " + datafile_path)    
-        # Call python ExactExtract routine to directly extract 
-        # AORC regridded results to global AORC variables
-        EE_df = python_ExactExtract_Manual_Weights(datafile_path, weights.copy(), add_offset, scale_factor, AORC_met_vars, AORC_missing_value, NN_table, gapfill)
-        #print(EE_df)
-        # concatenate the regridded data to threads final dataframe
-        EE_df_final = pd.concat([EE_df_final,EE_df])
+            # Read in ExactExtract coverage fraction weights file
+            weights = pd.read_csv(weights)
+            #print(f"weights = {weights}")
+            for i in range(num_files):
+                # extract forcing url file and file name
+                aorc_url_file = data["url_forcing_files"][i]
+                aorc_filename = data["aorc_filename"][i]
 
-        if(datafile_path != aorc_ncfile):
-            # Remove AORC forcing file after completing the aerial weighting average
-            os.remove(datafile_path)
+                # Flag to indicate user requested to 
+                # download AORC data off ERRDAP server
+                if(met_dataset_pathway == None):
+                    # Initalize AORC netcdf filename pathway
+                    datafile_path = join(output_root, aorc_filename)
 
-        # Print how far thread is along with regridding all AORC data
-        print("Thread (" + str(num) + ") is " + str((i+1)/num_files*100) + '% complete')
+                    # Generate dummy certificate for quicker access to ERRDAP server
+                    ssl._create_default_https_context = ssl._create_unverified_context
 
-    # collect the garbage within the thread before sending results back to main
-    # thread to maximize our RAM as much as possible
-    gc.collect()
+                    if(datafile_path != aorc_ncfile):
+                        # Call wget to download AORC forcing file for ExactExtract regridding
+                        filename = wget.download(aorc_url_file,out=output_root)
 
-    # Put regridded results into thread queue to return to main thread
-    EE_results.put(EE_df_final)
+                else:
+                    # Initalize AORC netcdf filename pathway
+                    datafile_path = join(met_dataset_pathway, aorc_filename)
+
+                # Call python ExactExtract routine to directly extract 
+                # AORC regridded results to global AORC variables
+                EE_df = python_ExactExtract_Manual_Weights(datafile_path, weights.copy(), add_offset, scale_factor, AORC_met_vars, AORC_missing_value, NN_table, gapfill)
+                # concatenate the regridded data to threads final dataframe
+                EE_df_final = pd.concat([EE_df_final,EE_df])
+
+            # collect the garbage within the thread before sending results back to main
+            # thread to maximize our RAM as much as possible
+            gc.collect()
+
+            # Put regridded results into thread queue to return to main thread
+            #print(f"Thread {num} completed successfully: {len(EE_df_final)} records, {EE_df_final['time'].nunique()} unique timestamps")
+            shared_results.put(EE_df_final)
+            
+    except Exception as e:
+        print(f"Thread {num} FAILED with error: {e}")
+        import traceback
+        traceback.print_exc()
+        shared_results.put(pd.DataFrame()) 
 
 
 def CONUS_NGen_files(pr, met_dataset_pathway, datafiles, aorc_filenames, output_root, netcdf_dir, csv_dir, netcdf, csv, hyfabfile, weights, num_processes, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, num_files, num_catchments, aorc_ncfile, nextgen_cat_ids, NN_table, gapfill):
@@ -791,14 +1292,19 @@ def CONUS_NGen_files(pr, met_dataset_pathway, datafiles, aorc_filenames, output_
     for year in years:
         print("Loop through CONUS AORC forcing data for year " + str(year))
 
-        # Slice list based on url and filenames within a particular year
-        yearly_filenames = [s for s in aorc_filenames if "AORC-OWP_" + str(year) in s]
-        yearly_datafiles = [s for s in datafiles if "AORC-OWP_" + str(year) in s]
+        if met_dataset_pathway is not None and met_dataset_pathway.startswith('s3://'):
+            # For zarr, we just need the time periods for this year
+            pr_yearly = pr[pr.year == year]
+            annual_months = pr_yearly.month.unique()
+        else:
+            # Slice list based on url and filenames within a particular year
+            yearly_filenames = [s for s in aorc_filenames if "AORC-OWP_" + str(year) in s]
+            yearly_datafiles = [s for s in datafiles if "AORC-OWP_" + str(year) in s]
 
-        # partition out the months within the year of data
-        # we are looping through
-        pr_yearly = pr[pr.year == year]
-        annual_months = pr_yearly.month.unique()
+            # partition out the months within the year of data
+            # we are looping through
+            pr_yearly = pr[pr.year == year]
+            annual_months = pr_yearly.month.unique()
 
         # seperate batches of months in either monthly batches from 1-3 months
         # which is the amount we can handle on the NWC servers currently
@@ -812,64 +1318,92 @@ def CONUS_NGen_files(pr, met_dataset_pathway, datafiles, aorc_filenames, output_
             monthly_batches = np.array_split(annual_months,4)
 
         # Loops over each monthly batch and create CONUS netcdf file for data
-        for months in monthly_batches:
-            print("Loop through CONUS AORC forcing data for year " + str(year) + " and months" + str(months.values))
             # Create monthly AORC file extension strings to grab the
             # correct monthly AORC files for this monthly batch
-            monthly_file_str = []
-            for value in months:
-                if(value < 10):
-                    monthly_file_str.append("AORC-OWP_" + str(year) + '0' + str(value))
-                else:
-                    monthly_file_str.append("AORC-OWP_" + str(year) + str(value))
+        for months in monthly_batches:
+            print("Loop through CONUS AORC forcing data for year " + str(year) + " and months" + str(months.values))
+            if is_zarr:
+                # Get time periods for these months
+                monthly_periods = pr_yearly[pr_yearly.month.isin(months)]
+                num_forcing_files_monthly = len(monthly_periods)
+                
+                # Split time periods among processes
+                time_groups = np.array_split(monthly_periods, num_processes)
+                
+                process_data = []
+                process_list = []
+                lock = Lock()
 
-            # Slice list based on url and filenames within a particular year
-            monthly_filenames = [s for s in yearly_filenames if any(xs in s for xs in monthly_file_str)]
-            monthly_datafiles = [s for s in yearly_datafiles if any(xs in s for xs in monthly_file_str)]
-
-
-            num_forcing_files_monthly = len(monthly_datafiles)
-
-            #generate the data objects for child processes
-            url_file_groups = np.array_split(np.array(monthly_datafiles), num_processes)
-            aorc_file_name_groups = np.array_split(np.array(monthly_filenames), num_processes)
-
-            # If there's no dataset pathway specified
-            # then we assume user wants to download
-            # AORC data off the server
-            if(met_dataset_pathway == None):
-        
-                # Grab first datafile for given year to save for netcdf creation
-                aorc_ncfile_monthly = join(output_root,monthly_filenames[0])
-
-                # Check to see if file exsits since we've already previously downloaded
-                # the first datafile to extract netcdf metadata
-                if(os.path.exists(aorc_ncfile_monthly) == False):
-                    filename = wget.download(monthly_datafiles[0],out=output_root)
+                for i in range(num_processes):
+                    data = {
+                        "time_periods": time_groups[i],
+                        "year": year,
+                        "months": months
+                    }
+                    process_data.append(data)
+                    
+                    p = Process(
+                        target=process_sublist, 
+                        args=(data, lock, EE_results, i, met_dataset_pathway, output_root, 
+                              hyfabfile, weights, add_offset, scale_factor, AORC_met_vars, 
+                              AORC_missing_value, aorc_ncfile, NN_table, gapfill, zarr_data)
+                    )
+                    process_list.append(p)
             else:
-                # Grab first datafile for given year to save for netcdf creation
-                aorc_ncfile_monthly = join(met_dataset_pathway,monthly_filenames[0])
+                monthly_file_str = []
+                for value in months:
+                    if(value < 10):
+                        monthly_file_str.append("AORC-OWP_" + str(year) + '0' + str(value))
+                    else:
+                        monthly_file_str.append("AORC-OWP_" + str(year) + str(value))
+
+                # Slice list based on url and filenames within a particular year
+                monthly_filenames = [s for s in yearly_filenames if any(xs in s for xs in monthly_file_str)]
+                monthly_datafiles = [s for s in yearly_datafiles if any(xs in s for xs in monthly_file_str)]
 
 
-            process_data = []
-            process_list = []
-            lock = Lock()
+                num_forcing_files_monthly = len(monthly_datafiles)
 
-            # Initalize thread storage to return to main program
-            EE_results = Queue()
+                #generate the data objects for child processes
+                url_file_groups = np.array_split(np.array(monthly_datafiles), num_processes)
+                aorc_file_name_groups = np.array_split(np.array(monthly_filenames), num_processes)
 
-            for i in range(num_processes):
-                # fill the dictionary with needed at
-                data = {}
-                data["url_forcing_files"] = url_file_groups[i]
-                data["aorc_filename"] = aorc_file_name_groups[i]
+                # If there's no dataset pathway specified
+                # then we assume user wants to download
+                # AORC data off the server
+                if(met_dataset_pathway == None):
+        
+                    # Grab first datafile for given year to save for netcdf creation
+                    aorc_ncfile_monthly = join(output_root,monthly_filenames[0])
 
-                #append to the list
-                process_data.append(data)
+                    # Check to see if file exsits since we've already previously downloaded
+                    # the first datafile to extract netcdf metadata
+                    if(os.path.exists(aorc_ncfile_monthly) == False):
+                        filename = wget.download(monthly_datafiles[0],out=output_root)
+                else:
+                    # Grab first datafile for given year to save for netcdf creation
+                    aorc_ncfile_monthly = join(met_dataset_pathway,monthly_filenames[0])
 
-                p = Process(target=process_sublist, args=(data, lock, EE_results, i, met_dataset_pathway, output_root, hyfabfile, weights, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, aorc_ncfile_monthly, NN_table, gapfill))
 
-                process_list.append(p)
+                process_data = []
+                process_list = []
+                lock = Lock()
+
+                # Initalize thread storage to return to main program
+                EE_results = Queue()
+
+                for i in range(num_processes):
+                    # fill the dictionary with needed at
+                    data = {}
+                    data["url_forcing_files"] = url_file_groups[i]
+                    data["aorc_filename"] = aorc_file_name_groups[i]
+
+                    #append to the list
+                    process_data.append(data)
+
+                    p = Process(target=process_sublist, args=(data, lock, EE_results, i, met_dataset_pathway, output_root, hyfabfile, weights, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, aorc_ncfile_monthly, NN_table, gapfill))
+
+                    process_list.append(p)
 
             #start all processes
             for p in process_list:
@@ -940,85 +1474,187 @@ def CONUS_NGen_files(pr, met_dataset_pathway, datafiles, aorc_filenames, output_
         create_ngen_netcdf_CONUS(aorc_ncfile, netcdf_dir)
     time6=datetime.datetime.now()
 
-def VPU_NGen_files(met_dataset_pathway, datafiles, aorc_filenames, output_root, netcdf_dir, csv_dir, netcdf, csv, hyfabfile, weights, num_processes, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, num_files, num_catchments, aorc_ncfile, NN_table, gapfill):
 
-    #generate the data objects for child processes
-    url_file_groups = np.array_split(np.array(datafiles), num_processes)
-    aorc_file_name_groups = np.array_split(np.array(aorc_filenames), num_processes)
+def VPU_NGen_files(met_dataset_pathway, datafiles, aorc_filenames, output_root, netcdf_dir, csv_dir, netcdf, csv, hyfabfile, weights, num_processes, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, num_files, num_catchments, aorc_ncfile, NN_table, gapfill, pr, zarr_data):
+    
+    weights_data = pd.read_csv(weights) if weights else None
+    
+    if met_dataset_pathway is not None and met_dataset_pathway.startswith('s3://'):
+        # Modified zarr processing with year chunks
+        years = sorted(pr.year.unique())
+        chunk_size = min(num_processes, len(years))
+        
+        manager = Manager()
+        shared_results = manager.list()
+        
+        # Process years in chunks equal to number of processes
+        for i in range(0, len(years), chunk_size):
+            years_chunk = years[i:i + chunk_size]
+            process_list = []
+            
+            # Create process for each year in chunk
+            for j, year in enumerate(years_chunk):
+                year_periods = pr[pr.year == year]
+                data = {
+                    "time_periods": year_periods,
+                    "weights_data" : weights_data,
+                    "is_zarr": True
+                }
+                
+                p = Process(
+                    target=process_years_chunk,
+                    args=([year], data, None, shared_results, j, 
+                          met_dataset_pathway, output_root, hyfabfile,
+                          weights, add_offset, scale_factor, AORC_met_vars,
+                          AORC_missing_value, aorc_ncfile, NN_table, 
+                          gapfill, zarr_data)
+                )
+                process_list.append(p)
+            
+            # Start and wait for processes in current chunk
+            for p in process_list:
+                p.start()
+            for p in process_list:
+                p.join()
+            
+            # Clear cache after chunk is complete
+            gc.collect()
+    else:
+        url_file_groups = np.array_split(np.array(datafiles), num_processes)
+        aorc_file_name_groups = np.array_split(np.array(aorc_filenames), num_processes)
+        
+        result_queue = Queue()
+        process_list = []
 
+        #print(f"About to create {num_processes} processes for {len(datafiles)} files")
+        #print(f"Files per process: {[len(group) for group in url_file_groups]}")
 
-    process_data = []
-    process_list = []
-    lock = Lock()
+        for i in range(num_processes):
+            data = {
+                "url_forcing_files": url_file_groups[i],
+                "aorc_filename": aorc_file_name_groups[i],
+                "is_zarr": False
+            }
 
-    # Initalize thread storage to return to main program
-    EE_results = Queue()
+            #print(f"Process {i}: {len(data['url_forcing_files'])} files assigned")
+            #if len(data['aorc_filename']) > 0:
+            #    print(f"  First: {data['aorc_filename'][0]}")
+            #    print(f"  Last: {data['aorc_filename'][-1]}")
 
-    for i in range(num_processes):
-        # fill the dictionary with needed at
-        data = {}
-        data["url_forcing_files"] = url_file_groups[i]
-        data["aorc_filename"] = aorc_file_name_groups[i]
+            p = Process(target=process_sublist, 
+                       args=(data, None, result_queue, i, met_dataset_pathway, 
+                            output_root, hyfabfile, weights, add_offset, 
+                            scale_factor, AORC_met_vars, AORC_missing_value, 
+                            aorc_ncfile, NN_table, gapfill, zarr_data))
+            process_list.append(p)
 
-        #append to the list
-        process_data.append(data)
+        print(f"Created {len(process_list)} processes")
 
-        p = Process(target=process_sublist, args=(data, lock, EE_results, i, met_dataset_pathway, output_root, hyfabfile, weights, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, aorc_ncfile, NN_table, gapfill))
+        # Start all processes
+        for p in process_list:
+            p.start()
 
-        process_list.append(p)
+        print("All processes started")
+        
+        # DEBUG: Check process status before collecting results
+        #import time
+        #time.sleep(2)  # Give processes a moment to start
+        #alive_count = sum(1 for p in process_list if p.is_alive())
+        #print(f"Processes alive after start: {alive_count}/{num_processes}")
 
-    #start all processes
-    for p in process_list:
-        p.start()
+        # Collect results with better error handling and monitoring
+        results = []
+        collected_count = 0
+        max_wait_time = 60  # seconds to wait for each result
+        
+        print("Starting result collection (may take some time)...")
+        while collected_count < num_processes:
+            try:
+                # Check if queue has items before trying to get
+                if not result_queue.empty():
+                    result = result_queue.get_nowait()
+                    results.append(result)
+                    collected_count += 1
+                else:
+                    # Check if any processes are still alive
+                    alive_processes = [p for p in process_list if p.is_alive()]
+                    
+                    if len(alive_processes) == 0:
+                        # Try to get any remaining results
+                        while not result_queue.empty():
+                            result = result_queue.get_nowait()
+                            results.append(result)
+                            collected_count += 1
+                        break
+                    # Wait a bit and try again
+                    time.sleep(1)
+                    
+            except Exception as e:
+                print(f"Error collecting result {collected_count + 1}: {e}")
+                # Add empty DataFrame for failed process
+                results.append(pd.DataFrame())
+                collected_count += 1
 
-    print("Gathering regridded data to main thread")
-    # Before we terminate threads, aggregate thread
-    #regridded results together and save to main thread
-    final_df = pd.DataFrame()
-    for i in range(num_processes):
-        result = EE_results.get()
-        final_df = pd.concat([final_df,result])
-        print("Collecting regridded data from thread " + str(i))
+        print(f"Result collection complete. Got {len(results)} results")
 
-    #wait for termination
-    for p in process_list:
-        p.join()
+        # Join processes with timeout to prevent hanging
+        print("Joining processes...")
+        for i, p in enumerate(process_list):
+            try:
+                #print(f"Joining process {i}...")
+                p.join(timeout=30)  # 30 second timeout
+                if p.is_alive():
+                    print(f"Process {i} didn't finish, terminating...")
+                    p.terminate()
+                    time.sleep(1)
+                    if p.is_alive():
+                        print(f"Process {i} still alive after terminate, killing...")
+                        p.kill()
+                #print(f"Process {i} joined successfully")
+            except Exception as e:
+                print(f"Error joining process {i}: {e}")
 
-    # delete variables to free up RAM
-    del(EE_results)
-    del(url_file_groups)
-    del(aorc_file_name_groups)
-    del(result)
-
-    # Collect garbage from main program to save RAM
-    gc.collect()
-
-    print("Sorting data by catchment ids and time")
-    # Sort aggregated data based on cat-id and timestamp
+    if met_dataset_pathway is not None and met_dataset_pathway.startswith('s3://'):
+        final_df = pd.concat(list(shared_results))
+        
+    else:
+        print(f"Collected {len(results)} results from queue")
+        
+        # Filter out empty results and concatenate
+        valid_results = [r for r in results if len(r) > 0]
+        print(f"Valid results: {len(valid_results)}")
+        
+        if len(valid_results) == 0:
+            print("WARNING: No valid results collected!")
+            return pd.DataFrame()
+        
+        final_df = pd.concat(valid_results)
+    
     final_df = final_df.sort_values(by=['cat-id','time'])
 
-    if (netcdf):
-        #generate single NextGen netcdf file from aggregated regridded data
-        print('Now Generating NextGen netcdf file for single VPU')
-        create_ngen_netcdf(aorc_ncfile, final_df, netcdf_dir,num_files, num_catchments)
+    if netcdf:
+        print('Generating NextGen netcdf file for single VPU')
+        create_ngen_netcdf(aorc_ncfile, final_df, netcdf_dir, num_files, num_catchments)
 
-    if (csv):
-        # generate catchment csv files from aggregated regridded data
-        print('Now Generating NextGen csv files for single VPU')
-        create_ngen_cat_csv(final_df, csv_dir, num_catchments,num_files, num_processes)
+    if csv:
+        print('Generating NextGen csv files for single VPU')
 
-    # If user is downloading AORC data
-    # off of ERRDAP, then remove file
-    if(met_dataset_pathway == None):
-        # Finally, once we've finished producing netcdf/csv files, remove the inital
-        # AORC file used for netcdf metadata and AORC variable names
+        # Debug the final_df before processing
+        print(f"Final dataframe shape: {final_df.shape}")
+        print(f"Unique catchments: {final_df['cat-id'].nunique()}")
+        print(f"Unique timestamps: {final_df['time'].nunique()}")
+
+        create_ngen_cat_csv(final_df, csv_dir, num_catchments, num_files, num_processes)
+
+    if met_dataset_pathway is None:
         os.remove(aorc_ncfile)
+        print(f"met_dataset_pathway = None")
 
+    return final_df
 
 
 def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AORC_end_time, netcdf, csv, CONUS, hyfabfile, weights_file, num_processes : int):
    
-
     if(netcdf):
         netcdf_dir = join(output_root,"netcdf")
         if not os.path.isdir(netcdf_dir):
@@ -1032,11 +1668,16 @@ def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AOR
             os.makedirs(csv_dir)
     else:
         csv_dir = ''
-
+        
+    #Checking which data source type we're dealing with
+    is_zarr = met_dataset_pathway is not None and met_dataset_pathway.startswith('s3://')
+    is_local = met_dataset_pathway is not None and not is_zarr
+    is_erddap = met_dataset_pathway is None
+    
     # Remove AORC files if they're already existing within the 
     # output directory from a previous run and they're using
     # the option to extract data off the ERRDAP server
-    if(met_dataset_pathway == None):
+    if(met_dataset_pathway == None and not is_zarr):
         os.system('rm ' + join(output_root,'AORC-*.nc*'))
 
     # get number of catchments and their ids from hydrofabric
@@ -1048,84 +1689,208 @@ def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AOR
     # and respective variables to save RAM
     del(cat_df_full)
 
-    # create url links to AORC files on server
-    # and save file names and links 
-    aorc_beg = "AORC-OWP_"
-    aorc_end = "z.nc4"
-    aorc_new_end = ".nc4"
-    base_url = 'https://nwcal-wrds-ti01.nwc.nws.noaa.gov/aorc_erddap/erddap/files/erddap_dadf_1012_a549/'
     # Create time series based on user input
-    pr = pd.period_range(start=AORC_start_time,end=AORC_end_time,freq='H')
+    pr = pd.period_range(start=AORC_start_time,end=AORC_end_time,freq='h')
     pr = pr[0:len(pr)-1]
-    datafiles = []
-    aorc_filenames = []
-    for dt in pr:
-        year = dt.strftime('%Y')
-        month = dt.strftime('%m')
-        day = dt.strftime('%d')
-        hour = dt.strftime('%H')
-        sub_dir = year + month + '/'
-        # flag to change ending of AORC file 
-        # based on system file changes after 2019
-        if(int(year) > 2019):
-            aorc_end_final = aorc_new_end
-        else:
-            aorc_end_final = aorc_end
-        file_name = aorc_beg + year + month + day + hour + aorc_end_final
-        aorc_file = base_url + sub_dir + file_name
-        aorc_filenames.append(file_name)
-        datafiles.append(aorc_file)
 
-    # Initialize ssl default context to connect to url server when downloading files
-    ssl._create_default_https_context = ssl._create_unverified_context
+    if is_zarr:
+        datafiles = None
+        aorc_filenames = None
+        aorc_ncfile = None
+        num_forcing_files = len(pr)
+    
+        _s3 = s3fs.S3FileSystem(anon=True)
+    
+        # Get unique years needed
+        years = pr.year.unique()
+    
 
-    #Get number of AORC forcing files
-    num_forcing_files = len(datafiles)
-    print("number of AORC forcing files = {}".format(num_forcing_files))
- 
-
-    # If there's no dataset pathway specified
-    # then we assume user wants to download 
-    # AORC data off the server
-    if(met_dataset_pathway == None):
-        # Initalize AORC netcdf file in csv file directory that will be used
-        # to extract netcdf AORC met variable metadata 
-        aorc_ncfile = join(output_root,aorc_filenames[0])
-
-        # Grab first AORC file to get AORC variable names from netcdf data
-        filename = wget.download(datafiles[0],out=output_root)
-    else:
-        # Initalize AORC netcdf file in csv file directory that will be used
-        # to extract netcdf AORC met variable metadata
-        aorc_ncfile = join(met_dataset_pathway,aorc_filenames[0])
-
-    # Extract variable names from AORC netcdf data
-    nc_file = nc4.Dataset(aorc_ncfile)
-    # Get variable list from AORC file
-    nc_vars = list(nc_file.variables.keys())
-    # Get indices corresponding to Meteorological data
-    indices = [nc_vars.index(i) for i in nc_vars if '_' in i]
-    # Make array with variable names to use for ExactExtract module
-    AORC_met_vars = np.array(nc_vars)[indices]
-
-    # get scale_factor and offset keys if available
-    # (AORC-OWP files for HUC01 scenario has this metadata)
-    add_offset = np.zeros([len(AORC_met_vars)])
-    scale_factor = np.zeros([len(AORC_met_vars)])
-    i = 0
-    for key in AORC_met_vars:
-        try:
-            scale_factor[i] = nc_file.variables[key].scale_factor
-        except AttributeError as e:
-            scale_factor[i] = 1.0
-        try:
-            add_offset[i] = nc_file.variables[key].add_offset
-        except AttributeError as e:
+    
+        # Create zarr store for first year to get metadata
+        first_year = min(years)
+        aorc_ncfile = f"s3://noaa-nws-aorc-v1-1-1km/{first_year}.zarr"
+        first_store = s3fs.S3Map(
+            root=aorc_ncfile,
+            #root=f"s3://noaa-nws-aorc-v1-1-1km/{first_year}.zarr",
+            s3=_s3,
+            check=False
+        )
+    
+        # Open first dataset to get metadata (similar to how other paths use first file)
+        ds = xr.open_dataset(
+            first_store,
+            engine='zarr',
+        chunks={'time': 'auto'}
+        )
+    
+        # Get AORC variable names from zarr data (similar to NetCDF extraction)
+        AORC_met_vars = [var for var in ds.variables if '_' in var]
+    
+        # Get scale factors and offsets (similar to NetCDF handling)
+        add_offset = np.zeros([len(AORC_met_vars)])
+        scale_factor = np.ones([len(AORC_met_vars)])
+        
+        metadata = json.loads(first_store['.zmetadata'].decode('utf-8'))
+        
+        for i, var in enumerate(AORC_met_vars):
+            var_attrs = metadata['metadata'][f'{var}/.zattrs']
             add_offset[i] = 0.0
-        i += 1
+            scale_factor[i] = 1.0
+            #print(f"{var} scale_factor: {scale_factor[i]}, add_offset: {add_offset[i]}")
+        AORC_missing_value = ds[AORC_met_vars[0]].attrs.get('missing_value', -9999.0)
+            
+        # Store zarr info for later processing
+        zarr_data = {
+            'years': years,
+            'variables': AORC_met_vars,
+            'add_offset': add_offset,
+            'scale_factor': scale_factor,
+            'missing_value': AORC_missing_value
+        }
+        ds.close()
+    elif is_local:
+        # Local file handling
+        aorc_filenames = []
+        datafiles = []
 
-    #Get AORC missing value
-    AORC_missing_value = nc_file.variables[AORC_met_vars[0]].missing_value
+        aorc_end = ".nc4"
+        aorc_new_end = ".nc4"
+        #TODO: Add if_alaska check
+        aorc_beg = "AK_AORC-OWP_"
+
+        for dt in pr:
+            year = dt.strftime('%Y')
+            month = dt.strftime('%m')
+            day = dt.strftime('%d')
+            hour = dt.strftime('%H')
+        
+            # Use same filename convention as ERRDAP, based on original code
+            if(int(year) > 2019):
+                aorc_end_final = aorc_new_end
+            else:
+                aorc_end_final = aorc_end
+            
+            file_name = aorc_beg + year + month + day + hour + aorc_end_final
+            file_path = join(met_dataset_pathway, file_name)
+        
+            # Only add if file exists
+            if os.path.exists(file_path):
+                aorc_filenames.append(file_name)
+                datafiles.append(file_path)
+            else:
+                print(f"Warning: Expected file not found: {file_path}")
+            
+        num_forcing_files = len(datafiles)
+        if num_forcing_files == 0:
+            raise FileNotFoundError(f"No AORC files found in {met_dataset_pathway}")
+        else:
+            print(f"Number of forcing files: {num_forcing_files}")
+        
+        #print(f"aorc_filenames: {aorc_filenames}")
+
+        aorc_ncfile = join(met_dataset_pathway, aorc_filenames[0])
+        zarr_data = None
+        
+        # Extract variable names from AORC netcdf data
+        nc_file = nc4.Dataset(aorc_ncfile)
+        # Get variable list from AORC file
+        nc_vars = list(nc_file.variables.keys())
+        # Get indices corresponding to Meteorological data
+        indices = [nc_vars.index(i) for i in nc_vars if '_' in i]
+        # Make array with variable names to use for ExactExtract module
+        AORC_met_vars = np.array(nc_vars)[indices]
+
+        # get scale_factor and offset keys if available
+        # (AORC-OWP files for HUC01 scenario has this metadata)
+        add_offset = np.zeros([len(AORC_met_vars)])
+        scale_factor = np.zeros([len(AORC_met_vars)])
+        i = 0
+        for key in AORC_met_vars:
+            try:
+                scale_factor[i] = nc_file.variables[key].scale_factor
+            except AttributeError as e:
+                scale_factor[i] = 1.0
+            try:
+                add_offset[i] = nc_file.variables[key].add_offset
+            except AttributeError as e:
+                add_offset[i] = 0.0
+            i += 1
+
+        #Get AORC missing value
+        AORC_missing_value = nc_file.variables[AORC_met_vars[0]].missing_value
+        
+        # Close netcdf file
+        nc_file.close()
+        
+    else: #is_erddap
+    
+        # Initialize ssl default context to connect to url server when downloading files
+        ssl._create_default_https_context = ssl._create_unverified_context
+        
+        aorc_beg = "AORC-OWP_"
+        aorc_end = "z.nc4"
+        aorc_new_end = ".nc4"
+        base_url = 'https://nwcal-wrds-ti01.nwc.nws.noaa.gov/aorc_erddap/erddap/files/erddap_dadf_1012_a549/'
+
+        datafiles = []
+        aorc_filenames = []
+        for dt in pr:
+            year = dt.strftime('%Y')
+            month = dt.strftime('%m')
+            day = dt.strftime('%d')
+            hour = dt.strftime('%H')
+            sub_dir = year + month + '/'
+            # flag to change ending of AORC file 
+            # based on system file changes after 2019
+            if(int(year) > 2019):
+                aorc_end_final = aorc_new_end
+            else:
+                aorc_end_final = aorc_end
+            
+            file_name = aorc_beg + year + month + day + hour + aorc_end_final
+            aorc_file = base_url + sub_dir + file_name
+            aorc_filenames.append(file_name)
+            datafiles.append(aorc_file)
+        
+        #Get number of AORC forcing files
+        num_forcing_files = len(datafiles)
+        print("number of AORC forcing files = {}".format(num_forcing_files))
+        
+        #Download first file for metadata
+        aorc_ncfile = join(met_dataset_pathway, aorc_filenames[0])
+        filename = wget.download(datafiles[0], out=output_root)
+        zarr_data = None
+ 
+        # Extract variable names from AORC netcdf data
+        nc_file = nc4.Dataset(aorc_ncfile)
+        # Get variable list from AORC file
+        nc_vars = list(nc_file.variables.keys())
+        # Get indices corresponding to Meteorological data
+        indices = [nc_vars.index(i) for i in nc_vars if '_' in i]
+        # Make array with variable names to use for ExactExtract module
+        AORC_met_vars = np.array(nc_vars)[indices]
+
+        # get scale_factor and offset keys if available
+        # (AORC-OWP files for HUC01 scenario has this metadata)
+        add_offset = np.zeros([len(AORC_met_vars)])
+        scale_factor = np.zeros([len(AORC_met_vars)])
+        i = 0
+        for key in AORC_met_vars:
+            try:
+                scale_factor[i] = nc_file.variables[key].scale_factor
+            except AttributeError as e:
+                scale_factor[i] = 1.0
+            try:
+                add_offset[i] = nc_file.variables[key].add_offset
+            except AttributeError as e:
+                add_offset[i] = 0.0
+            i += 1
+
+        #Get AORC missing value
+        AORC_missing_value = nc_file.variables[AORC_met_vars[0]].missing_value
+        
+        # Close netcdf file
+        nc_file.close()
 
     # Read in divides layer of the hydrofabric geopackage file
     # that is used to calculate lumped forcings
@@ -1138,8 +1903,6 @@ def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AOR
     hyfab_data = hyfab_data.to_crs('WGS84')
     hyfab_data.to_file(hyfabfile_final,driver="GeoJSON")
 
-    # Close netcdf file
-    nc_file.close()
 
     # Flag to see if user has already provided an ExactExtract
     # coverage weights file, otherwise go ahead and produce the file
@@ -1162,10 +1925,13 @@ def NextGen_Forcings_AORC(output_root, met_dataset_pathway, AORC_start_time, AOR
 
     # Call function based on type of hydrofabric file
     if(CONUS):
+        print("Calling CONUS_NGen_files")
         CONUS_NGen_files(pr, met_dataset_pathway, datafiles, aorc_filenames, output_root, netcdf_dir, csv_dir, netcdf, csv, hyfabfile_final, weights, num_processes, add_offset, scale_factor, AORC_met_vars, AORC_missing_value, num_forcing_files, num_catchments, aorc_ncfile, nextgen_cat_ids, NN_table, gapfill)
     else:
-        VPU_NGen_files(met_dataset_pathway, datafiles, aorc_filenames, output_root, netcdf_dir, csv_dir, netcdf, csv, hyfabfile_final, weights, num_processes, add_offset, scale_factor, AORC_met_vars, AORC_missing_value,num_forcing_files, num_catchments,aorc_ncfile, NN_table, gapfill)
-
+        print("Calling VPU_NGen_files")
+        VPU_NGen_files(met_dataset_pathway, datafiles, aorc_filenames, output_root, netcdf_dir, csv_dir, netcdf, csv, hyfabfile_final, weights, num_processes, add_offset, scale_factor, AORC_met_vars, AORC_missing_value,num_forcing_files, num_catchments,aorc_ncfile, NN_table, gapfill, pr, zarr_data)
     # Now clean up I/O files from the script to free up memory for the user
     # Remove the temporary hydrofabric file
     os.remove(hyfabfile_final)
+
+
