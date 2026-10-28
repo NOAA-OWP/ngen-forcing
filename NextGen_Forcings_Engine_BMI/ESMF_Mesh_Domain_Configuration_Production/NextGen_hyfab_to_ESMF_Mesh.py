@@ -173,3 +173,17 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     center_coords_var.units = "degrees"
     nc.gridType = "unstructured"
     nc.version = "0.9"
+
+    if parquet is not None and os.path.isfile(parquet):
+        hgt_elem_var = nc.createVariable("Element_Elevation", "f8", ("elementCount"))
+        hgt_elem_var.long_name = "Catchment height above sea level"
+        hgt_elem_var.units = "meters"
+        slope_elem_var = nc.createVariable("Element_Slope", "f8", ("elementCount"))
+        slope_elem_var.long_name = "Catchment slope"
+        slope_elem_var.units = "meters"
+        slope_azi_elem_var = nc.createVariable("Element_Slope_Azmuith", "f8", ("elementCount"))
+        slope_azi_elem_var.long_name = "Catchment slope azmuith angle"
+        slope_azi_elem_var.units = "Degrees"
+        hgt_elem_var[:] = hyfab.elevation.values
+        slope_elem_var[:] = hyfab.slope.values
+        slope_azi_elem_var[:] = hyfab.slope_azmuith.values
