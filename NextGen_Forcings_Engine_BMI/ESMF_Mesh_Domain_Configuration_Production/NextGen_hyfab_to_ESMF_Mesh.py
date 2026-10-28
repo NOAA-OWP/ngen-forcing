@@ -187,3 +187,20 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
         hgt_elem_var[:] = hyfab.elevation.values
         slope_elem_var[:] = hyfab.slope.values
         slope_azi_elem_var[:] = hyfab.slope_azmuith.values
+
+    node_coords_var[:, 0] = node_x
+    node_coords_var[:, 1] = node_y
+    elem_conn_var[:] = node_connectivity
+    num_elem_conn_var[:] = element_num_nodes
+    center_coords_var[:, 0] = element_x_coord
+    center_coords_var[:, 1] = element_y_coord
+    elem_id[:] = hyfab.element_id.values
+
+    nc.sync()
+    nc.close()
+
+    try:
+        os.link(temp_path, esmf_mesh_output)
+        os.remove(temp_path)
+    except FileExistsError:
+        os.remove(temp_path)
