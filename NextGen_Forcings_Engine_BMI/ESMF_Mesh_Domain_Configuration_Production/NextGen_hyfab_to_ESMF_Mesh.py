@@ -122,3 +122,21 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
         nodes = len(geom.exterior.coords) - 1
         total_num_nodes += nodes
         element_num_nodes[i] = nodes
+
+    node_x_coord = np.empty(total_num_nodes, dtype=np.double)
+    node_y_coord = np.empty(total_num_nodes, dtype=np.double)
+    element_x_coord = np.empty(element_count, dtype=np.double)
+    element_y_coord = np.empty(element_count, dtype=np.double)
+
+    node_ptr = 0
+    for i, geom in enumerate(sanitized_geoms):
+        coords = np.array(geom.exterior.coords)[:-1]
+        num_nodes = element_num_nodes[i]
+
+        node_x_coord[node_ptr:node_ptr + num_nodes] = coords[:, 0]
+        node_y_coord[node_ptr:node_ptr + num_nodes] = coords[:, 1]
+
+        element_x_coord[i] = geom.centroid.x
+        element_y_coord[i] = geom.centroid.y
+
+        node_ptr += num_nodes
