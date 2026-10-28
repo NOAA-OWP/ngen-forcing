@@ -150,3 +150,26 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     node_count = len(unique_nodes)
     node_x = unique_nodes['x'].values
     node_y = unique_nodes['y'].values
+
+    out_dir = os.path.dirname(esmf_mesh_output)
+    base = os.path.basename(esmf_mesh_output)
+    temp_path = os.path.join(out_dir, f".{base}.tmp.{uuid.uuid4()}")
+
+    nc = netCDF4.Dataset(temp_path, "w", format="NETCDF4")
+    node_count_dim = nc.createDimension("nodeCount", node_count)
+    elem_count_dim = nc.createDimension("elementCount", element_count)
+    elem_conn_count_dim = nc.createDimension("connectionCount", len(node_connectivity))
+    node_count_dim = nc.createDimension("coordDim", 2)
+
+    node_coords_var = nc.createVariable("nodeCoords", 'f8', ("nodeCount", "coordDim"))
+    node_coords_var.units = "degrees"
+    elem_id = nc.createVariable("element_id", "i", "elementCount")
+    elem_id.long_name = "Catchment ID for hydrofabric"
+    elem_conn_var = nc.createVariable("elementConn", "i4", ("connectionCount"))
+    elem_conn_var.long_name = "Node Indices that define the element connectivity"
+    num_elem_conn_var = nc.createVariable("numElementConn", "i", "elementCount")
+    num_elem_conn_var.long_name = "Number of nodes per element"
+    center_coords_var = nc.createVariable("centerCoords", 'f8', ("elementCount", "coordDim"))
+    center_coords_var.units = "degrees"
+    nc.gridType = "unstructured"
+    nc.version = "0.9"
