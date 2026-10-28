@@ -204,3 +204,24 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
         os.remove(temp_path)
     except FileExistsError:
         os.remove(temp_path)
+
+
+def get_options():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('hyfab_gpkg', type=pathlib.Path, help="Hydrofabric geopackage file pathway")
+    parser.add_argument('-parquet', type=pathlib.Path, nargs='?', default=None, help="Hydrofabric parquet file pathway containing model-attributes.")
+    parser.add_argument("esmf_mesh_output", type=pathlib.Path, help="File pathway to save ESMF netcdf mesh file for hydrofabric")
+    return parser.parse_args()
+
+
+def main():
+    args = get_options()
+    convert_hyfab_to_esmf(
+        hyfab_gpkg=args.hyfab_gpkg,
+        esmf_mesh_output=args.esmf_mesh_output,
+        parquet=args.parquet
+    )
+
+
+if __name__ == "__main__":
+    main()
