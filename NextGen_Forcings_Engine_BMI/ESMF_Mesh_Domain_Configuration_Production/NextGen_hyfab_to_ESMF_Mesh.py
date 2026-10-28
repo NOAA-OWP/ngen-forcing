@@ -89,3 +89,22 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
 
     hyfab['element_id'] = element_ids
     hyfab = hyfab.sort_values(by=['element_id']).reset_index(drop=True)
+
+    if parquet is not None and os.path.isfile(parquet):
+        forcing_metadata = pd.read_parquet(parquet)
+        forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean', 'aspect_c_mean', 'X', 'Y']]
+        forcing_metadata = forcing_metadata.sort_values('divide_id')
+        forcing_metadata = forcing_metadata.reset_index()
+
+        element_ids_parquet = np.array(np.array([elem.split('-')[1] for elem in np.array(forcing_metadata.divide_id.values, dtype=str)], dtype=float), dtype=int)
+        parquet_coords = np.empty((len(element_ids_parquet), 2), dtype=float)
+        parquet_coords[:, 0] = element_ids_parquet
+        parquet_coords[:, 1] = element_ids_parquet
+
+        dist, idx = scipy.spatial.KDTree(parquet_coords).query(hyfab_coords)
+
+        hyfab['elevation'] = forcing_metadata.elevation_mean.values[idx]
+        hyfab['slope'] = forcing_metadata.slope_mean.values[idx]
+        hyfab['slope_azmuith'] = forcing_metadata.aspect_c_mean.values[idx]
+
+        del (forcing_metadata)
