@@ -20,3 +20,22 @@ hydrofabric domain configuration to utilize downscaling methods in the NextGen F
 
 Example Usage:  python NextGen_hyfab_to_ESMF_Mesh.py ./nextgen_01.gpkg -parquet ./vpu1.parquet ./NextGen_VPU01_Mesh.nc
 """
+def extract_largest_polygon(geom):
+    """
+    Guarantees that the returned object is a single Shapely Polygon.
+    Extracts the polygon with the largest area from MultiPolygons 
+    or GeometryCollections.
+    """
+    if geom is None or geom.is_empty:
+        return None
+
+    if geom.geom_type == "Polygon":
+        return geom
+    elif geom.geom_type == "MultiPolygon":
+        return max(geom.geoms, key=lambda a: a.area)
+    elif geom.geom_type == "GeometryCollection":
+        polys = [g for g in geom.geoms if g.geom_type == "Polygon"]
+        if polys:
+            return max(polys, key=lambda a: a.area)
+        return None
+    return None
