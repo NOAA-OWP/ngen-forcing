@@ -70,3 +70,22 @@ def clean_geometry_for_esmf(geom, i, grid_size=1e-6, simplify_tol=1e-6):
         geom = orient(geom, sign=1.0)
 
     return geom
+
+def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Path, parquet: pathlib.Path | None = None):
+    """
+    Convert NextGen Hydrofabric geopackage into ESMF Mesh format
+
+    :param hyfab_gpkg: Path to the hydrofabric geopackage file
+    :param esmf_mesh_output: Path to the output ESMF mesh file
+    :param parquet: Optional parquet file with hydrofabric model attributes
+    """
+    hyfab = gpd.read_file(hyfab_gpkg, layer='divides')
+    hyfab = hyfab.to_crs('WGS84')
+
+    element_ids = np.array(np.array([elem.split('-')[1] for elem in np.array(hyfab.divide_id.values, dtype=str)], dtype=float), dtype=int)
+    hyfab_coords = np.empty((len(element_ids), 2), dtype=float)
+    hyfab_coords[:, 0] = element_ids
+    hyfab_coords[:, 1] = element_ids
+
+    hyfab['element_id'] = element_ids
+    hyfab = hyfab.sort_values(by=['element_id']).reset_index(drop=True)
