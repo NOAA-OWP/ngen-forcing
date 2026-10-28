@@ -140,3 +140,13 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
         element_y_coord[i] = geom.centroid.y
 
         node_ptr += num_nodes
+
+    node_df = pd.DataFrame({'x': node_x_coord, 'y': node_y_coord})
+    node_df['global_id'] = node_df.groupby(['x', 'y']).ngroup() + 1
+
+    node_connectivity = node_df['global_id'].values.astype(np.int32)
+
+    unique_nodes = node_df.drop_duplicates('global_id').sort_values('global_id')
+    node_count = len(unique_nodes)
+    node_x = unique_nodes['x'].values
+    node_y = unique_nodes['y'].values
