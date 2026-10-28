@@ -108,3 +108,17 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
         hyfab['slope_azmuith'] = forcing_metadata.aspect_c_mean.values[idx]
 
         del (forcing_metadata)
+
+    element_count = len(hyfab.element_id)
+    element_num_nodes = np.empty(element_count, dtype=np.int32)
+    total_num_nodes = 0
+    sanitized_geoms = []
+
+    for i in range(element_count):
+        geom = hyfab.geometry[i]
+        geom = clean_geometry_for_esmf(geom, i)
+        sanitized_geoms.append(geom)
+        
+        nodes = len(geom.exterior.coords) - 1
+        total_num_nodes += nodes
+        element_num_nodes[i] = nodes
