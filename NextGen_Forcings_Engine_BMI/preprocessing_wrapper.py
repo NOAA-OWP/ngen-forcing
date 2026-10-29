@@ -30,11 +30,23 @@ def execute(forcing_config_input: str):
     with open(forcing_config_input, 'r') as forcing_config_file:
         forcing_config = yaml.safe_load(forcing_config_file)
 
+    # Sanitize parquet path: enforce None if empty string or file not found
+    parquet_val = forcing_config.get('parquet', forcing_config.get('Parquet', None))
+    if parquet_val is not None:
+        parquet_val = str(parquet_val).strip()
+        if not parquet_val or not os.path.isfile(parquet_val):
+            print(
+                f"NOTICE: Parquet file '{parquet_val}' is empty or does not exist. "
+                "Setting to None; bias correction and downscaling methods will not be applied"
+                "in the NextGen Forcings Engine BMI workflow unless parquet file is prescribed."
+            )
+            parquet_val = None
+            
     # Wrap config dict into simplenamespace to match esmf creation ConfigOptions format
     esmf_cfg = SimpleNamespace(
         geopackage=forcing_config['Geopackage'],
         geogrid=forcing_config['GeogridIn'],
-        parquet=forcing_config.get('Parquet', forcing_config.get('parquet', None))
+        parquet=parquet_val)
     )
 
     # Start timer for ESMF Mesh production script
