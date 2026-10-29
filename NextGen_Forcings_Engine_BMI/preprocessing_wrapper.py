@@ -46,7 +46,7 @@ def execute(forcing_config_input: str):
     esmf_cfg = SimpleNamespace(
         geopackage=forcing_config['Geopackage'],
         geogrid=forcing_config['GeogridIn'],
-        parquet=parquet_val)
+        parquet=parquet_val
     )
 
     # Start timer for ESMF Mesh production script
