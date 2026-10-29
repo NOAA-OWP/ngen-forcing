@@ -36,3 +36,15 @@ def execute(forcing_config_input: str):
         geogrid=forcing_config['GeogridIn'],
         parquet=forcing_config.get('Parquet', forcing_config.get('parquet', None))
     )
+
+    # Start timer for ESMF Mesh production script
+    start = time.perf_counter()
+
+    # Create mesh file
+    esmf_creation.create_mesh(esmf_cfg)
+
+    # Stop timer for ESMF Mesh production script
+    end = time.perf_counter()
+
+    # Report the time it took for ESMF Mesh production script
+    print(f"Time taken for ESMF mesh production: {end - start:.6f} seconds")
