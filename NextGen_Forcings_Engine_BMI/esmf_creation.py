@@ -44,3 +44,15 @@ def main():
     # Load Yaml into dict
     with open(args.cfg, "r") as f:
         cfg_dict = yaml.safe_load(f)
+
+    # Wrap config dict into simplenamespace to match ConfigOptions format
+    cfg = SimpleNamespace(
+        geopackage=cfg_dict["Geopackage"], geogrid=cfg_dict["GeogridIn"], parquet=cfg_dict.get("Parquet", None)
+    )
+
+    # Run mesh creation
+    create_mesh(cfg)
+
+
+if __name__ == "__main__":
+    main()
