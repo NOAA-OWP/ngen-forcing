@@ -26,3 +26,21 @@ def create_mesh(cfg: "ConfigOptions"):
         convert_hyfab_to_esmf(hyfab_gpkg=hyfab_name, esmf_mesh_output=mesh_outPath, parquet=parquet_data)
     else:
         print(f"ESMF mesh file already exists at {mesh_outPath}, skipping conversion.")
+
+
+def main():
+    """Create ESMF mesh from hydrofabric geopackage.
+
+    Main function to parse arguments and create ESMF mesh.
+
+    :param cfg: path to dictionary of forcing engine config parameters
+    """
+    parser = argparse.ArgumentParser(
+        description="Create ESMF mesh from hydrofabric geopackage"
+    )
+    parser.add_argument("cfg", help="Path to YAML config file")
+    args = parser.parse_args()
+
+    # Load Yaml into dict
+    with open(args.cfg, "r") as f:
+        cfg_dict = yaml.safe_load(f)
