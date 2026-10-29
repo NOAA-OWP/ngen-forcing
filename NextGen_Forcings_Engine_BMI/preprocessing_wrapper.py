@@ -48,3 +48,30 @@ def execute(forcing_config_input: str):
 
     # Report the time it took for ESMF Mesh production script
     print(f"Time taken for ESMF mesh production: {end - start:.6f} seconds")
+
+
+def get_options():
+    """
+    Function to accept and parse arguments.
+
+    :return: An argparse.Namespace object containing the parsed arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        'forcing_config_input',
+        type=str,
+        help='Path to forcing engine configuration file for forecast run'
+    )
+    return parser.parse_args()
+
+
+def main():
+    """
+    Main function to handle command-line execution.
+    """
+    args = get_options()
+    execute(forcing_config_input=args.forcing_config_input)
+
+
+if __name__ == '__main__':
+    main()
