@@ -18,6 +18,8 @@ ForecastFrequency: 360
 ForecastShift: 0
 ForecastInputHorizons: [23040]
 ForecastInputOffsets: [0]
+Geopackage: "./Alaska_NWMv4_Hydrofabric.gpkg"
+Parquet: "./Alaska_Hydrofabric.parquet"
 GeogridIn: "/scratch2/NCEPDEV/ohd/Jason.Ducker/NextGen_Domains_to_ESMF_Mesh/Hydrofabric_to_ESMF_Mesh/ESMF_Mesh_Output/Alaska_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"

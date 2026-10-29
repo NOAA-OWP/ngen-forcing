@@ -20,6 +20,8 @@ ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [14400]
 ForecastInputOffsets: [0]
+Geopackage: "./CONUS_NWMv4_Hydrofabric.gpkg"
+Parquet: "./CONUS_Hydrofabric.parquet"
 GeogridIn: "./NextGen_Domains/hydrofabric/NextGen_Hyfab_v2_VPU_conus_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
