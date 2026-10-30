@@ -22,7 +22,7 @@ ForecastInputHorizons: [14400]
 ForecastInputOffsets: [0]
 NWM_Geogrid: "./NWMv3.0_config/parm/domain/geo_em_CONUS.nc"
 Geopackage: "./CONUS_NWMv4_Hydrofabric.gpkg"
-Parquet: "./CONUS_Hydrofabric.parquet"
+Parquet_Path: "./CONUS_Hydrofabric.parquet"
 GeogridIn: "./NextGen_Domains/hydrofabric/NextGen_Hyfab_v2_VPU_01_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"

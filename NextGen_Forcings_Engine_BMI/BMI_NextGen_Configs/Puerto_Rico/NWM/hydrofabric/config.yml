@@ -22,7 +22,7 @@ ForecastInputHorizons: [14400]
 ForecastInputOffsets: [0]
 NWM_Geogrid: "./NWMv3.0_config/parm/domain/geo_em_PRVI.nc"
 Geopackage: "./Puerto_Rico_NWMv4_Hydrofabric.gpkg"
-Parquet: "./Puerto_Rico_Hydrofabric.parquet"
+Parquet_Path: "./Puerto_Rico_Hydrofabric.parquet"
 GeogridIn: "./NextGen_Domains/hydrofabric/NextGen_Hyfab_Puerto_Rico_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"

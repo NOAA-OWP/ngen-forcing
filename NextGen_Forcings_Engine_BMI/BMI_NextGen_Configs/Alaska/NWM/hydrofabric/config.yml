@@ -22,7 +22,7 @@ ForecastInputHorizons: [14400]
 ForecastInputOffsets: [0]
 NWM_Geogrid: "./NWMv3.0_config/parm/domain/geo_em_AK.nc"
 Geopackage: "./Alaska_NWMv4_Hydrofabric.gpkg"
-Parquet: "./Alaska_Hydrofabric.parquet"
+Parquet_Path: "./Alaska_Hydrofabric.parquet"
 GeogridIn: "./NextGen_Domains/hydrofabric/NextGen_Alaska_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"

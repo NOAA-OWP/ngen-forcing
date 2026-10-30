@@ -21,7 +21,7 @@ ForecastShift: 0
 ForecastInputHorizons: [2880, 2880]
 ForecastInputOffsets: [0, 0]
 Geopackage: "./Hawaii_NWMv4_Hydrofabric.gpkg"
-Parquet: "./Hawaii_Hydrofabric.parquet"
+Parquet_Path: "./Hawaii_Hydrofabric.parquet"
 GeogridIn: "./NextGen_Domains/hydrofabric/Hawaii_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
