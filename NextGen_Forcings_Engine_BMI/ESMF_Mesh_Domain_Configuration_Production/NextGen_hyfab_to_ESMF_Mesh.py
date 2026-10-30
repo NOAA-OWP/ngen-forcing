@@ -109,3 +109,45 @@ def convert_hyfab_to_esmf(
         hyfab["slope"] = forcing_metadata.slope_mean.values[idx]
         hyfab["slope_azmuith"] = forcing_metadata.aspect_c_mean.values[idx]
         del forcing_metadata
+
+    element_count: int = len(hyfab.element_id)
+    element_num_nodes: npt.NDArray[np.int32] = np.empty(element_count, dtype=np.int32)
+    total_num_nodes: int = 0
+    sanitized_geoms: list[shapely.Polygon] = []
+
+    for i in range(element_count):
+        raw_geom: BaseGeometry = hyfab.geometry[i]
+        cleaned_geom: shapely.Polygon | None = clean_geometry_for_esmf(raw_geom, i)
+        if cleaned_geom is None:
+            continue
+        sanitized_geoms.append(cleaned_geom)
+
+        nodes: int = len(cleaned_geom.exterior.coords) - 1
+        total_num_nodes += nodes
+        element_num_nodes[i] = nodes
+
+    node_x_coord: npt.NDArray[np.float64] = np.empty(total_num_nodes, dtype=np.float64)
+    node_y_coord: npt.NDArray[np.float64] = np.empty(total_num_nodes, dtype=np.float64)
+    element_x_coord: npt.NDArray[np.float64] = np.empty(element_count, dtype=np.float64)
+    element_y_coord: npt.NDArray[np.float64] = np.empty(element_count, dtype=np.float64)
+
+    node_ptr: int = 0
+    for i, geom in enumerate(sanitized_geoms):
+        coords: npt.NDArray[np.float64] = np.array(geom.exterior.coords)[:-1]
+        num_nodes: int = int(element_num_nodes[i])
+
+        node_x_coord[node_ptr : node_ptr + num_nodes] = coords[:, 0]
+        node_y_coord[node_ptr : node_ptr + num_nodes] = coords[:, 1]
+        element_x_coord[i] = geom.centroid.x
+        element_y_coord[i] = geom.centroid.y
+        node_ptr += num_nodes
+
+    node_df: pd.DataFrame = pd.DataFrame({"x": node_x_coord, "y": node_y_coord})
+    node_df["global_id"] = node_df.groupby(["x", "y"]).ngroup() + 1
+
+    node_connectivity: npt.NDArray[np.int32] = node_df["global_id"].values.astype(np.int32)
+
+    unique_nodes: pd.DataFrame = node_df.drop_duplicates("global_id").sort_values("global_id")
+    node_count: int = len(unique_nodes)
+    node_x: npt.NDArray[np.float64] = unique_nodes["x"].values
+    node_y: npt.NDArray[np.float64] = unique_nodes["y"].values
