@@ -28,3 +28,19 @@ def create_mesh(cfg: ConfigOptionsSubset) -> None:
         )
     else:
         print(f"ESMF mesh file already exists at {mesh_out_path}, skipping conversion.")
+
+
+def main() -> None:
+    """Create ESMF mesh from hydrofabric geopackage."""
+    parser = argparse.ArgumentParser(
+        description="Create ESMF mesh from hydrofabric geopackage"
+    )
+    parser.add_argument("cfg", type=pathlib.Path, help="Path to YAML config file")
+    args = parser.parse_args()
+
+    cfg: ConfigOptionsSubset = ConfigOptionsSubset.from_yaml_file(args.cfg)
+    create_mesh(cfg)
+
+
+if __name__ == "__main__":
+    main()
