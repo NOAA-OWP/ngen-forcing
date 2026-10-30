@@ -32,3 +32,22 @@ def execute(forcing_config_input: str | pathlib.Path) -> None:
     end: float = time.perf_counter()
 
     print(f"Time taken for ESMF mesh production: {end - start:.6f} seconds")
+
+
+def get_options() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "forcing_config_input",
+        type=str,
+        help="Path to forcing engine configuration file for forecast run",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args: argparse.Namespace = get_options()
+    execute(forcing_config_input=args.forcing_config_input)
+
+
+if __name__ == "__main__":
+    main()
