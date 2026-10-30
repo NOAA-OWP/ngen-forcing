@@ -34,3 +34,34 @@ def extract_largest_polygon(geom: BaseGeometry | None) -> shapely.Polygon | None
             return max(polys, key=lambda a: a.area)
         return None
     return None
+
+
+def clean_geometry_for_esmf(
+    geom: BaseGeometry | None,
+    i: int,
+    grid_size: float = 1e-6,
+    simplify_tol: float = 1e-6,
+) -> shapely.Polygon | None:
+    if geom is None or geom.is_empty:
+        return None
+
+    poly: shapely.Polygon | None = extract_largest_polygon(geom)
+    if poly is None:
+        return None
+
+    if not poly.is_valid:
+        print(f"element {i + 1} has an invalid topology (e.g., bowtie)")
+        poly = extract_largest_polygon(shapely.make_valid(poly))
+        if poly is None:
+            return None
+
+    poly = extract_largest_polygon(shapely.set_precision(poly, grid_size=grid_size))
+    if poly is None:
+        return None
+
+    poly = extract_largest_polygon(poly.simplify(simplify_tol, preserve_topology=True))
+    if poly is not None and hasattr(poly, "exterior") and not poly.exterior.is_ccw:
+        print(f"element {i + 1} is clockwise orientation, switching orientation.")
+        poly = orient(poly, sign=1.0)
+
+    return poly
