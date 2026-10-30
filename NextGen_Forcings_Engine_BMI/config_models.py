@@ -27,3 +27,29 @@ class ConfigOptionsSubset:
                 self.Parquet_Path = None
             else:
                 self.Parquet_Path = cleaned_path
+
+    @classmethod
+    def from_yaml_file(cls, path: pathlib.Path | str) -> typing.Self:
+        """Instantiate ConfigOptionsSubset directly from a YAML config file."""
+        with open(path, "r", encoding="utf-8") as yaml_file:
+            loaded_data = yaml.safe_load(yaml_file) or {}
+            return cls.from_dict(loaded_data)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, typing.Any]) -> typing.Self:
+        """Extract and initialize only the fields defined in this dataclass with alias resolution."""
+        parquet_val = None
+        for key in ("Parquet_Path", "parquet_path", "Parquet", "parquet"):
+            if key in data and data[key] is not None:
+                parquet_val = data[key]
+                break
+
+        data["Parquet_Path"] = parquet_val
+
+        field_names: set[str] = {
+            field.name for field in dataclasses.fields(cls) if field.init
+        }
+        relevant_data: dict[str, typing.Any] = {
+            key: value for key, value in data.items() if key in field_names
+        }
+        return cls(**relevant_data)
