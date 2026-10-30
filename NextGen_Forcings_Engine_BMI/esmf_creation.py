@@ -1,58 +1,30 @@
+from __future__ import annotations
+
 import argparse
 import os
-from types import SimpleNamespace
-
-import yaml
+import pathlib
+import typing
 
 from ESMF_Mesh_Domain_Configuration_Production.NextGen_hyfab_to_ESMF_Mesh import (
     convert_hyfab_to_esmf,
 )
+from config_models import ConfigOptionsSubset
 
 
-def create_mesh(cfg: "ConfigOptions"):
+def create_mesh(cfg: ConfigOptionsSubset) -> None:
     """Create ESMF Mesh from geopackage file provided by the forcing engine config.
 
-    :param cfg: Object with attributes:
-                - geopackage: path to hydrofabric geopackage file
-                - geogrid: path to desired ESMF mesh output file
+    :param cfg: ConfigOptionsSubset instance containing Geopackage, GeogridIn, and optional Parquet_Path
     """
-    # Set the mesh file name based on the hydrofabric file
-    hyfab_name = cfg.geopackage
-    mesh_outPath = cfg.geogrid
-    parquet_data = cfg.parquet
+    hyfab_name: str = cfg.Geopackage
+    mesh_out_path: str = cfg.GeogridIn
+    parquet_path: typing.Optional[str] = cfg.Parquet_Path
 
-    # Check if the mesh file already exists and skip conversion if it does
-    if not os.path.exists(mesh_outPath):
-        convert_hyfab_to_esmf(hyfab_gpkg=hyfab_name, esmf_mesh_output=mesh_outPath, parquet=parquet_data)
+    if not os.path.exists(mesh_out_path):
+        convert_hyfab_to_esmf(
+            hyfab_gpkg=pathlib.Path(hyfab_name),
+            esmf_mesh_output=pathlib.Path(mesh_out_path),
+            parquet_path=pathlib.Path(parquet_path) if parquet_path else None,
+        )
     else:
-        print(f"ESMF mesh file already exists at {mesh_outPath}, skipping conversion.")
-
-
-def main():
-    """Create ESMF mesh from hydrofabric geopackage.
-
-    Main function to parse arguments and create ESMF mesh.
-
-    :param cfg: path to dictionary of forcing engine config parameters
-    """
-    parser = argparse.ArgumentParser(
-        description="Create ESMF mesh from hydrofabric geopackage"
-    )
-    parser.add_argument("cfg", help="Path to YAML config file")
-    args = parser.parse_args()
-
-    # Load Yaml into dict
-    with open(args.cfg, "r") as f:
-        cfg_dict = yaml.safe_load(f)
-
-    # Wrap config dict into simplenamespace to match ConfigOptions format
-    cfg = SimpleNamespace(
-        geopackage=cfg_dict["Geopackage"], geogrid=cfg_dict["GeogridIn"], parquet=cfg_dict.get("Parquet", None)
-    )
-
-    # Run mesh creation
-    create_mesh(cfg)
-
-
-if __name__ == "__main__":
-    main()
+        print(f"ESMF mesh file already exists at {mesh_out_path}, skipping conversion.")
