@@ -151,3 +151,86 @@ def convert_hyfab_to_esmf(
     node_count: int = len(unique_nodes)
     node_x: npt.NDArray[np.float64] = unique_nodes["x"].values
     node_y: npt.NDArray[np.float64] = unique_nodes["y"].values
+
+    out_dir: str = os.path.dirname(esmf_mesh_output)
+    base: str = os.path.basename(esmf_mesh_output)
+    temp_path: str = os.path.join(out_dir, f".{base}.tmp.{uuid.uuid4()}")
+
+    nc: netCDF4.Dataset = netCDF4.Dataset(temp_path, "w", format="NETCDF4")
+    nc.createDimension("nodeCount", node_count)
+    nc.createDimension("elementCount", element_count)
+    nc.createDimension("connectionCount", len(node_connectivity))
+    nc.createDimension("coordDim", 2)
+
+    node_coords_var = nc.createVariable("nodeCoords", "f8", ("nodeCount", "coordDim"))
+    node_coords_var.units = "degrees"
+    elem_id = nc.createVariable("element_id", "i", "elementCount")
+    elem_id.long_name = "Catchment ID for hydrofabric"
+    elem_conn_var = nc.createVariable("elementConn", "i4", ("connectionCount",))
+    elem_conn_var.long_name = "Node Indices that define the element connectivity"
+    num_elem_conn_var = nc.createVariable("numElementConn", "i", "elementCount")
+    num_elem_conn_var.long_name = "Number of nodes per element"
+    center_coords_var = nc.createVariable("centerCoords", "f8", ("elementCount", "coordDim"))
+    center_coords_var.units = "degrees"
+    nc.gridType = "unstructured"
+    nc.version = "0.9"
+
+    if parquet_path is not None and os.path.isfile(parquet_path):
+        hgt_elem_var = nc.createVariable("Element_Elevation", "f8", ("elementCount",))
+        hgt_elem_var.long_name = "Catchment height above sea level"
+        hgt_elem_var.units = "meters"
+        slope_elem_var = nc.createVariable("Element_Slope", "f8", ("elementCount",))
+        slope_elem_var.long_name = "Catchment slope"
+        slope_elem_var.units = "meters"
+        slope_azi_elem_var = nc.createVariable("Element_Slope_Azmuith", "f8", ("elementCount",))
+        slope_azi_elem_var.long_name = "Catchment slope azmuith angle"
+        slope_azi_elem_var.units = "Degrees"
+
+        hgt_elem_var[:] = hyfab.elevation.values
+        slope_elem_var[:] = hyfab.slope.values
+        slope_azi_elem_var[:] = hyfab.slope_azmuith.values
+
+    node_coords_var[:, 0] = node_x
+    node_coords_var[:, 1] = node_y
+    elem_conn_var[:] = node_connectivity
+    num_elem_conn_var[:] = element_num_nodes
+    center_coords_var[:, 0] = element_x_coord
+    center_coords_var[:, 1] = element_y_coord
+    elem_id[:] = hyfab.element_id.values
+
+    nc.sync()
+    nc.close()
+
+    try:
+        os.link(temp_path, esmf_mesh_output)
+        os.remove(temp_path)
+    except FileExistsError:
+        os.remove(temp_path)
+
+
+def get_options() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("hyfab_gpkg", type=pathlib.Path, help="Hydrofabric geopackage file pathway")
+    parser.add_argument(
+        "-parquet",
+        dest="parquet_path",
+        type=pathlib.Path,
+        nargs="?",
+        default=None,
+        help="Hydrofabric parquet file pathway containing model-attributes.",
+    )
+    parser.add_argument("esmf_mesh_output", type=pathlib.Path, help="File pathway to save ESMF netcdf mesh file for hydrofabric")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args: argparse.Namespace = get_options()
+    convert_hyfab_to_esmf(
+        hyfab_gpkg=args.hyfab_gpkg,
+        esmf_mesh_output=args.esmf_mesh_output,
+        parquet_path=args.parquet_path,
+    )
+
+
+if __name__ == "__main__":
+    main()
