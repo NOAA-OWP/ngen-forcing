@@ -1,10 +1,8 @@
 name: ngen_esmf_mesh_prod
 channels:
-  - defaults
-  - anaconda
   - conda-forge
 dependencies:
-  - python
+  - python>=3.10.0
   - geopandas
   - netCDF4
   - pandas

@@ -20,6 +20,8 @@ ForecastFrequency: 720
 ForecastShift: 0
 ForecastInputHorizons: [2880, 2880]
 ForecastInputOffsets: [0, 6]
+Geopackage: "./Puerto_Rico_NWMv4_Hydrofabric.gpkg"
+Parquet_Path: "./Puerto_Rico_Hydrofabric.parquet"
 GeogridIn: "./NextGen_Domains/hydrofabric/nextgen_uniform_06_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
