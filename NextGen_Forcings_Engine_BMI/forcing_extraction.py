@@ -134,3 +134,20 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
 
         if supp_forcing_hours is not None:
             start_delt = (start_delt or timedelta()) + timedelta(hours=supp_forcing_hours)
+
+        downloader = downloader_class(
+            out_dir=extract_outPath,
+            start_time=forcing_start_time + start_delt if start_delt else forcing_start_time,
+            lookback_hours=look_back_hours + lag_delt if lag_delt else look_back_hours,
+            cleanback_hours=0,
+            lagback_hours=0,
+            ens_number=int(ens_number) if ens_number not in ("", None) else None,
+            input_forcing=input_forcings[i],
+            max_download_attempts=max_download_attempts,
+            download_attempt_interval=download_attempt_interval,
+            check_file_availability=check_file_availability,
+            subhourly_avg=subhourly_avg,
+            gfs_extended=gfs_extended,
+        )
+
+        downloader.run()
