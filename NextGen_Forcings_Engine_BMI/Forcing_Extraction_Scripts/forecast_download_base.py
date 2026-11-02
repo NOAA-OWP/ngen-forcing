@@ -209,3 +209,29 @@ class ForecastDownloader(ABC):
             self.pre_download_hook(d_start)
             targets: list[typing.Any] = self.get_download_targets(d_start)
             self.last_hour = (hour == final_hour)
+
+            if self.input_forcing == 6:
+                for target in targets:
+                    file_list: list[tuple[str, str]] = typing.cast(
+                        list[tuple[str, str]], self.build_file_url_and_name(d_start, target, self.ens_number)
+                    )
+                    for url, filename in file_list:
+                        out_path: str = os.path.join(output_dir, filename)
+                        LOG.info(f"Looking for file {out_path}")
+                        if os.path.isfile(out_path):
+                            LOG.info(f"Skipping existing: {out_path}")
+                            continue
+                        self._download_file(url, out_path)
+                self.post_download_hook(d_start)
+            else:
+                for target in targets:
+                    url, filename = typing.cast(
+                        tuple[str, str], self.build_file_url_and_name(d_start, target, self.ens_number)
+                    )
+                    out_path = os.path.join(output_dir, filename)
+                    LOG.info(f"Looking for file {out_path}")
+                    if os.path.isfile(out_path):
+                        LOG.info(f"Skipping existing: {out_path}")
+                        continue
+                    self._download_file(url, out_path)
+                self.post_download_hook(d_start)
