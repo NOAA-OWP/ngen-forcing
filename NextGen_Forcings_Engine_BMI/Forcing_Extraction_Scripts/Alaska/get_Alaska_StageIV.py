@@ -17,3 +17,21 @@ class AlaskaStageIVDownloader(ForecastDownloader):
 
     def get_download_targets(self, d_start):
         return [0]
+
+    def build_output_dir(self, d_start, _):
+        return self.out_dir
+
+    def build_file_url_and_name(self, d_start, _, __):
+        date_folder = f"pcpanl.{d_start.strftime('%Y%m%d')}"
+        filename = f"st4_ak.{d_start.strftime('%Y%m%d%H')}.06h.grb2"
+        url = os.path.join(self.base_url, date_folder, filename)
+        return url, filename
+
+    def _cleanup_old_data(self):
+        if os.path.isdir(self.out_dir):
+            print(f"Removing old StageIV data from: {self.out_dir}")
+            shutil.rmtree(self.out_dir)
+
+if __name__ == "__main__":
+    downloader = AlaskaStageIVDownloader.from_cli_args()
+    downloader.run()
