@@ -67,3 +67,24 @@ class ForecastDownloader(ABC):
         self.d_now: datetime = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
         os.makedirs(self.out_dir, exist_ok=True)
+
+    def effective_lagback(self) -> int:
+        """Determines effective lag back window to avoid unpopulated upstream cycles."""
+        return getattr(self, "_override_lagback", self.lagback_hours)
+
+    @classmethod
+    def from_cli_args(cls) -> typing.Self:
+        """Create an instance of the subclass using command-line arguments."""
+        parser = argparse.ArgumentParser()
+        parser.add_argument("outDir", type=str, help="Output directory path")
+        parser.add_argument("startTime", type=lambda s: datetime.strptime(s, "%Y-%m-%d %H:%M:%S"))
+        parser.add_argument("--lookBackHours", type=int, default=cls.default_lookback)
+        parser.add_argument("--cleanBackHours", type=int, default=cls.default_cleanback)
+        parser.add_argument("--lagBackHours", type=int, default=cls.default_lagback)
+        parser.add_argument("--ensNumber", type=int, default=None)
+        parser.add_argument("--inputforcing", type=int, required=True)
+        parser.add_argument("--max_download_attempts", type=int, default=10, help="Number of attempts to download a file.")
+        parser.add_argument("--download_attempt_interval", type=int, default=30, help="Wait time (s) between retries.")
+        parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
+        parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
+        parser.add_argument("--gfs_extended", action="store_true", default=False, help="Flag GFS extended horizon.")
