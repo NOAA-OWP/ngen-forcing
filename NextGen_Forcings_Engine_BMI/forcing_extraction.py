@@ -1,0 +1,28 @@
+from __future__ import annotations
+
+import argparse
+import importlib.util
+from datetime import datetime, timedelta
+from pathlib import Path
+import typing
+import yaml
+
+from config_models import ForcingExtractionConfig
+from Forcing_Extraction_Scripts.forecast_download_base import (
+    FixedFileDownloader,
+    ForecastDownloader,
+)
+
+
+def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
+    """Download forecast forcing data based on requested sources in configuration."""
+    refcstbdate: datetime = cfg.b_date_proc
+    input_forcings: list[typing.Any] = cfg.input_forcings + [
+        f"supp{val}" for val in cfg.supp_precip_forcings
+    ]
+    if cfg.supp_precip_dirs is not None:
+        input_forcing_dirs: list[str] = cfg.input_force_dirs + cfg.supp_precip_dirs
+    else:
+        input_forcing_dirs = list(cfg.input_force_dirs)
+    input_horizons: list[int] = cfg.fcst_input_horizons
+    input_horizons = input_horizons + [input_horizons[0]] * len(cfg.supp_precip_forcings)
