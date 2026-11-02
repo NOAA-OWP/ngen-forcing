@@ -26,3 +26,19 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
         input_forcing_dirs = list(cfg.input_force_dirs)
     input_horizons: list[int] = cfg.fcst_input_horizons
     input_horizons = input_horizons + [input_horizons[0]] * len(cfg.supp_precip_forcings)
+
+    if "supp16" in input_forcings:
+        index: int = input_forcings.index("supp16")
+        input_forcings.append("supp2")
+        input_forcing_dirs.append(f"{input_forcing_dirs[index]}/MRMS_Hourly")
+        input_forcing_dirs[index] = f"{input_forcing_dirs[index]}/MRMS_SubHourly"
+        input_horizons.append(input_horizons[index])
+
+    ens_number: typing.Optional[typing.Union[int, str]] = cfg.cfsv2EnsMember
+    ana_flag: int = cfg.ana_flag
+    look_back: int = cfg.look_back
+    extraction_scriptPath: str = "./Forcing_Extraction_Scripts"
+
+    max_download_attempts: int = cfg.max_download_attempts
+    download_attempt_interval: int = cfg.download_attempt_interval
+    check_file_availability: int = cfg.check_file_availability
