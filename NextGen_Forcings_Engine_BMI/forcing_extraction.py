@@ -77,3 +77,30 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
         "supp15": "Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py",
         "supp16": "CONUS/get_conus_MRMS_subhourly.py",
     }
+
+    for i in range(len(input_forcings)):
+        extract_outPath: str = input_forcing_dirs[i]
+        supp_forcing_hours: int | None = None
+
+        if ana_flag == 0:
+            look_back_hours: int = 1
+            forcing_script: str | None = forcing_src.get(input_forcings[i])
+            forcing_start_time: datetime = refcstbdate + timedelta(hours=1)
+            gfs_extended: bool = (3 in input_forcings and len(input_forcings) == 1)
+            subhourly_avg: bool = False
+        elif ana_flag == 1:
+            look_back_hours = int(look_back / 60)
+            forcing_start_time = refcstbdate
+            gfs_extended = False
+
+            if "supp16" in input_forcings and input_forcings[i] in ["supp16", "supp2"]:
+                look_back_hours += 1
+                subhourly_avg = True
+            else:
+                subhourly_avg = False
+
+            if input_forcings[i] in ("supp1", "supp2", "supp6", "supp10", "supp11", "supp12", "supp16"):
+                supp_forcing_hours = 1
+            else:
+                supp_forcing_hours = 0
+            forcing_script = forcing_ana_src.get(input_forcings[i])
