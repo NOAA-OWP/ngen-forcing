@@ -13,3 +13,17 @@ class RAPAnADownloader(ForecastDownloader):
 
     def build_output_dir(self, d_start, _):
         return os.path.join(self.out_dir, f"rap.{d_start.strftime('%Y%m%d')}")
+
+    def build_file_url_and_name(self, d_start, forecast_hour, _):
+        fhr_str = str(forecast_hour).zfill(2)
+        extensions = ["pgrb", "bgrb"]
+        results = []
+        for ext in extensions:
+            filename = f"rap.t{d_start.strftime('%H')}z.awp130{ext}f{fhr_str}.grib2"
+            url = os.path.join(self.base_url, f"rap.{d_start.strftime('%Y%m%d')}", filename)
+            results.append((url, filename))
+        return results
+
+if __name__ == "__main__":
+    downloader = RAPAnADownloader.from_cli_args()
+    downloader.run()
