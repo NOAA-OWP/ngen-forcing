@@ -422,3 +422,37 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                     continue
 
                 self._download_file(url, out_path)
+
+    def _check_data_availability(self) -> None:
+        """Check fixed file availability across time range and specs for MRMS and StageIV."""
+        LOG.info(f"FixedFileDownloader: Checking data availability. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
+        total_files_checked: int = 0
+        available_files_count: int = 0
+        final_hour: int = self.effective_lagback() + 1
+
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            d_start: datetime = self.start_time - timedelta(hours=hour)
+            self.last_hour = (hour == final_hour)
+
+            if not self.should_process_hour(d_start):
+                continue
+
+            for subdir, filename in self.get_file_specs(d_start):
+                total_files_checked += 1
+                url: str = os.path.join(self.base_url, subdir, filename)
+                LOG.info(f"Checking upstream availability for {subdir}/{filename} via HEAD request")
+
+                if self._check_file_availability(url):
+                    available_files_count += 1
+                else:
+                    LOG.warning(f"Required file missing from server: {url}")
+
+        LOG.info("--- Fixed File Availability Verification Summary ---")
+        LOG.info(f"Total files checked: {total_files_checked}")
+        LOG.info(f"Total files available on server: {available_files_count}")
+
+        if available_files_count == total_files_checked:
+            LOG.info("Verification complete: 100% of requested fixed files are available upstream.")
+        else:
+            missing_count: int = total_files_checked - available_files_count
+            LOG.warning(f"Verification complete: {missing_count} fixed file(s) are currently missing from the server.")
