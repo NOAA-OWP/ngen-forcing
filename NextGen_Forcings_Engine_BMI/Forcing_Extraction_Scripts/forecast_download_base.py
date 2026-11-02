@@ -336,3 +336,13 @@ class ForecastDownloader(ABC):
                 self.post_download_hook(d_start)
             else:
                 LOG.error(f"One or more forcing files missing for timestamp: {d_start}.")
+
+        LOG.info("--- Forcing Availability Verification Summary ---")
+        LOG.info(f"Total files checked: {total_files_checked}")
+        LOG.info(f"Total files available on server: {available_files_count}")
+
+        if available_files_count == total_files_checked:
+            LOG.info("Verification complete: 100% of requested files are available upstream.")
+        else:
+            missing_count: int = total_files_checked - available_files_count
+            LOG.warning(f"Verification complete: {missing_count} file(s) are currently missing from the server.")
