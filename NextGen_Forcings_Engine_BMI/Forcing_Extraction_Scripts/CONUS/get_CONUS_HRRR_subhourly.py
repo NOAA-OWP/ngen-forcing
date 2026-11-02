@@ -16,3 +16,18 @@ class HRRRSubhourlyDownloader(ForecastDownloader):
 
     def get_download_targets(self, d_current):
         return range(0, 19)
+
+    def build_output_dir(self, d_current, _):
+        return os.path.join(self.out_dir, f"hrrr.{d_current.strftime('%Y%m%d')}", "subhourly")
+
+    def build_file_url_and_name(self, d_current, target, _):
+        fhr_str = f"{target:02d}"
+        hour = d_current.strftime('%H')
+        date = d_current.strftime('%Y%m%d')
+        filename = f"hrrr.t{hour}z.wrfsubhf{fhr_str}.grib2"
+        url = os.path.join(self.base_url, f"hrrr.{date}", "conus", filename)
+        return url, filename
+
+if __name__ == "__main__":
+    downloader = HRRRSubhourlyDownloader.from_cli_args()
+    downloader.run()
