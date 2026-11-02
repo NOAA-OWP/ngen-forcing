@@ -17,3 +17,16 @@ class StageIVDownloader(ForecastDownloader, ABC):
 
     def get_download_targets(self, _):
         return [None]
+
+    def build_output_dir(self, _, __):
+        return self.out_dir
+
+    def build_file_url_and_name(self, d_start, _, __):
+        subdir = f"pcpanl.{d_start.strftime('%Y%m%d')}"
+        filename = f"st4_conus.{d_start.strftime('%Y%m%d%H')}.01h.grb2"
+        url = os.path.join(self.base_url, subdir, filename)
+        return url, filename
+
+if __name__ == "__main__":
+    downloader = StageIVDownloader.from_cli_args()
+    downloader.run()
