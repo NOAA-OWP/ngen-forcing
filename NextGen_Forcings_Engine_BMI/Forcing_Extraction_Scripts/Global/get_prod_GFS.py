@@ -18,3 +18,20 @@ class GFSDownloader(ForecastDownloader):
         hourly = range(1, 121)
         every_3h = range(123, 385, 3)
         return list(hourly) + list(every_3h)
+
+    def build_output_dir(self, d_start, _):
+        return os.path.join(self.out_dir, f"gfs.{d_start.strftime('%Y%m%d')}", d_start.strftime("%H"), "atmos")
+
+    def build_file_url_and_name(self, d_start, forecast_hour, _):
+        fhr = str(forecast_hour).zfill(3)
+        filename = f"gfs.t{d_start.strftime('%H')}z.sfluxgrbf{fhr}.grib2"
+        url = os.path.join(self.base_url, f"gfs.{d_start.strftime('%Y%m%d')}", d_start.strftime("%H"), "atmos", filename)
+        return url, filename
+
+    @property
+    def recursive_cleanup(self) -> bool:
+        return True
+
+if __name__ == "__main__":
+    downloader = GFSDownloader.from_cli_args()
+    downloader.run()
