@@ -88,3 +88,28 @@ class ForecastDownloader(ABC):
         parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
         parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
         parser.add_argument("--gfs_extended", action="store_true", default=False, help="Flag GFS extended horizon.")
+        args = parser.parse_args()
+        print(f"{cls.__name__} args:", vars(args))
+
+        return cls(
+            out_dir=args.outDir,
+            start_time=args.startTime,
+            lookback_hours=args.lookBackHours,
+            cleanback_hours=args.cleanBackHours,
+            lagback_hours=args.lagBackHours,
+            ens_number=args.ensNumber,
+            input_forcing=args.inputforcing,
+            max_download_attempts=args.max_download_attempts,
+            download_attempt_interval=args.download_attempt_interval,
+            check_file_availability=args.check_file_availability,
+            subhourly_avg=args.subhourly_avg,
+            gfs_extended=args.gfs_extended,
+        )
+
+    def run(self) -> None:
+        """Execute cleanup and downloads or verify file availability."""
+        if self.check_file_availability == 1:
+            self._check_data_availability()
+        else:
+            self._cleanup_old_data()
+            self._download_data()
