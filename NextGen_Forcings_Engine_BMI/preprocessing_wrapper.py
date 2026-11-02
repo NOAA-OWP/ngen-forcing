@@ -34,3 +34,30 @@ def execute(forcing_config_input: str | pathlib.Path) -> None:
     esmf_creation.create_mesh(esmf_cfg)
     end: float = time.perf_counter()
     print(f"Time taken for ESMF mesh production: {end - start:.6f} seconds")
+
+    # Start timer for forcing extraction
+    start = time.perf_counter()
+    forcing_extraction.retrieve_forcing(extract_cfg)
+    end = time.perf_counter()
+    print(f"Time taken for forcing file extraction: {end - start:.6f} seconds")
+
+
+def get_options() -> argparse.Namespace:
+    """Parse command line arguments for forcing configuration path."""
+    parser = argparse.ArgumentParser(description="BMI Forcings Engine preprocessing driver")
+    parser.add_argument(
+        "forcing_config_input",
+        type=pathlib.Path,
+        help="Path to forcing engine configuration file for forecast run",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Main CLI entrypoint."""
+    args: argparse.Namespace = get_options()
+    execute(forcing_config_input=args.forcing_config_input)
+
+
+if __name__ == "__main__":
+    main()
