@@ -104,3 +104,33 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
             else:
                 supp_forcing_hours = 0
             forcing_script = forcing_ana_src.get(input_forcings[i])
+
+        if forcing_script is None:
+            continue
+
+        extract_scriptPath: Path = Path(extraction_scriptPath) / forcing_script
+        mod_name: str = f"forcing_{extract_scriptPath.stem}"
+        spec = importlib.util.spec_from_file_location(mod_name, extract_scriptPath)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Could not load specification for {extract_scriptPath}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        base_classes = (ForecastDownloader, FixedFileDownloader)
+        downloader_class = next(
+            obj
+            for name, obj in vars(module).items()
+            if isinstance(obj, type)
+            and issubclass(obj, base_classes)
+            and obj not in base_classes
+        )
+
+        start_delt: timedelta | None = None
+        lag_delt: int | None = None
+
+        if ana_flag == 1:
+            start_delt = timedelta(hours=1)
+            lag_delt = 1
+
+        if supp_forcing_hours is not None:
+            start_delt = (start_delt or timedelta()) + timedelta(hours=supp_forcing_hours)
