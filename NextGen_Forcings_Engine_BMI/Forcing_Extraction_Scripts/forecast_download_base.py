@@ -113,3 +113,30 @@ class ForecastDownloader(ABC):
         else:
             self._cleanup_old_data()
             self._download_data()
+
+    @property
+    @abstractmethod
+    def base_url(self) -> str:
+        """Return base URL for downloading forecast files."""
+        pass
+
+    @abstractmethod
+    def get_download_targets(self, d_start: datetime) -> list[typing.Any]:
+        """Return list of download targets for a given forecast cycle time."""
+        pass
+
+    def should_process_hour(self, d_start: datetime) -> bool:
+        """Determine whether a given forecast cycle hour should be processed."""
+        return True
+
+    @abstractmethod
+    def build_output_dir(self, d_start: datetime, ens_number: str) -> str:
+        """Return output directory for the given forecast cycle datetime."""
+        pass
+
+    @abstractmethod
+    def build_file_url_and_name(
+        self, d_start: datetime, target: typing.Any, ens_number: str
+    ) -> tuple[str, str] | list[tuple[str, str]]:
+        """Construct remote file URL and local target filename."""
+        pass
