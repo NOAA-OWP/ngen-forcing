@@ -18,3 +18,17 @@ class AlaskaHRRRDownloader(ForecastDownloader):
         if d_start.hour % 3 == 0:
             return range(0, 49) if d_start.hour == 0 else range(0, 19)
         return []
+
+    def build_output_dir(self, d_start, _):
+        return os.path.join(self.out_dir, "hrrr." + d_start.strftime('%Y%m%d'), "alaska")
+
+    def build_file_url_and_name(self, d_start, fhr, _):
+        fhr_str = str(fhr).zfill(2)
+        filename = f"hrrr.t{d_start.strftime('%H')}z.wrfsfcf{fhr_str}.ak.grib2"
+        date_path = "hrrr." + d_start.strftime('%Y%m%d')
+        url = os.path.join(self.base_url, date_path, "alaska", filename)
+        return url, filename
+
+if __name__ == "__main__":
+    downloader = AlaskaHRRRDownloader.from_cli_args()
+    downloader.run()
