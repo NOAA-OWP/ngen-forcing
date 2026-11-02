@@ -16,3 +16,16 @@ class AlaskaHRRRAnADownloader(ForecastDownloader):
 
     def get_download_targets(self, _):
         return [1, 2, 3, 4]
+
+    def build_output_dir(self, d_start, _):
+        return os.path.join(self.out_dir, "hrrr." + d_start.strftime('%Y%m%d'), "alaska")
+
+    def build_file_url_and_name(self, d_start, fhr, _):
+        fhr_str = str(fhr).zfill(2)
+        filename = f"hrrr.t{d_start.strftime('%H')}z.wrfsfcf{fhr_str}.ak.grib2"
+        url = os.path.join(self.base_url, f"hrrr.{d_start.strftime('%Y%m%d')}", "alaska", filename)
+        return url, filename
+
+if __name__ == "__main__":
+    downloader = AlaskaHRRRAnADownloader.from_cli_args()
+    downloader.run()
