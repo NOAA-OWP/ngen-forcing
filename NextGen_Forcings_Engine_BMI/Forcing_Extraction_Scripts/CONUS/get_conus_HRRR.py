@@ -13,3 +13,17 @@ class HRRRDownloader(ForecastDownloader):
 
     def get_download_targets(self, d_start):
         return range(0, 49) if d_start.hour % 6 == 0 else range(0, 19)
+
+    def build_output_dir(self, d_start, _):
+        return os.path.join(self.out_dir, f"hrrr.{d_start.strftime('%Y%m%d')}", "conus")
+
+    def build_file_url_and_name(self, d_start, forecast_hour, _):
+        fhr_str = str(forecast_hour).zfill(2)
+        filename = f"hrrr.t{d_start.strftime('%H')}z.wrfsfcf{fhr_str}.grib2"
+        date_dir = f"hrrr.{d_start.strftime('%Y%m%d')}"
+        url = os.path.join(self.base_url, date_dir, "conus", filename)
+        return url, filename
+
+if __name__ == "__main__":
+    downloader = HRRRDownloader.from_cli_args()
+    downloader.run()
