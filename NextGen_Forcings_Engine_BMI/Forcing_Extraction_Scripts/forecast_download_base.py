@@ -210,6 +210,9 @@ class ForecastDownloader(ABC):
             targets: list[typing.Any] = self.get_download_targets(d_start)
             self.last_hour = (hour == final_hour)
 
+            # Special handling for RAP (input_forcing == 6): RAP requires downloading
+            # multiple file extensions (["pgrb", "bgrb"]) to assemble all mandatory
+            # atmospheric and surface forcing fields into NextGen Forcings Engine BMI.
             if self.input_forcing == 6:
                 for target in targets:
                     file_list: list[tuple[str, str]] = typing.cast(
@@ -305,6 +308,8 @@ class ForecastDownloader(ABC):
             self.last_hour = (hour == final_hour)
             all_files_available: bool = True
 
+            # Special handling for RAP (input_forcing == 6): verify upstream availability
+            # across all required file extensions (["pgrb", "bgrb"]) returned as (url, filename) pairs.
             if self.input_forcing == 6:
                 for target in targets:
                     file_list = typing.cast(
