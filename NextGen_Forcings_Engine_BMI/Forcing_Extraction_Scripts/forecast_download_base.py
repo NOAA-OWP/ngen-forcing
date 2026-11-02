@@ -169,3 +169,19 @@ class ForecastDownloader(ABC):
                 if os.path.isdir(dir_path):
                     LOG.debug(f"Removing old data: {dir_path}")
                     shutil.rmtree(dir_path)
+
+    @staticmethod
+    def _remove_dir_and_empty_parents(path: str, levels: int = 2) -> None:
+        """Removes a directory and prunes up to levels empty parent directories."""
+        if os.path.isdir(path):
+            LOG.debug(f"Removing directory: {path}")
+            shutil.rmtree(path)
+
+            current_path: str = path
+            for _ in range(levels):
+                current_path = os.path.dirname(current_path)
+                if os.path.isdir(current_path) and not os.listdir(current_path):
+                    LOG.debug(f"Removing empty parent directory: {current_path}")
+                    os.rmdir(current_path)
+                else:
+                    break
