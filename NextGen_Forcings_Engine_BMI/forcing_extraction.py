@@ -59,3 +59,21 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
         "supp12": "CONUS/get_conus_StageIV.py",
         "supp15": "Puerto_Rico/get_prod_NBM_Puerto_Rico.py",
     }
+
+    forcing_ana_src: dict[int | str, str] = {
+        5: "CONUS/get_conus_HRRR_AnA.py",
+        6: "CONUS/get_conus_RAP_AnA.py",
+        13: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
+        14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py",
+        19: "Alaska/get_Alaska_HRRR.py",
+        20: "Alaska/get_Alaska_HRRR_AnA.py",
+        26: "CONUS/get_conus_HRRR_subhourly_AnA.py",
+        "supp1": "CONUS/get_conus_MRMS_Radar.py",
+        "supp2": "CONUS/get_conus_MRMS_MultiSensor.py",
+        "supp6": "Hawaii/get_MRMS_MultiSensor_Hawaii.py",
+        "supp10": "Alaska/get_MRMS_MultiSensor_Alaska.py",
+        "supp11": "Alaska/get_Alaska_StageIV.py",
+        "supp12": "CONUS/get_conus_StageIV.py",
+        "supp15": "Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py",
+        "supp16": "CONUS/get_conus_MRMS_subhourly.py",
+    }
