@@ -13,3 +13,20 @@ class ARWPuertoRicoDownloader(ForecastDownloader):
 
     def get_download_targets(self, d_current):
         return range(1, 49)
+
+    def build_output_dir(self, d_current, _=None):
+        return os.path.join(self.out_dir, f"hiresw.{d_current.strftime('%Y%m%d')}")
+
+    def build_file_url_and_name(self, d_current, target, _=None):
+        fhr = str(target).zfill(2)
+        filename = f"hiresw.t{d_current.strftime('%H')}z.arw_2p5km.f{fhr}.pr.grib2"
+        url = os.path.join(self.base_url, f"hiresw.{d_current.strftime('%Y%m%d')}", filename)
+        return url, filename
+
+    @property
+    def recursive_cleanup(self) -> bool:
+        return True
+
+if __name__ == "__main__":
+    downloader = ARWPuertoRicoDownloader.from_cli_args()
+    downloader.run()
