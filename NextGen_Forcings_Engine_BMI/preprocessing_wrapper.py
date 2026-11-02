@@ -26,3 +26,11 @@ def execute(forcing_config_input: str | pathlib.Path) -> None:
 
     :param forcing_config_input: Path to forcing engine configuration file for forecast run
     """
+    esmf_cfg: ConfigOptionsSubset = ConfigOptionsSubset.from_yaml_file(forcing_config_input)
+    extract_cfg: ForcingExtractionConfig = ForcingExtractionConfig.from_yaml_file(forcing_config_input)
+
+    # Start timer for ESMF Mesh production
+    start: float = time.perf_counter()
+    esmf_creation.create_mesh(esmf_cfg)
+    end: float = time.perf_counter()
+    print(f"Time taken for ESMF mesh production: {end - start:.6f} seconds")
