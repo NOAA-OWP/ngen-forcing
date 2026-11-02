@@ -16,3 +16,20 @@ class NBMConusDownloader(ForecastDownloader):
         every_3h = range(36, 193, 3)
         every_6h = range(198, 241, 6)
         return list(hourly) + list(every_3h) + list(every_6h) if d_start.hour in [0, 6, 12, 18] else []
+
+    def build_output_dir(self, d_start, _):
+        return os.path.join(self.out_dir, f"blend.{d_start.strftime('%Y%m%d')}", d_start.strftime('%H'), "core")
+
+    def build_file_url_and_name(self, d_start, target, _):
+        fhr_str = f"f{str(target).zfill(3)}"
+        filename = f"blend.t{d_start.strftime('%H')}z.core.{fhr_str}.co.grib2"
+        url = os.path.join(self.base_url, f"blend.{d_start.strftime('%Y%m%d')}", d_start.strftime('%H'), "core", filename)
+        return url, filename
+
+    @property
+    def recursive_cleanup(self) -> bool:
+        return True
+
+if __name__ == "__main__":
+    downloader = NBMConusDownloader.from_cli_args()
+    downloader.run()
