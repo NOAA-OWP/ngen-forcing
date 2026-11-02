@@ -346,3 +346,41 @@ class ForecastDownloader(ABC):
         else:
             missing_count: int = total_files_checked - available_files_count
             LOG.warning(f"Verification complete: {missing_count} file(s) are currently missing from the server.")
+
+    def _check_file_availability(self, url: str) -> bool:
+        """Ping server using HTTP HEAD request to verify file availability."""
+        max_attempts: int = self.max_download_attempts
+        interval: int = self.download_attempt_interval
+        attempt: int = 0
+
+        while attempt < max_attempts:
+            try:
+                LOG.info(f"Attempt {attempt + 1}: Pinging {url} for availability...")
+                response: requests.Response = requests.head(url, timeout=10)
+
+                if response.status_code == requests.codes.ok:
+                    LOG.info(f"File is available: {url}")
+                    return True
+                elif response.status_code == 404:
+                    LOG.warning(f"File not found (404): {url}")
+                else:
+                    LOG.error(f"Server returned status code {response.status_code} while pinging {url}")
+
+            except requests.exceptions.Timeout:
+                LOG.error(f"Timeout occurred while trying to connect to {url}")
+            except requests.exceptions.ConnectionError:
+                LOG.error(f"ConnectionError (Network issue) while pinging {url}")
+            except requests.exceptions.RequestException as e:
+                LOG.error(f"An error occurred with the request: {e}")
+
+            attempt += 1
+            if attempt < max_attempts:
+                time.sleep(interval)
+
+        if self.last_hour and self.subhourly_avg:
+            LOG.warning(f"Failed to confirm availability after {max_attempts} attempts: {url}")
+            return False
+        else:
+            LOG.error(f"Failed to confirm file availability after {max_attempts} attempts: {url}")
+            LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
+            os._exit(1)
