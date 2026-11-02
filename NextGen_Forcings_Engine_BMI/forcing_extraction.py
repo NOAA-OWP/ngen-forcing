@@ -151,3 +151,17 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
         )
 
         downloader.run()
+
+
+def main() -> None:
+    """Download forecast forcing data using CLI YAML config input."""
+    parser = argparse.ArgumentParser(description="Download forecast forcing data")
+    parser.add_argument("cfg", type=Path, help="Path to YAML config file")
+    args = parser.parse_args()
+
+    cfg: ForcingExtractionConfig = ForcingExtractionConfig.from_yaml_file(args.cfg)
+    retrieve_forcing(cfg)
+
+
+if __name__ == "__main__":
+    main()
