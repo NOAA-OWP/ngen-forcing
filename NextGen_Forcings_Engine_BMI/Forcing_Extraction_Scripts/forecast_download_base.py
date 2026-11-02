@@ -140,3 +140,32 @@ class ForecastDownloader(ABC):
     ) -> tuple[str, str] | list[tuple[str, str]]:
         """Construct remote file URL and local target filename."""
         pass
+
+    @property
+    def recursive_cleanup(self) -> bool:
+        """If True, recursively delete directories and prune parent paths."""
+        return False
+
+    def pre_download_hook(self, d_start: datetime) -> None:
+        """Hook called before downloading begins for a specific cycle."""
+        pass
+
+    def post_download_hook(self, d_start: datetime) -> None:
+        """Hook called after downloading completes for a specific cycle."""
+        pass
+
+    def _cleanup_old_data(self) -> None:
+        """Clean up old forecast cycles using timestamp or recursive pruning."""
+        for hour in range(self.cleanback_hours, self.lookback_hours, -1):
+            d_start: datetime = self.start_time - timedelta(hours=hour)
+            if not self.should_process_hour(d_start):
+                continue
+
+            if self.recursive_cleanup:
+                leaf_dir: str = self.build_output_dir(d_start, self.ens_number)
+                self._remove_dir_and_empty_parents(leaf_dir, levels=2)
+            else:
+                dir_path: str = self.build_output_dir(d_start, self.ens_number)
+                if os.path.isdir(dir_path):
+                    LOG.debug(f"Removing old data: {dir_path}")
+                    shutil.rmtree(dir_path)
