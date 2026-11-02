@@ -17,3 +17,22 @@ class CFSv2Downloader(ForecastDownloader):
 
     def should_process_hour(self, d_start):
         return d_start.hour in [0, 6, 12, 18]
+
+    def build_output_dir(self, d_start, ens_number):
+        return os.path.join(self.out_dir, f"cfs.{d_start.strftime('%Y%m%d')}", d_start.strftime('%H'), f"6hrly_grib_{ens_number}")
+
+    def build_file_url_and_name(self, d_start, fhr, ens_number):
+        valid_time = d_start + timedelta(hours=fhr)
+        init_time = d_start.strftime('%Y%m%d%H')
+        valid_time_str = valid_time.strftime('%Y%m%d%H')
+        filename = f"flxf{valid_time_str}.{ens_number}.{init_time}.grb2"
+        url = os.path.join(self.base_url, f"cfs.{d_start.strftime('%Y%m%d')}", d_start.strftime('%H'), f"6hrly_grib_{ens_number}", filename)
+        return url, filename
+
+    @property
+    def recursive_cleanup(self) -> bool:
+        return True
+
+if __name__ == "__main__":
+    downloader = CFSv2Downloader.from_cli_args()
+    downloader.run()
