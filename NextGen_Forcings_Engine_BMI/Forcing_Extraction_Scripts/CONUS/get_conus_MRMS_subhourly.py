@@ -11,3 +11,16 @@ class MRMS_SubHourlyConusDownloader(FixedFileDownloader, ABC):
 
     def build_output_dir(self, _, __):
         return self.out_dir
+
+    def get_file_specs(self, d_start):
+        specs = []
+        for i in range(0, 60, 2):
+            current_step = d_start + timedelta(minutes=i)
+            subdir = f"{d_start.strftime('%Y%m%d')}"
+            filename = f"MRMS_PrecipRate_00.00_{d_start.strftime('%Y%m%d')}-{current_step.strftime('%H%M%S')}.grib2.gz"
+            specs.append((subdir, filename))
+        return specs
+
+if __name__ == "__main__":
+    downloader = MRMS_SubHourlyConusDownloader.from_cli_args()
+    downloader.run()
