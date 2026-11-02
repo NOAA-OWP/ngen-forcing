@@ -42,3 +42,20 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
     max_download_attempts: int = cfg.max_download_attempts
     download_attempt_interval: int = cfg.download_attempt_interval
     check_file_availability: int = cfg.check_file_availability
+
+    forcing_src: dict[int | str, str] = {
+        3: "Global/get_prod_GFS.py",
+        5: "CONUS/get_conus_HRRR.py",
+        6: "CONUS/get_conus_RAP.py",
+        7: "Global/get_CFSv2.py",
+        13: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
+        14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py",
+        19: "Alaska/get_Alaska_HRRR.py",
+        24: "CONUS/get_prod_NBM_Conus.py",
+        26: "CONUS/get_conus_HRRR_subhourly.py",
+        "supp8": "CONUS/get_prod_NBM_Conus.py",
+        "supp9": "Alaska/get_prod_NBM_Alaska.py",
+        "supp11": "Alaska/get_Alaska_StageIV.py",
+        "supp12": "CONUS/get_conus_StageIV.py",
+        "supp15": "Puerto_Rico/get_prod_NBM_Puerto_Rico.py",
+    }
