@@ -273,3 +273,14 @@ class ForecastDownloader(ABC):
                         pass
             attempt += 1
             time.sleep(interval)
+
+        if self.last_hour and self.subhourly_avg:
+            LOG.warning(f"Failed to download after {max_attempts} attempts: {url}")
+            LOG.warning(
+                "This MRMS file is not required to fill in the latest AnA cycle hour for "
+                "sub-hourly averaging method. Will use HRRR instead."
+            )
+        else:
+            LOG.error(f"Failed to download after {max_attempts} attempts: {url}")
+            LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
+            os._exit(1)
