@@ -284,3 +284,55 @@ class ForecastDownloader(ABC):
             LOG.error(f"Failed to download after {max_attempts} attempts: {url}")
             LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
             os._exit(1)
+
+    def _check_data_availability(self) -> None:
+        """Check forecast file availability without fetching content."""
+        LOG.info(
+            f"ForecastDownloader: Checking data availability. lookback: {self.lookback_hours} "
+            f"lagback: {self.effective_lagback()}"
+        )
+        total_files_checked: int = 0
+        available_files_count: int = 0
+        final_hour: int = self.effective_lagback() + 1
+
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            d_start: datetime = self.start_time - timedelta(hours=hour)
+            if not self.should_process_hour(d_start):
+                continue
+
+            self.pre_download_hook(d_start)
+            targets: list[typing.Any] = self.get_download_targets(d_start)
+            self.last_hour = (hour == final_hour)
+            all_files_available: bool = True
+
+            if self.input_forcing == 6:
+                for target in targets:
+                    file_list = typing.cast(
+                        list[tuple[str, str]], self.build_file_url_and_name(d_start, target, self.ens_number)
+                    )
+                    for url, filename in file_list:
+                        total_files_checked += 1
+                        LOG.info(f"Checking upstream availability for {filename} via HEAD request")
+                        if self._check_file_availability(url):
+                            available_files_count += 1
+                        else:
+                            all_files_available = False
+                            LOG.warning(f"Required file missing from server: {url}")
+            else:
+                for target in targets:
+                    url, filename = typing.cast(
+                        tuple[str, str], self.build_file_url_and_name(d_start, target, self.ens_number)
+                    )
+                    total_files_checked += 1
+                    LOG.info(f"Checking upstream availability for {filename} via HEAD request")
+                    if self._check_file_availability(url):
+                        available_files_count += 1
+                    else:
+                        all_files_available = False
+                        LOG.warning(f"Required file missing from server: {url}")
+
+            if all_files_available:
+                LOG.info(f"All required forcing files are available for timestamp: {d_start}")
+                self.post_download_hook(d_start)
+            else:
+                LOG.error(f"One or more forcing files missing for timestamp: {d_start}.")
