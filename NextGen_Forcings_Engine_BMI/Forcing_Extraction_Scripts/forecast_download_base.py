@@ -235,3 +235,41 @@ class ForecastDownloader(ABC):
                         continue
                     self._download_file(url, out_path)
                 self.post_download_hook(d_start)
+
+    def _download_file(self, url: str, out_path: str) -> None:
+        """Download remote URL to temporary path and publish atomically."""
+        max_attempts: int = self.max_download_attempts
+        interval: int = self.download_attempt_interval
+        attempt: int = 0
+
+        out_dir: str = os.path.dirname(out_path)
+        base: str = os.path.basename(out_path)
+        temp_path: str = os.path.join(out_dir, f".{base}.tmp.{uuid.uuid4()}")
+
+        while attempt < max_attempts:
+            try:
+                LOG.info(f"Attempt {attempt + 1}: Downloading {url} -> {temp_path}")
+                request.urlretrieve(url, temp_path)
+                try:
+                    os.link(temp_path, out_path)
+                    os.remove(temp_path)
+                    LOG.info(f"Download complete: {out_path}")
+                    return
+                except FileExistsError:
+                    LOG.info(f"{out_path} already exists; another process wrote it first. Removing temp.")
+                    os.remove(temp_path)
+                    return
+            except error.HTTPError as e:
+                LOG.error(f"HTTPError {e.code} while downloading {url}: {e.reason}")
+            except error.URLError as e:
+                LOG.error(f"URLError while downloading {url}: {e.reason}")
+            except Exception as e:
+                LOG.error(f"Unexpected error while downloading {url}: {e}")
+            finally:
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+            attempt += 1
+            time.sleep(interval)
