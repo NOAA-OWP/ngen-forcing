@@ -384,3 +384,41 @@ class ForecastDownloader(ABC):
             LOG.error(f"Failed to confirm file availability after {max_attempts} attempts: {url}")
             LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
             os._exit(1)
+
+
+class FixedFileDownloader(ForecastDownloader, ABC):
+    """Subclass for MRMS and StageIV datasets with predefined filenames and subdirectories."""
+
+    def build_file_url_and_name(self, d_start: datetime, target: typing.Any, ens_number: str) -> tuple[str, str]:
+        raise NotImplementedError("FixedFileDownloader uses get_file_specs() instead.")
+
+    def get_download_targets(self, d_start: datetime) -> list[typing.Any]:
+        return []
+
+    @abstractmethod
+    def get_file_specs(self, d_start: datetime) -> list[tuple[str, str]]:
+        """Return a list of (subdir, filename) tuples for files to be downloaded."""
+        pass
+
+    def _download_data(self) -> None:
+        LOG.info(f"FixedFileDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
+        final_hour: int = self.effective_lagback() + 1
+
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            d_start: datetime = self.start_time - timedelta(hours=hour)
+            self.last_hour = (hour == final_hour)
+
+            if not self.should_process_hour(d_start):
+                continue
+
+            for subdir, filename in self.get_file_specs(d_start):
+                full_dir: str = os.path.join(self.out_dir, subdir)
+                os.makedirs(full_dir, exist_ok=True)
+                url: str = os.path.join(self.base_url, subdir, filename)
+                out_path: str = os.path.join(full_dir, filename)
+
+                if os.path.isfile(out_path):
+                    LOG.info(f"Skipping existing: {out_path}")
+                    continue
+
+                self._download_file(url, out_path)
