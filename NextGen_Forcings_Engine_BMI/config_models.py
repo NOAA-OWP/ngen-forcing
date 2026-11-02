@@ -5,6 +5,7 @@ import os
 import pathlib
 import typing
 import yaml
+import datetime
 
 
 @dataclasses.dataclass
@@ -81,11 +82,13 @@ class ForcingExtractionConfig:
     @classmethod
     def from_dict(cls, data: dict[str, typing.Any]) -> typing.Self:
         raw_bdate = data.get("RefcstBDateProc")
-        b_date = (
-            datetime.datetime.strptime(raw_bdate, "%Y-%m-%d %H:%M:%S")
-            if isinstance(raw_bdate, str)
-            else raw_bdate
-        )
+        if isinstance(raw_bdate, str):
+            try:
+                b_date = datetime.datetime.strptime(raw_bdate, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                b_date = datetime.datetime.strptime(raw_bdate, "%Y%m%d%H%M")
+        else:
+            b_date = raw_bdate
         return cls(
             b_date_proc=b_date,
             input_forcings=list(data.get("InputForcings", [])),
