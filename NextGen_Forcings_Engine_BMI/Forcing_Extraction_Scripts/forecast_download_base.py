@@ -185,3 +185,27 @@ class ForecastDownloader(ABC):
                     os.rmdir(current_path)
                 else:
                     break
+
+    def _download_data(self) -> None:
+        """Download forecast files across desired time horizons and targets."""
+        LOG.info(
+            f"ForecastDownloader: Download data. lookback: {self.lookback_hours} "
+            f"lagback: {self.effective_lagback()}"
+        )
+        final_hour: int = self.effective_lagback() + 1
+
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            d_start: datetime = self.start_time - timedelta(hours=hour)
+
+            if self.should_process_hour(d_start):
+                LOG.debug(f"Processing hour offset: {hour}, timestamp: {d_start}")
+            else:
+                LOG.debug(f"Skipping hour offset: {hour}, timestamp: {d_start}")
+                continue
+
+            output_dir: str = self.build_output_dir(d_start, self.ens_number)
+            os.makedirs(output_dir, exist_ok=True)
+
+            self.pre_download_hook(d_start)
+            targets: list[typing.Any] = self.get_download_targets(d_start)
+            self.last_hour = (hour == final_hour)
