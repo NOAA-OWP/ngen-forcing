@@ -13,3 +13,16 @@ class NAMNestPuertoRicoDownloader(ForecastDownloader):
 
     def get_download_targets(self, _):
         return range(1, 61)
+
+    def build_output_dir(self, d_start, _):
+        return os.path.join(self.out_dir, f"nam.{d_start.strftime('%Y%m%d')}")
+
+    def build_file_url_and_name(self, d_start, target, _):
+        fhr = str(target).zfill(2)
+        filename = f"nam.t{d_start.strftime('%H')}z.priconest.hiresf{fhr}.tm00.grib2"
+        url = os.path.join(self.base_url, f"nam.{d_start.strftime('%Y%m%d')}", filename)
+        return url, filename
+
+if __name__ == "__main__":
+    downloader = NAMNestPuertoRicoDownloader.from_cli_args()
+    downloader.run()
