@@ -20,8 +20,13 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
     input_forcings: list[typing.Any] = cfg.input_forcings + [
         f"supp{val}" for val in cfg.supp_precip_forcings
     ]
-    if cfg.supp_precip_dirs is not None:
-        input_forcing_dirs: list[str] = cfg.input_force_dirs + cfg.supp_precip_dirs
+    supp_dirs = (
+        [cfg.supp_precip_dirs]
+        if isinstance(cfg.supp_precip_dirs, str) and cfg.supp_precip_dirs.strip()
+        else list(cfg.supp_precip_dirs or [])
+    )
+    if cfg.supp_precip_forcings and supp_dirs:
+        input_forcing_dirs: list[str] = list(cfg.input_force_dirs) + supp_dirs
     else:
         input_forcing_dirs = list(cfg.input_force_dirs)
     input_horizons: list[int] = cfg.fcst_input_horizons
