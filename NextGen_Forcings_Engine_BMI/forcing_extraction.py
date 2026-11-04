@@ -61,6 +61,7 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
         18: "Puerto_Rico/get_ARW_Puerto_Rico.py",
         19: "Alaska/get_Alaska_HRRR.py",
         24: "CONUS/get_prod_NBM_Conus.py",
+        25: "CONUS/get_conus_NDFD.py",
         26: "CONUS/get_conus_HRRR_subhourly.py",
         "supp8": "CONUS/get_prod_NBM_Conus.py",
         "supp9": "Alaska/get_prod_NBM_Alaska.py",
