@@ -61,3 +61,63 @@ class NDFDConusDownloader(ForecastDownloader):
         url = f"{self.base_url}/VP.001-003/{bin_file}"
         filename = f"ndfd_conus_{target}.grib2"
         return url, filename
+
+    def _execute_multi_vp_download(self, url: str, out_file: str, attempt_limit: int = 10, interval: int = 10) -> bool:
+        """Download and concatenate GRIB2 records across VP.001-003 and VP.004-007."""
+        base_name = os.path.basename(out_file)
+        field = base_name.replace("ndfd_conus_", "").replace(".grib2", "")
+        bin_file = self.FIELD_MAP.get(field)
+
+        out_path = Path(out_file)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_out = out_path.with_name(f".{out_path.name}.tmp")
+
+        headers = {"User-Agent": "Mozilla/5.0 (NextGen-Forcing-Engine)"}
+        base_success = False
+
+        with open(temp_out, "wb") as outfile:
+            for vp in self.VALID_PERIODS:
+                vp_url = f"{self.base_url}/{vp}/{bin_file}"
+                logger.info(f"Attempting download of {vp}/{bin_file} -> {out_file}")
+                try:
+                    resp = requests.get(vp_url, headers=headers, stream=True, timeout=30)
+                    if resp.status_code == 200:
+                        for chunk in resp.iter_content(chunk_size=1048576):
+                            if chunk:
+                                outfile.write(chunk)
+                        logger.info(f"Appended {vp}/{bin_file} to {out_file}")
+                        if vp == "VP.001-003":
+                            base_success = True
+                    elif resp.status_code == 404:
+                        logger.info(f"{vp}/{bin_file} not available on upstream bucket (404 Not Found); omitting.")
+                    else:
+                        logger.warning(f"Unexpected HTTP {resp.status_code} for {vp_url}")
+                except Exception as exc:
+                    logger.warning(f"Failed to retrieve {vp_url}: {exc}")
+
+        if base_success and temp_out.stat().st_size > 0:
+            temp_out.replace(out_path)
+            logger.info(f"Consolidated download complete: {out_file} ({out_path.stat().st_size} bytes)")
+            return True
+        else:
+            if temp_out.exists():
+                temp_out.unlink()
+            return False
+
+    def _download_file(self, *args, **kwargs) -> bool:
+        return self._execute_multi_vp_download(*args, **kwargs)
+
+    def download_file(self, *args, **kwargs) -> bool:
+        return self._execute_multi_vp_download(*args, **kwargs)
+
+
+def main() -> None:
+    """CLI entrypoint for standalone NDFD CONUS forcing extraction."""
+    downloader = NDFDConusDownloader.from_cli_args(
+        desc="Download operational NDFD CONUS forecast forcings"
+    )
+    downloader.run()
+
+
+if __name__ == "__main__":
+    main()
