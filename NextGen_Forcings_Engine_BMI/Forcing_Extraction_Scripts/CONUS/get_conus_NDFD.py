@@ -27,7 +27,14 @@ class NDFDConusDownloader(ForecastDownloader):
         "APCP": "ds.qpf.bin",
     }
 
-    VALID_PERIODS: list[str] = ["VP.001-003", "VP.004-007"]
+    # APCP (QPF) is only produced operationally through 72 hours (VP.001-003).
+    # Instantaneous elements (TMP, WDIR, WSPD) extend through Day 7 (VP.004-007).
+    FIELD_VALID_PERIODS: dict[str, list[str]] = {
+        "TMP": ["VP.001-003", "VP.004-007"],
+        "WDIR": ["VP.001-003", "VP.004-007"],
+        "WSPD": ["VP.001-003", "VP.004-007"],
+        "APCP": ["VP.001-003"],
+    }
 
     @property
     def base_url(self) -> str:
@@ -63,10 +70,14 @@ class NDFDConusDownloader(ForecastDownloader):
         return url, filename
 
     def _execute_multi_vp_download(self, url: str, out_file: str, attempt_limit: int = 10, interval: int = 10) -> bool:
-        """Download and concatenate GRIB2 records across VP.001-003 and VP.004-007."""
+        """Download and concatenate GRIB2 records across supported valid periods."""
         base_name = os.path.basename(out_file)
         field = base_name.replace("ndfd_conus_", "").replace(".grib2", "")
         bin_file = self.FIELD_MAP.get(field)
+
+        valid_periods = self.FIELD_VALID_PERIODS.get(field, ["VP.001-003"])
+        if field == "APCP":
+            logger.info("NDFD QPF (APCP) is capped at 72 hours (VP.001-003) by operational design; omitting extended periods.")
 
         out_path = Path(out_file)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -76,7 +87,7 @@ class NDFDConusDownloader(ForecastDownloader):
         base_success = False
 
         with open(temp_out, "wb") as outfile:
-            for vp in self.VALID_PERIODS:
+            for vp in valid_periods:
                 vp_url = f"{self.base_url}/{vp}/{bin_file}"
                 logger.info(f"Attempting download of {vp}/{bin_file} -> {out_file}")
                 try:
@@ -88,8 +99,6 @@ class NDFDConusDownloader(ForecastDownloader):
                         logger.info(f"Appended {vp}/{bin_file} to {out_file}")
                         if vp == "VP.001-003":
                             base_success = True
-                    elif resp.status_code == 404:
-                        logger.info(f"{vp}/{bin_file} not available on upstream bucket (404 Not Found); omitting.")
                     else:
                         logger.warning(f"Unexpected HTTP {resp.status_code} for {vp_url}")
                 except Exception as exc:
