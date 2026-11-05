@@ -1,102 +1,33 @@
-# Quick and dirty program to pull down operational
-# conus HRRR 15 minute data (surface files).
-
-import datetime
-import urllib
-from urllib import request
-import http
-from http import cookiejar
 import os
-import sys
-import shutil
-import time
-import argparse
+from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 
-def main(args):
-    outDir = args.outDir
-    lookBackHours = args.lookBackHours
-    cleanBackHours = args.cleanBackHours
-    lagBackHours = args.lagBackHours
+class HRRRSubhourlyDownloader(ForecastDownloader):
+    """Downloader for CONUS HRRR sub-hourly data (15-minute forecasts)."""
+    default_lookback = 30
+    default_cleanback = 240
+    default_lagback = 1
 
-    dNowUTC = datetime.datetime.utcnow()
-    dNow = datetime.datetime(dNowUTC.year,dNowUTC.month,dNowUTC.day,dNowUTC.hour)
-    ncepHTTP = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
+    @property
+    def base_url(self):
+        return "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
 
-    pid = os.getpid()
-    lockFile = outDir + "/GET_Conus_HRRR_subhourly.lock"
+    def should_process_hour(self, d_current):
+        return True
 
-    # First check to see if lock file exists, if it does, throw error message as
-    # another pull program is running. If lock file not found, create one with PID.
-    if os.path.isfile(lockFile):
-        fileLock = open(lockFile,'r')
-        pid = fileLock.readline()
-        warningMsg =  "ERROR: Another CONUS HRRR SubHourly Fetch Program Running. PID: " + pid + ". Please remove lockfile before attempting to execute another file extraction. Exiting script"
-        sys.exit(1)
-    else:
-        fileLock = open(lockFile,'w')
-        fileLock.write(str(os.getpid()))
-        fileLock.close()
+    def get_download_targets(self, d_current):
+        return range(0, 19)
 
-    for hour in range(cleanBackHours,lagBackHours,-1):
-        # Calculate current hour.
-        dCurrent = dNow - datetime.timedelta(seconds=3600*hour)
+    def build_output_dir(self, d_current, _):
+        return os.path.join(self.out_dir, f"hrrr.{d_current.strftime('%Y%m%d')}", "subhourly")
 
-        # Compose path to directory containing data.
-        hrrrCleanDir = outDir + "/hrrr." + dCurrent.strftime('%Y%m%d') + "/conus"
-
-        # Check to see if directory exists. If it does, remove it.
-        if os.path.isdir(hrrrCleanDir):
-            print("Removing old HRRR subhourly data from: " + hrrrCleanDir)
-            shutil.rmtree(hrrrCleanDir)
-
-    # Now that cleaning is done, download files within the download window.
-    for hour in range(lookBackHours,lagBackHours,-1):
-        # Calculate current hour.
-        dCurrent = dNow - datetime.timedelta(seconds=3600*hour)
-
-        hrrrOutDir = outDir + "/hrrr." + dCurrent.strftime('%Y%m%d') + "/conus"
-        if not os.path.isdir(hrrrOutDir):
-            os.makedirs(hrrrOutDir)
-
-        # 18 hour sub-hourly forecasts.
-        nFcstHrs = 18
-
-        for hrDownload in range(0,nFcstHrs+1):
-            httpDownloadDir = ncepHTTP + "/hrrr." + dCurrent.strftime('%Y%m%d') + "/conus"
-            fileDownload = "hrrr.t" + dCurrent.strftime('%H') + \
-                       "z.wrfsubhf" + str(hrDownload).zfill(2) + ".grib2"
-            url = httpDownloadDir + "/" + fileDownload
-            outFile = hrrrOutDir + "/" + fileDownload
-            if not os.path.isfile(outFile):
-                download_complete = False
-                start_time = time.time()
-                timer = 0.0
-                print("Pulling HRRR subhourly file: " + url)
-                while(download_complete == False and timer < 600.0):
-                    try:
-                        request.urlretrieve(url,outFile)
-                        download_complete = True
-                    except:
-                        timer = time.time() - start_time
-
-                if(download_complete == False):
-                    print("Unable to retrieve: " + url)
-                    print("Data may not available yet...")
-
-    # Remove the LOCK file.
-    os.remove(lockFile)
-
-def get_options():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('outDir', type=str, help="Output directory pathway where the NOMADS data will be downloaded to")
-    parser.add_argument('--lookBackHours', type=int, default=30, help="How many hours to look back for forecast data cycles")
-    parser.add_argument('--cleanBackHours', type=int, default=240, help="Period between this time and the beginning of the lookback period to cleanout old data")
-    parser.add_argument('--lagBackHours', type=int, default=1, help="Wait at least this long back before searching for files")
-
-
-    return parser.parse_args()
+    def build_file_url_and_name(self, d_current, target, _):
+        fhr_str = f"{target:02d}"
+        hour = d_current.strftime('%H')
+        date = d_current.strftime('%Y%m%d')
+        filename = f"hrrr.t{hour}z.wrfsubhf{fhr_str}.grib2"
+        url = os.path.join(self.base_url, f"hrrr.{date}", "conus", filename)
+        return url, filename
 
 if __name__ == "__main__":
-    args = get_options()
-    main(args)
+    downloader = HRRRSubhourlyDownloader.from_cli_args()
+    downloader.run()
