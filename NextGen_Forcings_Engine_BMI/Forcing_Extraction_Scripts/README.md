@@ -1,24 +1,107 @@
-# Overview
-This directory contains a series of scripts for each NWM domain subdirectory (CONUS, Alaska, Puerto Rico, Hawaii) that encompasses the required meteorological forcing data products needed for each regional NWMv3.0 operational configuration setup. Each script is a particular meteorlogical forcing data product that is available to download off the NOMADS server. Availability of each meteorlogical forcing data product varies, but a user can generally extract at least the last 24 hours of previous data products or forecast cycles available. 
+# Forcing Extraction Workflow
 
-# Setting Up Required Python Environment to Execute Forcing Extraction Scripts Using Anaconda
-conda env create --name forcing_extraction --file=environment.yml
+The `Forcing_Extraction_Scripts` subsystem provides modular, parallelized downloaders for retrieving and staging atmospheric and hydrologic model forcing data required by the National Water Model v4 (NWMv4) NextGen framework.
 
-# Script Execution Example and Argument Descriptions
+---
 
-#### Example ####
-python get_prod_GFS.py ./output --lookBackHours=24 --cleanBackHours=36 --lagBackHours=6
+## Architecture Overview
 
-#### Arguments to the Forcing Extraction Scripts ####
-* outDir (required) - Output directory pathway where the NOMADS data will be downloaded to
-* lookBackHours (optional) - How many hours to look back for forecast data cycles
-* cleanBackHours (optional) - Period between current time and the beginning of the lookback period to cleanout old data
-* lagBackHours (optional) - Wait at least this long back before searching for files
+All downloaders inherit from `ForecastDownloader` (`forecast_download_base.py`), establishing a standard lifecycle across datasets:
+1. **Cycle Window Evaluation**: Computes lookback/lagback windows aligned to model operational cadences.
+2. **Availability Verification**: Queries upstream endpoints (`HTTP HEAD` / NOMADS / AWS S3 Open Data buckets) to ensure grids are staged before dispatching retrieval jobs.
+3. **Parallel Dispatch**: Orchestrates concurrent downloads across variables and timesteps via `ThreadPoolExecutor`.
+4. **Binary / Horizon Staging**: Downloads, verifies, and (where necessary) concatenates multi-period binary bins into unified GRIB2 files ready for regridding and ESMF mesh mapping.
 
+---
 
-#### Things to Keep in Mind ####
-* MRMS precipitation products only store the last 24 hours of satellite swath data.
-* At times, the server lags and scripts will take between 2-5 minutes to finally recieve the url request and download a given file.
-* National Blended Model (NWM) products do not have a presistent forecast cycle output file interval. Future changes will be coming however for NBM forecast products to always have hourly data.
-* HRRR data product output varies from region to region (Hourly - CONUS, 3-hourly Alaska)
-* AORC data downloading is not available in this repository currently for CONUS and Alaska domains. The Office of Water Prediction (OWP) is working on making a public data respository for these data products. Once they go online, we will update this repsoitory accordingly. 
+## Registered Forecast Forcing Datasets
+
+Each standard forecast pipeline is indexed by an operational ID registered in `NextGen_Forcings_Engine_BMI/forcing_extraction.py`:
+
+| Forcing ID | Domain | Model / Product | Downloader Class / Script | Source Endpoint | Supported Forecast Horizon |
+|:---:|:---|:---|:---|:---|:---:|
+| **1** | CONUS | HRRR | `CONUS/get_HRRR.py` | AWS NODD / NOMADS | 1–48 Hours |
+| **2** | CONUS | RAP | `CONUS/get_RAP.py` | AWS NODD / NOMADS | 1–21 Hours |
+| **3** | CONUS | NAM Nest | `CONUS/get_NAM_Nest.py` | NOMADS / AWS S3 | 1–60 Hours |
+| **4** | Global | GFS | `Global/get_GFS.py` | NOMADS / AWS S3 | 1–384 Hours |
+| **7** | Global | CFSv2 | `Global/get_CFSv2.py` | NOMADS | Seasonal / Subseasonal |
+| **8** | Hawaii | HIRESW WRF-ARW | `Hawaii/get_AWR_Hawaii.py` | NOAA NOMADS HTTPS | 1–48 Hours |
+| **13** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | NOMADS / AWS S3 | 1–60 Hours |
+| **14** | Puerto Rico | NAM Nest PR | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | NOMADS / AWS S3 | 1–60 Hours |
+| **16** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | NOMADS / AWS S3 | 1–60 Hours |
+| **17** | Puerto Rico | NAM Nest PR | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | NOMADS / AWS S3 | 1–60 Hours |
+| **18** | Puerto Rico | HIRESW WRF-ARW | `Puerto_Rico/get_ARW_Puerto_Rico.py` | NOAA NOMADS HTTPS | 1–48 Hours |
+| **19** | Alaska | Alaska HRRR | `Alaska/get_Alaska_HRRR.py` | AWS NODD / NOMADS | 1–48 Hours |
+| **24** | CONUS | NBM CONUS | `CONUS/get_prod_NBM_Conus.py` | AWS NODD / NOMADS | 1–264 Hours |
+| **25** | CONUS | NDFD CONUS | `CONUS/get_conus_NDFD.py` | NOAA NDFD AWS S3 PDS | Up to 168 Hours (Day 7) |
+
+---
+
+## Analysis & Assimilation (AnA) and Supplemental Precipitation Sources
+
+When running in Analysis and Assimilation mode (`ana_flag: 1`) or incorporating supplemental precipitation grids (`SuppPcp`), the engine dispatches downloads via `forcing_ana_src`:
+
+| Key / Identifier | Domain | Description / Product | Extraction Script |
+|:---:|:---|:---|:---|
+| **5** | CONUS | HRRR Analysis and Assimilation | `CONUS/get_conus_HRRR_AnA.py` |
+| **6** | CONUS | RAP Analysis and Assimilation | `CONUS/get_conus_RAP_AnA.py` |
+| **13** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` |
+| **14** | Puerto Rico | NAM Nest Puerto Rico AnA | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py` |
+| **19** | Alaska | Alaska HRRR | `Alaska/get_Alaska_HRRR.py` |
+| **20** | Alaska | Alaska HRRR Analysis and Assimilation | `Alaska/get_Alaska_HRRR_AnA.py` |
+| **26** | CONUS | HRRR Subhourly Analysis and Assimilation | `CONUS/get_conus_HRRR_subhourly_AnA.py` |
+| **supp1** | CONUS | MRMS Radar-Only QPE | `CONUS/get_conus_MRMS_Radar.py` |
+| **supp2** | CONUS | MRMS Multi-Sensor QPE (Hourly) | `CONUS/get_conus_MRMS_MultiSensor.py` |
+| **supp6** | Hawaii | MRMS Multi-Sensor Hawaii | `Hawaii/get_MRMS_MultiSensor_Hawaii.py` |
+| **supp10** | Alaska | MRMS Multi-Sensor Alaska | `Alaska/get_MRMS_MultiSensor_Alaska.py` |
+| **supp11** | Alaska | Stage IV Precipitation Alaska | `Alaska/get_Alaska_StageIV.py` |
+| **supp12** | CONUS | Stage IV Precipitation CONUS | `CONUS/get_conus_StageIV.py` |
+| **supp15** | Puerto Rico | NBM Puerto Rico Analysis and Assimilation | `Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py` |
+| **supp16** | CONUS | MRMS Multi-Sensor Subhourly QPE | `CONUS/get_conus_MRMS_subhourly.py` |
+
+> **Note on `supp16`**: When `supp16` is designated, the extraction workflow dynamically binds and fetches both subhourly (`supp16`) and hourly (`supp2`) MRMS files under respective `/MRMS_SubHourly` and `/MRMS_Hourly` subdirectories.
+
+---
+
+## Configuration & Pipeline Integration
+
+Download parameters are set across YAML configs in `BMI_NextGen_Configs/`:
+
+```yaml
+# Network resilience parameters
+max_download_attempts: 10
+download_attempt_interval: 10
+check_file_availability: 0
+
+# Forcing specification
+Forcing:
+  - 25  # CONUS NDFD
+ForcingDirectories:
+  - "./NDFD"
+ForecastInputHorizons:
+  - 168
+
+# Supplemental precipitation parameters
+SuppPcp: []
+SuppPcpDirectories: ""
+```
+
+## Example to Execute the Workflow
+
+Follow these steps from the root of the repository to set up the minimal environment and execute the extraction workflow end-to-end:
+
+```bash
+# 1. Navigate to the Forcing Extraction Script Directory
+cd ngen-forcing/NextGen_Forcings_Engine_BMI/Forcing_Extraction_Scripts
+
+# 2. Create the dedicated conda environment from the minimal specification
+conda env create -f environment.yml
+
+# 2. Activate the environment
+conda activate forcing_extraction
+
+# 3. Navigate into the BMI engine directory
+cd ../
+
+# 4. Execute the extraction workflow with the target hydrofabric configuration
+python forcing_extraction.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
