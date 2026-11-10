@@ -27,12 +27,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
-import tempfile
 from collections import Counter
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -42,21 +39,14 @@ import urllib3
 from Forcing_Extraction_Scripts import probe_sources
 from Forcing_Extraction_Scripts.forecast_download_base import (
     CHUNK_SIZE,
-    CONNECT_TIMEOUT,
-    READ_TIMEOUT,
     REQUEST_HEADERS,
     SNIFF_BYTES,
     content_signature_problem,
+    plain_md5_etag,
 )
+from Forcing_Extraction_Scripts.probe_sources import TIMEOUT, get_prefix
 
 PASS, FAIL, SKIP, NOTE = "pass", "fail", "skip", "note"
-_PLAIN_MD5 = re.compile(r"^\"?([0-9a-f]{32})\"?$")
-
-
-def plain_md5(etag: str | None) -> str | None:
-    """The MD5 hex digest an ETag stands for, or None for multipart or opaque ETags."""
-    match = _PLAIN_MD5.match(etag or "")
-    return match.group(1) if match else None
 DEFAULT_MAX_MB = 64
 
 
@@ -94,8 +84,7 @@ class Fetched:
 
 
 def fetch_all(session: requests.Session, url: str, keep_body: bool = False) -> Fetched:
-    timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
-    with session.get(url, headers=REQUEST_HEADERS, timeout=timeout, stream=True) as resp:
+    with session.get(url, headers=REQUEST_HEADERS, timeout=TIMEOUT, stream=True) as resp:
         result = Fetched(resp.status_code, dict(resp.headers))
         if resp.status_code != 200:
             return result
@@ -118,9 +107,8 @@ def fetch_all(session: requests.Session, url: str, keep_body: bool = False) -> F
 
 def check_url(url: str, session: requests.Session, max_bytes: int) -> FileReport:
     report = FileReport(url)
-    timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
     try:
-        head = session.head(url, headers=REQUEST_HEADERS, timeout=timeout, allow_redirects=True)
+        head = probe_sources.head(session, url)
     except requests.RequestException as exc:
         report.add("head", FAIL, f"HEAD failed: {exc}")
         return report
@@ -169,7 +157,7 @@ def check_url(url: str, session: requests.Session, max_bytes: int) -> FileReport
         report.add("validators", PASS)
 
     etag = got.headers.get("ETag")
-    expected = plain_md5(etag)
+    expected = plain_md5_etag(etag)
     if expected is None:
         report.add("etag-md5", SKIP, f"ETag {etag!r} is not a plain MD5")
     elif expected == got.md5:
@@ -185,11 +173,10 @@ def check_url(url: str, session: requests.Session, max_bytes: int) -> FileReport
 
 def check_compression(report: FileReport, url: str, session: requests.Session) -> None:
     """Note whether the server compresses the transfer when gzip is accepted (headers only)."""
-    timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
     try:
-        with session.get(url, headers={"Accept-Encoding": "gzip, deflate"}, timeout=timeout, stream=True) as resp:
-            encoding = resp.headers.get("Content-Encoding", "identity").lower()
-            length = resp.headers.get("Content-Length")
+        _, headers, _ = get_prefix(session, url, {"Accept-Encoding": "gzip, deflate"})
+        encoding = headers.get("Content-Encoding", "identity").lower()
+        length = headers.get("Content-Length")
     except requests.RequestException as exc:
         report.add("compression", SKIP, f"GET with gzip accepted failed: {exc}")
         return
@@ -216,24 +203,14 @@ class ScriptReport:
 
 
 def check_script(script: str, session: requests.Session, max_bytes: int, per_script: int) -> ScriptReport:
-    import forcing_extraction as fe
-
     result = ScriptReport(script)
-    with tempfile.TemporaryDirectory() as out_dir:
-        try:
-            cls = fe.load_downloader_class(probe_sources.SCRIPT_DIR / script)
-            age = probe_sources.AGE_HOURS_OVERRIDE.get(cls.__name__, probe_sources.DEFAULT_AGE_HOURS)
-            cycle = probe_sources.pick_cycle(cls, datetime.now(timezone.utc), age, out_dir)
-            if cycle is None:
-                result.error = "no recent cycle yields any files"
-                return result
-            result.cycle = cycle.strftime("%Y-%m-%d %HZ")
-            urls = list(dict.fromkeys(
-                u for _, u, _ in probe_sources.make_probe_downloader(cls, cycle, out_dir).iter_remote_files()))
-        except Exception as exc:  # report and continue with the other scripts
-            result.error = f"{type(exc).__name__}: {exc}"
-            return result
-    for url in probe_sources.sample(urls)[:per_script]:
+    try:
+        chosen = probe_sources.script_cycle(script)
+    except Exception as exc:  # report and continue with the other scripts
+        result.error = f"{type(exc).__name__}: {exc}"
+        return result
+    result.cycle = chosen.cycle.strftime("%Y-%m-%d %HZ")
+    for url in probe_sources.sample(chosen.urls)[:per_script]:
         result.files.append(check_url(url, session, max_bytes))
     return result
 
