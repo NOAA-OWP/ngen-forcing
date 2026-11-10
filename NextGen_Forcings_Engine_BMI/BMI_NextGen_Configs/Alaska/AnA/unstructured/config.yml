@@ -47,7 +47,7 @@ HumidityDownscaling: [0]
 DownscalingParamDirs: ["/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/Alaska"]
 SuppPcp: [11]
 SuppPcpForcingTypes: ['GRIB2']
-SuppPcpDirectories: ['/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/Alaska_ExtAnA/MRMS_Alaska', '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/Alaska_ExtAnA/STAGEIV_Alaska']
+SuppPcpDirectories: ['/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/Alaska_ExtAnA/STAGEIV_Alaska', '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWM_Forcing_Data/Alaska_ExtAnA/MRMS_Alaska']
 SuppPcpParamDir: '/scratch2/NCEPDEV/ohd/Jason.Ducker/NWMv3.0_config/parm/forcingParam/Alaska'
 RegridOptSuppPcp: [1]
 SuppPcpTemporalInterpolation: [0]
