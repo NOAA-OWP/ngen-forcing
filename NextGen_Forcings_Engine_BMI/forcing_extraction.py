@@ -15,6 +15,7 @@ from config_models import ForcingExtractionConfig
 from Forcing_Extraction_Scripts.forecast_download_base import (
     DownloadError,
     ForecastDownloader,
+    MRMSMultiSensorDownloader,
     configure_logging,
 )
 
@@ -65,6 +66,12 @@ FORCING_ANA_SRC: dict[int | str, str] = {
     "supp16": "CONUS/get_conus_MRMS_subhourly.py",
 }
 
+#: MRMS MultiSensor source for the second (MRMS) directory of the Stage IV/MRMS SuppPcp options.
+STAGE4_MRMS_SRC: dict[str, str] = {
+    "supp11": "Alaska/get_MRMS_MultiSensor_Alaska.py",
+    "supp12": "CONUS/get_conus_MRMS_MultiSensor.py",
+}
+
 #: Hourly observation products whose AnA window is shifted one hour later.
 HOURLY_OBS_SUPP = ("supp1", "supp2", "supp6", "supp10", "supp11", "supp12", "supp16")
 
@@ -77,6 +84,7 @@ class ExtractionJob:
     script: str
     out_dir: str
     horizon_minutes: int | None = None
+    local_layout: str | None = None
 
 
 def load_downloader_class(script: Path) -> type[ForecastDownloader]:
@@ -113,12 +121,13 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
     horizons = list(cfg.fcst_input_horizons)
     jobs: list[ExtractionJob] = []
 
-    def add(forcing: int | str, out_dir: str, horizon: int | None) -> None:
-        script = src.get(forcing)
+    def add(forcing: int | str, out_dir: str, horizon: int | None, script: str | None = None,
+            local_layout: str | None = None) -> None:
+        script = script or src.get(forcing)
         if script is None:
             LOG.warning("No downloader is registered for forcing %r in %s mode; skipping it.", forcing, mode)
             return
-        jobs.append(ExtractionJob(forcing, script, out_dir, horizon))
+        jobs.append(ExtractionJob(forcing, script, out_dir, horizon, local_layout))
 
     if len(cfg.input_force_dirs) < len(cfg.input_forcings):
         raise ValueError("InputForcingDirectories must have one entry per InputForcings value.")
@@ -130,6 +139,21 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
         return jobs
     supp_dirs = _supp_dirs(cfg)
     supp_horizon = horizons[0] if horizons else None
+
+    stage4 = [s for s in supp if s in STAGE4_MRMS_SRC]
+    if stage4:
+        # The engine reads these as one comma-joined "<Stage IV dir>,<MRMS dir>" input (config.py),
+        # so they are only supported as the sole SuppPcp option.
+        if len(supp) != 1 or not supp_dirs:
+            raise ValueError("SuppPcp 11 or 12 must be the only SuppPcp option and needs a Stage IV directory.")
+        label = stage4[0]
+        add(label, supp_dirs[0], supp_horizon)
+        if len(supp_dirs) > 1:
+            add(label, supp_dirs[1], supp_horizon, script=STAGE4_MRMS_SRC[label],
+                local_layout=MRMSMultiSensorDownloader.LAYOUT_STAGE4_BLEND)
+        else:
+            LOG.warning("%s has no second (MRMS) directory in SuppPcpDirectories; MRMS will not be downloaded.", label)
+        return jobs
 
     if len(supp_dirs) < len(supp):
         raise ValueError("SuppPcpDirectories must have one entry per SuppPcp value.")
@@ -173,7 +197,7 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
 
     ens_number = cfg.cfsv2EnsMember
     downloader_class = load_downloader_class(SCRIPT_DIR / job.script)
-    return downloader_class(
+    downloader = downloader_class(
         out_dir=job.out_dir,
         start_time=start_time,
         lookback_hours=look_back_hours,
@@ -188,6 +212,9 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
         gfs_extended=(3 in cfg.input_forcings and len(cfg.input_forcings) == 1),
         max_forecast_hour=max_forecast_hour,
     )
+    if job.local_layout is not None:
+        downloader.local_layout = job.local_layout
+    return downloader
 
 
 def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
