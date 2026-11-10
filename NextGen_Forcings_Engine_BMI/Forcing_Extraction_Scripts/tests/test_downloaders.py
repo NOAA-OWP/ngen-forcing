@@ -189,7 +189,9 @@ def test_download_publishes_file(server, tmp_path):
     server.add(HRRR_ANA_URL, b"GRIB-data")
     assert make(HRRR_ANA, tmp_path).run() is True
     assert (tmp_path / "hrrr.20261110/conus/hrrr.t12z.wrfsfcf01.grib2").read_bytes() == b"GRIB-data"
-    assert not [p for p in (tmp_path / "hrrr.20261110/conus").iterdir() if p.name.startswith(".")]
+    leftovers = [p.name for p in (tmp_path / "hrrr.20261110/conus").iterdir()
+                 if p.name.startswith(".") and not p.name.endswith(".meta.json")]
+    assert not leftovers
 
 
 def test_missing_file_raises_instead_of_exiting(server, tmp_path):
@@ -355,7 +357,8 @@ def test_ndfd_concatenates_valid_periods(server, tmp_path):
     out = tmp_path / "NDFD/20261110/wgrbbul/ndfd_conus"
     assert (out / "ndfd_conus_tmp.grib2").read_bytes() == b"GRIB VP.001-003 ds.temp.bin;GRIB VP.004-007 ds.temp.bin;"
     assert (out / "ndfd_conus_qpf.grib2").read_bytes() == b"GRIB VP.001-003 ds.qpf.bin;"
-    assert sorted(p.name for p in out.iterdir()) == [f"ndfd_conus_{t}.grib2" for t in ("qpf", "tmp", "wdir", "wspd")]
+    data_files = sorted(p.name for p in out.iterdir() if not p.name.endswith(".meta.json"))
+    assert data_files == [f"ndfd_conus_{t}.grib2" for t in ("qpf", "tmp", "wdir", "wspd")]
 
 
 def test_ndfd_partial_field_is_not_published(server, tmp_path):

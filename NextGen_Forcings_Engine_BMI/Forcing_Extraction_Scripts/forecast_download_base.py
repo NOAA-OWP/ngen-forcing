@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import email.utils
+import hashlib
+import json
 import logging
 import os
 import re
@@ -11,8 +14,9 @@ import typing
 import uuid
 import zlib
 from abc import ABC, abstractmethod
+from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import requests
 import urllib3
@@ -92,6 +96,86 @@ def plain_md5_etag(etag: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def utc_now() -> datetime:
+    """Current UTC time as a naive datetime, matching the cycle times used throughout."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# ---------------------------------------------------------------------- HTTP validator metadata
+#
+# Each downloaded file gets a sidecar ``.<name>.meta.json`` next to it, recording the upstream
+# validators (ETag, Last-Modified, Content-Length) from the response that produced it. The sidecar
+# is written after the data file, so a crash leaves a file without metadata (treated as
+# unvalidated), never metadata describing missing or partial data.
+
+META_SUFFIX = ".meta.json"
+
+
+def meta_path(out_path: str) -> str:
+    return os.path.join(os.path.dirname(out_path), f".{os.path.basename(out_path)}{META_SUFFIX}")
+
+
+def read_meta(out_path: str) -> dict[str, typing.Any] | None:
+    try:
+        with open(meta_path(out_path), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def write_meta(out_path: str, meta: dict[str, typing.Any]) -> None:
+    path = meta_path(out_path)
+    temp = f"{path}.tmp.{uuid.uuid4()}"
+    with open(temp, "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, indent=1, sort_keys=True)
+    os.replace(temp, path)
+
+
+def conditional_headers(validators: dict[str, typing.Any] | None, no_cache: bool) -> dict[str, str]:
+    """Request headers asking the server to answer 304 if the stored version is still current."""
+    headers: dict[str, str] = {}
+    if not validators:
+        return headers
+    if validators.get("etag"):
+        headers["If-None-Match"] = validators["etag"]
+    if validators.get("last_modified"):
+        headers["If-Modified-Since"] = validators["last_modified"]
+    if headers and no_cache:
+        headers["Cache-Control"] = "no-cache"
+    return headers
+
+
+def set_mtime_from_header(path: str, last_modified: str | None) -> None:
+    if not last_modified:
+        return
+    try:
+        stamp = email.utils.parsedate_to_datetime(last_modified).timestamp()
+    except (TypeError, ValueError):
+        return
+    os.utime(path, (stamp, stamp))
+
+
+@dataclass
+class FetchResult:
+    """Outcome of one successful HTTP retrieval: 200 (body written) or 304 (unchanged)."""
+
+    status: int
+    headers: typing.Mapping[str, str]
+    md5_verified: bool = False
+
+    def validators(self, url: str, size: int | None) -> dict[str, typing.Any]:
+        now = utc_now().isoformat(timespec="seconds")
+        return {
+            "url": url,
+            "etag": self.headers.get("ETag"),
+            "last_modified": self.headers.get("Last-Modified"),
+            "content_length": size,
+            "md5_verified": self.md5_verified,
+            "fetched_at": now,
+            "checked_at": now,
+        }
+
+
 def cap_forecast_hours(targets: list[typing.Any], max_hour: int) -> list[typing.Any]:
     """
     Restrict integer forecast-hour targets to those needed for a horizon of ``max_hour`` hours.
@@ -147,6 +231,12 @@ class ForecastDownloader(ABC):
     #: Why the product ended, with a reference; included in the error for later cycles.
     retirement_note: typing.ClassVar[str] = ""
 
+    #: True for products whose files are rewritten in place upstream (Stage IV reruns, NDFD).
+    #: Existing files of such products are revalidated with conditional requests on every run.
+    mutable_upstream: bool = False
+    #: A 404 for a cycle older than this many hours is final and is not retried.
+    archived_after_hours: int = 48
+
     def __init__(
         self,
         out_dir: str | os.PathLike,
@@ -162,6 +252,7 @@ class ForecastDownloader(ABC):
         subhourly_avg: bool = False,
         gfs_extended: bool = False,
         max_forecast_hour: int | None = None,
+        revalidate: bool = False,
     ) -> None:
         if lookback_hours <= lagback_hours:
             raise ValueError(
@@ -182,8 +273,11 @@ class ForecastDownloader(ABC):
         # Retained for interface compatibility; forecast length is controlled by max_forecast_hour.
         self.gfs_extended: bool = gfs_extended
         self.max_forecast_hour: int | None = max_forecast_hour
+        #: Revalidate existing files of immutable products too (normally skipped without a request).
+        self.revalidate: bool = revalidate
 
         self.last_hour: bool | None = None
+        self._cycle_time: datetime | None = None
 
     def effective_lagback(self) -> int:
         """Return the lag-back (in hours) that ends the processing window; subclasses may override."""
@@ -214,6 +308,8 @@ class ForecastDownloader(ABC):
         parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
         parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
         parser.add_argument("--gfs_extended", action="store_true", default=False, help="Unused; retained for compatibility.")
+        parser.add_argument("--revalidate", action="store_true", default=False,
+                            help="Check existing files against upstream with conditional requests.")
         args = parser.parse_args(argv)
         LOG.info("%s args: %s", cls.__name__, vars(args))
 
@@ -231,6 +327,7 @@ class ForecastDownloader(ABC):
             subhourly_avg=args.subhourly_avg,
             gfs_extended=args.gfs_extended,
             max_forecast_hour=args.maxForecastHour,
+            revalidate=args.revalidate,
         )
 
     @classmethod
@@ -340,6 +437,7 @@ class ForecastDownloader(ABC):
                 continue
             files = self._cycle_files(d_start)
             if files:
+                self._cycle_time = d_start
                 yield d_start, files
 
     def _part_urls(self, url: str, out_path: str) -> list[str]:
@@ -428,51 +526,136 @@ class ForecastDownloader(ABC):
                 raise DownloadError(problem)
             self.pre_download_hook(d_start)
             for url, out_path in files:
-                if os.path.isfile(out_path):
-                    LOG.debug("Skipping existing: %s", out_path)
-                    continue
-                self._download_file(url, out_path)
+                if self._needs_download(out_path, url):
+                    self._download_file(url, out_path)
             self.post_download_hook(d_start)
 
         if processed == 0:
             self._warn_nothing_processed()
 
-    def _fetch(self, url: str, dest_path: str) -> typing.Mapping[str, str]:
-        """
-        Download ``url`` to ``dest_path`` with retries, verifying the byte count against Content-Length.
+    def _cycle_is_archived(self) -> bool:
+        """True when the cycle being fetched is old enough that a 404 means the file will never exist."""
+        if self._cycle_time is None:
+            return False
+        return utc_now() - self._cycle_time > timedelta(hours=self.archived_after_hours)
 
-        Returns the response headers. Raises DownloadError after the last failed attempt.
+    @staticmethod
+    def _stored_validators(out_path: str, url: str) -> dict[str, typing.Any] | None:
+        """Validators recorded for ``url`` in the sidecar of ``out_path``, if any."""
+        meta = read_meta(out_path)
+        if not meta:
+            return None
+        if "parts" in meta:
+            return meta["parts"].get(url)
+        return meta if meta.get("url") == url else None
+
+    def _needs_download(self, out_path: str, url: str) -> bool:
+        """
+        Decide whether ``url`` must be requested for ``out_path``.
+
+        Missing files are always requested. Existing files of mutable products (or with
+        ``revalidate``) are requested conditionally. Existing files of immutable products are only
+        requested again when their size disagrees with the recorded upstream size.
+        """
+        if not os.path.isfile(out_path):
+            return True
+        if self.mutable_upstream or self.revalidate:
+            return True
+        stored = self._stored_validators(out_path, url)
+        size = stored.get("content_length") if stored and "parts" not in (read_meta(out_path) or {}) else None
+        if size is not None and os.path.getsize(out_path) != size:
+            LOG.warning("%s is %d bytes but upstream reported %d; downloading it again.",
+                        out_path, os.path.getsize(out_path), size)
+            return True
+        LOG.debug("Skipping existing: %s", out_path)
+        return False
+
+    @staticmethod
+    def _verify_md5(path: str, etag: str | None) -> bool:
+        """Compare the file's MD5 with a plain-MD5 ETag; return True if verified, raise on mismatch."""
+        expected = plain_md5_etag(etag)
+        if expected is None:
+            return False
+        digest = hashlib.md5()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(CHUNK_SIZE), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected:
+            raise OSError(f"MD5 mismatch: ETag {expected}, received {digest.hexdigest()}")
+        return True
+
+    def _fetch(self, url: str, dest_path: str,
+               conditional: typing.Mapping[str, str] | None = None) -> FetchResult:
+        """
+        Download ``url`` to ``dest_path`` with retries.
+
+        ``conditional`` request headers may yield a 304, returned without writing ``dest_path``.
+        A body interrupted mid-transfer is resumed with ``Range`` + ``If-Range`` when the server
+        offers byte ranges and an ETag. Completed bodies are checked against Content-Length, their
+        file type and, when the ETag is a plain MD5, their content. A 404 for an archived cycle is
+        final. Raises DownloadError after the last failed attempt.
         """
         attempts: int = self.max_download_attempts
         last_error = "unknown error"
+        resume_etag: str | None = None
         for attempt in range(1, attempts + 1):
+            headers = {**REQUEST_HEADERS, **(conditional or {})}
+            offset = os.path.getsize(dest_path) if resume_etag and os.path.exists(dest_path) else 0
+            if offset:
+                headers["Range"] = f"bytes={offset}-"
+                headers["If-Range"] = resume_etag
+            resp_etag: str | None = None
+            ranges_ok = False
+            body_started = False
             try:
-                LOG.info("Downloading %s (attempt %d/%d)", url, attempt, attempts)
+                LOG.info("%s %s (attempt %d/%d%s)", "Revalidating" if conditional else "Downloading",
+                         url, attempt, attempts, f", resuming at byte {offset}" if offset else "")
                 with requests.get(url, stream=True, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
-                                  headers=REQUEST_HEADERS) as resp:
+                                  headers=headers) as resp:
+                    if resp.status_code == 304:
+                        return FetchResult(304, resp.headers)
                     resp.raise_for_status()
+                    resp_etag = resp.headers.get("ETag")
+                    ranges_ok = (resp.headers.get("Accept-Ranges", "").lower() == "bytes"
+                                 or resp.status_code == 206)
+                    if resp.status_code != 206:
+                        offset = 0
                     expected = resp.headers.get("Content-Length")
-                    written = 0
-                    with open(dest_path, "wb") as fh:
+                    total = offset + int(expected) if expected is not None else None
+                    written = offset
+                    with open(dest_path, "ab" if offset else "wb") as fh:
+                        body_started = True
                         while True:
                             chunk = resp.raw.read(CHUNK_SIZE)
                             if not chunk:
                                 break
                             fh.write(chunk)
                             written += len(chunk)
-                    if expected is not None and written != int(expected):
-                        raise ServerInconsistency(f"received {written} bytes but Content-Length is {expected}")
+                    body_started = False
+                    if total is not None and written != total:
+                        received = f"{written - offset} bytes from byte {offset}" if offset else f"{written} bytes"
+                        raise ServerInconsistency(f"received {received} but Content-Length is {expected}")
                     with open(dest_path, "rb") as fh:
                         problem = content_signature_problem(url, fh.read(SNIFF_BYTES))
                     if problem:
                         raise ServerInconsistency(f"content does not match {url.rsplit('/', 1)[-1]}: {problem}")
-                    return resp.headers
+                    md5_verified = self._verify_md5(dest_path, resp_etag)
+                    return FetchResult(200, resp.headers, md5_verified)
+            except requests.HTTPError as exc:
+                last_error = describe_request_error(exc)
+                if exc.response is not None and exc.response.status_code in (404, 410) and self._cycle_is_archived():
+                    raise DownloadError(
+                        f"Failed to download {url}: {last_error}; the cycle is older than "
+                        f"{self.archived_after_hours} h, so it was not retried."
+                    ) from exc
             except (requests.RequestException, urllib3.exceptions.HTTPError, OSError) as exc:
                 # Errors while streaming the body come from urllib3, not requests.
                 last_error = describe_request_error(exc)
                 if isinstance(exc, ServerInconsistency):
                     LOG.error("%s: %s", url, last_error)
-            if os.path.exists(dest_path):
+            keep_partial = body_started and ranges_ok and bool(resp_etag)
+            resume_etag = resp_etag if keep_partial else None
+            if not keep_partial and os.path.exists(dest_path):
                 os.remove(dest_path)
             LOG.warning("Attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)
             if attempt < attempts:
@@ -480,8 +663,16 @@ class ForecastDownloader(ABC):
         raise DownloadError(f"Failed to download {url} after {attempts} attempt(s): {last_error}")
 
     @staticmethod
-    def _publish(temp_path: str, out_path: str) -> None:
-        """Move a completed temporary file into place without clobbering a concurrent writer."""
+    def _publish(temp_path: str, out_path: str, replace: bool = False) -> None:
+        """
+        Move a completed temporary file into place.
+
+        A new file is hard-linked so a concurrent writer is never clobbered; ``replace`` (an
+        upstream update of an existing file) renames over it atomically.
+        """
+        if replace:
+            os.replace(temp_path, out_path)
+            return
         try:
             os.link(temp_path, out_path)
         except FileExistsError:
@@ -494,29 +685,57 @@ class ForecastDownloader(ABC):
 
     def _download_file(self, url: str, out_path: str) -> bool:
         """
-        Download a file (or all its parts) to temporary paths and publish it atomically.
+        Download a file (or all its parts) to temporary paths, publish it atomically and record its
+        validators.
 
-        A multi-part file is published only when every part downloaded. Returns True when the file
-        was published, False when a tolerated sub-hourly file is missing. Raises DownloadError
-        otherwise.
+        An existing file is requested conditionally and left untouched when every part answers 304,
+        or kept when it cannot be revalidated. A multi-part file is rebuilt from all its parts when
+        any changed, and published only when every part downloaded. Returns True when the file is
+        in place, False when a tolerated sub-hourly file is missing. Raises DownloadError otherwise.
         """
         out_dir: str = os.path.dirname(out_path)
         os.makedirs(out_dir, exist_ok=True)
         parts = self._part_urls(url, out_path)
+        existing = os.path.isfile(out_path)
+        stored = {u: self._stored_validators(out_path, u) for u in parts} if existing else {}
+        single = stored.get(url) if len(parts) == 1 else None
+        if single and single.get("content_length") is not None and os.path.getsize(out_path) != single["content_length"]:
+            stored = {}  # local copy is damaged; fetch unconditionally
         name, token = os.path.basename(out_path), uuid.uuid4()
         temp_path: str = os.path.join(out_dir, f".{name}.tmp.{token}")
         part_paths = [temp_path] if len(parts) == 1 else [
             os.path.join(out_dir, f".{name}.part{i}.{token}") for i in range(len(parts))]
         try:
-            for part_url, part_path in zip(parts, part_paths):
-                self._check_part(part_url, self._fetch(part_url, part_path))
+            results = {
+                u: self._fetch(u, p, conditional_headers(stored.get(u), self.mutable_upstream))
+                for u, p in zip(parts, part_paths)
+            }
+            if existing and all(r.status == 304 for r in results.values()):
+                meta = read_meta(out_path) or {}
+                meta["checked_at"] = utc_now().isoformat(timespec="seconds")
+                write_meta(out_path, meta)
+                LOG.debug("Unchanged upstream: %s", out_path)
+                return True
+            for u, p in zip(parts, part_paths):
+                if results[u].status == 304:  # every part's bytes are needed to rebuild the file
+                    results[u] = self._fetch(u, p)
+                self._check_part(u, results[u].headers)
+            sizes = {u: os.path.getsize(p) for u, p in zip(parts, part_paths)}
             if len(parts) > 1:
                 with open(temp_path, "wb") as outfile:
                     for part_path in part_paths:
                         with open(part_path, "rb") as infile:
                             shutil.copyfileobj(infile, outfile)
-            self._publish(temp_path, out_path)
+            self._publish(temp_path, out_path, replace=existing)
+            if len(parts) == 1:
+                set_mtime_from_header(out_path, results[url].headers.get("Last-Modified"))
+                write_meta(out_path, results[url].validators(url, sizes[url]))
+            else:
+                write_meta(out_path, {"url": url, "parts": {u: r.validators(u, sizes[u]) for u, r in results.items()}})
         except DownloadError as exc:
+            if existing:
+                LOG.warning("Could not revalidate %s (%s); keeping the existing file.", out_path, exc)
+                return True
             if self.last_hour and self.subhourly_avg:
                 LOG.warning(
                     "%s. This file is not required for the latest AnA hour when sub-hourly averaging; "
@@ -528,56 +747,79 @@ class ForecastDownloader(ABC):
             for path in {temp_path, *part_paths}:
                 if os.path.exists(path):
                     os.remove(path)
-        LOG.info("Downloaded %s", out_path)
+        LOG.info("%s %s", "Updated" if existing else "Downloaded", out_path)
         return True
 
     # ------------------------------------------------------------------ availability check
 
+    MISSING_UPSTREAM: typing.ClassVar[str] = "missing upstream"
+    NOT_DOWNLOADED: typing.ClassVar[str] = "available, not downloaded"
+    CURRENT: typing.ClassVar[str] = "downloaded and current"
+    UNVALIDATED: typing.ClassVar[str] = "downloaded, no stored validators"
+    STALE: typing.ClassVar[str] = "downloaded but changed upstream"
+    SIZE_MISMATCH: typing.ClassVar[str] = "downloaded but size differs"
+
     def _check_data_availability(self) -> bool:
-        """Check forecast file availability without fetching content; return True if all files exist."""
+        """
+        Compare every file of the window with upstream using HEAD requests, without downloading.
+
+        Each remote part is classified as missing upstream, available but not downloaded,
+        downloaded and current, downloaded without stored validators, changed upstream, or
+        differing in size. Returns True if nothing is missing upstream.
+        """
         LOG.info(
             "%s: checking data availability. lookback: %s lagback: %s",
             type(self).__name__, self.lookback_hours, self.effective_lagback(),
         )
-        total_files_checked: int = 0
-        available_files_count: int = 0
+        counts: Counter[str] = Counter()
         for d_start, files in self._cycles():
             problem = self.retirement_problem(d_start)
             if problem:
                 LOG.error("%s", problem)
-                total_files_checked += sum(len(self._part_urls(u, p)) for u, p in files)
+                counts[self.MISSING_UPSTREAM] += sum(len(self._part_urls(u, p)) for u, p in files)
                 continue
-            self.pre_download_hook(d_start)
-            all_files_available: bool = True
-            for url, path in files:
-                for part in self._part_urls(url, path):
-                    total_files_checked += 1
-                    if self._check_file_availability(part):
-                        available_files_count += 1
-                    else:
-                        all_files_available = False
+            for url, out_path in files:
+                for part in self._part_urls(url, out_path):
+                    status = self._classify(part, out_path, self._head(part))
+                    counts[status] += 1
+                    if status in (self.STALE, self.SIZE_MISMATCH):
+                        LOG.warning("%s: %s (%s)", status, out_path, part)
+                    elif status == self.NOT_DOWNLOADED:
+                        LOG.debug("%s: %s", status, part)
 
-            if all_files_available:
-                LOG.info("All required forcing files are available for timestamp: %s", d_start)
-                self.post_download_hook(d_start)
-            else:
-                LOG.error("One or more forcing files missing for timestamp: %s.", d_start)
-
-        return self._log_availability_summary(total_files_checked, available_files_count)
-
-    @staticmethod
-    def _log_availability_summary(total: int, available: int) -> bool:
+        total = sum(counts.values())
         LOG.info("--- Forcing Availability Verification Summary ---")
         LOG.info("Total files checked: %d", total)
-        LOG.info("Total files available on server: %d", available)
-        if available == total:
-            LOG.info("Verification complete: all %d requested files are available upstream.", total)
-            return True
-        LOG.warning("Verification complete: %d file(s) are currently missing from the server.", total - available)
-        return False
+        for status in (self.MISSING_UPSTREAM, self.NOT_DOWNLOADED, self.CURRENT, self.UNVALIDATED,
+                       self.STALE, self.SIZE_MISMATCH):
+            if counts[status]:
+                LOG.info("  %s: %d", status, counts[status])
+        missing = counts[self.MISSING_UPSTREAM]
+        if missing:
+            LOG.warning("Verification complete: %d file(s) are currently missing from the server.", missing)
+            return False
+        LOG.info("Verification complete: all %d requested files are available upstream.", total)
+        return True
 
-    def _check_file_availability(self, url: str) -> bool:
-        """Ping server using HTTP HEAD request to verify file availability; return False if not found."""
+    def _classify(self, url: str, out_path: str, upstream: typing.Mapping[str, str] | None) -> str:
+        if upstream is None:
+            return self.MISSING_UPSTREAM
+        if not os.path.isfile(out_path):
+            return self.NOT_DOWNLOADED
+        stored = self._stored_validators(out_path, url)
+        if not stored:
+            return self.UNVALIDATED
+        is_part = "parts" in (read_meta(out_path) or {})
+        upstream_size = upstream.get("Content-Length")
+        if not is_part and upstream_size is not None and os.path.getsize(out_path) != int(upstream_size):
+            return self.SIZE_MISMATCH
+        for key, header in (("etag", "ETag"), ("last_modified", "Last-Modified")):
+            if stored.get(key) and upstream.get(header) and stored[key] != upstream[header]:
+                return self.STALE
+        return self.CURRENT
+
+    def _head(self, url: str) -> typing.Mapping[str, str] | None:
+        """HEAD ``url`` with retries; return its headers, or None if it is not available."""
         attempts: int = self.max_download_attempts
         last_error = "unknown error"
         for attempt in range(1, attempts + 1):
@@ -586,7 +828,7 @@ class ForecastDownloader(ABC):
                                                              headers=REQUEST_HEADERS)
                 if response.status_code == requests.codes.ok:
                     LOG.debug("File is available: %s", url)
-                    return True
+                    return response.headers
                 last_error = f"HTTP {response.status_code}"
             except requests.RequestException as exc:
                 last_error = describe_request_error(exc)
@@ -596,7 +838,7 @@ class ForecastDownloader(ABC):
 
         level = logging.WARNING if (self.last_hour and self.subhourly_avg) else logging.ERROR
         LOG.log(level, "Not available after %d attempt(s): %s (%s)", attempts, url, last_error)
-        return False
+        return None
 
 
 @dataclass(frozen=True)
@@ -670,6 +912,8 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                     continue
                 LOG.debug("Removing old file: %s", path)
                 os.remove(path)
+                if os.path.exists(meta_path(path)):
+                    os.remove(meta_path(path))
                 parent = os.path.dirname(path)
                 if parent != os.path.normpath(str(self.out_dir)) and not os.listdir(parent):
                     os.rmdir(parent)

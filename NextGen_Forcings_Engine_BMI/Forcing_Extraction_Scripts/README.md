@@ -9,8 +9,19 @@ The `Forcing_Extraction_Scripts` subsystem provides modular downloaders for retr
 All downloaders inherit from `ForecastDownloader` (`forecast_download_base.py`), establishing a standard lifecycle across datasets:
 1. **Cycle Window Evaluation**: Computes lookback/lagback windows aligned to model operational cadences, optionally limited to the configured forecast horizon.
 2. **Cleanup**: Removes data of cycles older than the window (standalone runs only; never data the window needs).
-3. **Download**: Fetches each missing file with retries and timeouts, verifies the byte count, and publishes it atomically.
-4. **Availability Verification** (`check_file_availability: 1`): Sends `HTTP HEAD` requests instead of downloading and reports which files are missing upstream.
+3. **Download**: Fetches each needed file with retries and timeouts, verifies the byte count (and the MD5 when the ETag is a plain MD5), and publishes it atomically. Interrupted transfers resume with `Range`/`If-Range`.
+4. **Availability Verification** (`check_file_availability: 1`): Sends `HTTP HEAD` requests instead of downloading and classifies each file as missing upstream, not downloaded, current, changed upstream, size mismatch, or without stored validators.
+
+### Change detection
+
+Each downloaded file gets a sidecar `.<name>.meta.json` recording the upstream `ETag`, `Last-Modified` and size. On later runs:
+
+- **Products rewritten upstream** (`mutable_upstream`: Stage IV, whose analyses are re-issued about 24 h after valid time, and NDFD) are revalidated with `If-None-Match` / `If-Modified-Since`; a `304 Not Modified` keeps the local file, a `200` replaces it. NDFD stores validators per valid-period part.
+- **Other products** are not requested again unless the local size disagrees with the recorded size. `--revalidate` forces conditional requests for them too.
+- If an existing file cannot be revalidated (for example the server is down, or NDFD now holds an issuance from another cycle), the existing file is kept.
+- A `404` for a cycle more than 48 h old is final and is not retried.
+
+File modification times are set from `Last-Modified`.
 
 `FixedFileDownloader` covers observation products (MRMS, Stage IV) with one or more fixed files per hour; `MRMSMultiSensorDownloader` covers the hourly MRMS MultiSensor products of every MRMS domain. NDFD additionally concatenates its valid-period bins into one GRIB2 file per field.
 
