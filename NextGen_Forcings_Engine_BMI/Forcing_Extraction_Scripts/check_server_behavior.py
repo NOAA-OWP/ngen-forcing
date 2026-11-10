@@ -9,8 +9,14 @@ the downloader would fetch are listed, and a sample of them is checked. Each che
   get         GET answers 200 without a transfer Content-Encoding (Accept-Encoding: identity).
   length      HEAD Content-Length, GET Content-Length and the bytes received agree.
   validators  GET reports the same ETag and Last-Modified as HEAD.
-  etag-md5    an ETag of 32 hex digits without a "-N" suffix is the MD5 of the bytes received.
+  etag-md5    an ETag of 32 hex digits is the MD5 of the bytes received; a multipart ETag
+              ("<md5>-N") is reproduced from the bytes when its part size can be inferred.
   content     the bytes are what the name says (GRIB2, or gzip containing GRIB2).
+  conditional-etag  If-None-Match with the current ETag answers 304 carrying that ETag, and with
+              another ETag answers 200.
+  conditional-date  If-Modified-Since with Last-Modified answers 304, with an earlier date 200.
+  range       a byte range answers 206 with a matching Content-Range and exactly those bytes.
+  if-range    Range with If-Range of the current ETag answers 206; with another ETag, 200.
   compression (note) whether the server would compress the transfer if gzip were accepted, and
               how much smaller the body would be. The downloaders request identity encoding;
               a server that starts compressing is a reason to revisit that.
@@ -25,11 +31,14 @@ Files larger than --max-mb get the HEAD check only. Run from NextGen_Forcings_En
 from __future__ import annotations
 
 import argparse
+import email.utils
 import hashlib
 import json
+import re
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -42,6 +51,7 @@ from Forcing_Extraction_Scripts.forecast_download_base import (
     REQUEST_HEADERS,
     SNIFF_BYTES,
     content_signature_problem,
+    multipart_part_sizes,
     plain_md5_etag,
 )
 from Forcing_Extraction_Scripts.probe_sources import TIMEOUT, get_prefix
@@ -124,7 +134,8 @@ def check_url(url: str, session: requests.Session, max_bytes: int) -> FileReport
                              f"Last-Modified {head.headers.get('Last-Modified')}")
     check_compression(report, url, session)
     if report.size > max_bytes:
-        for name in ("get", "length", "validators", "etag-md5", "content"):
+        for name in ("get", "length", "validators", "etag-md5", "content",
+                     "conditional-etag", "conditional-date", "range", "if-range"):
             report.add(name, SKIP, f"larger than {max_bytes // (1 << 20)} MB")
         return report
 
@@ -158,12 +169,20 @@ def check_url(url: str, session: requests.Session, max_bytes: int) -> FileReport
 
     etag = got.headers.get("ETag")
     expected = plain_md5_etag(etag)
-    if expected is None:
-        report.add("etag-md5", SKIP, f"ETag {etag!r} is not a plain MD5")
-    elif expected == got.md5:
-        report.add("etag-md5", PASS)
+    multipart = _MULTIPART.match(etag or "")
+    if expected is not None:
+        if expected == got.md5:
+            report.add("etag-md5", PASS)
+        else:
+            report.add("etag-md5", FAIL, f"ETag {etag} but content MD5 {got.md5}")
+    elif multipart:
+        part_size = multipart_part_size(got.body, multipart.group(1), int(multipart.group(2)))
+        if part_size:
+            report.add("etag-md5", PASS, f"multipart, {part_size} byte parts")
+        else:
+            report.add("etag-md5", SKIP, f"multipart ETag {etag} not reproduced with likely part sizes")
     else:
-        report.add("etag-md5", FAIL, f"ETag {etag} but content MD5 {got.md5}")
+        report.add("etag-md5", SKIP, f"ETag {etag!r} is not an MD5")
 
     problem = content_signature_problem(url, got.head, require_edition2=True)
     report.add("content", FAIL if problem else PASS, problem)
@@ -189,9 +208,71 @@ def check_compression(report: FileReport, url: str, session: requests.Session) -
         report.add("compression", NOTE, f"{encoding} (encoded length not given)")
 
 
+_MULTIPART = re.compile(r"^\"?([0-9a-f]{32})-(\d+)\"?$")
+OTHER_ETAG = '"00000000000000000000000000000000"'
+
+
+def multipart_part_size(body: bytes, md5_hex: str, parts: int) -> int | None:
+    """The part size that reproduces a multipart ETag for ``body``, if any likely one does."""
+    for size in multipart_part_sizes(len(body), parts):
+        digests = b"".join(hashlib.md5(body[i:i + size]).digest() for i in range(0, len(body), size))
+        if hashlib.md5(digests).hexdigest() == md5_hex:
+            return size
+    return None
+
+
 def extra_checks(report: FileReport, url: str, session: requests.Session,
                  head: requests.Response, got: Fetched) -> None:
-    """Hook for further checks on a fully fetched file."""
+    """Conditional-request and range behavior the validator logic relies on."""
+    etag, last_modified, size = got.headers.get("ETag"), got.headers.get("Last-Modified"), got.length
+    try:
+        if etag:
+            same, same_headers, _ = get_prefix(session, url, {"If-None-Match": etag})
+            other, _, _ = get_prefix(session, url, {"If-None-Match": OTHER_ETAG})
+            echoed = same_headers.get("ETag", etag)
+            if same == 304 and echoed == etag and other == 200:
+                report.add("conditional-etag", PASS)
+            else:
+                report.add("conditional-etag", FAIL, f"current ETag -> {same} (ETag {echoed}), other -> {other}")
+        else:
+            report.add("conditional-etag", SKIP, "no ETag")
+
+        if last_modified:
+            earlier = email.utils.format_datetime(
+                email.utils.parsedate_to_datetime(last_modified) - timedelta(days=1), usegmt=True)
+            same, _, _ = get_prefix(session, url, {"If-Modified-Since": last_modified})
+            older, _, _ = get_prefix(session, url, {"If-Modified-Since": earlier})
+            if same == 304 and older == 200:
+                report.add("conditional-date", PASS)
+            else:
+                report.add("conditional-date", FAIL, f"Last-Modified -> {same}, a day earlier -> {older}")
+        else:
+            report.add("conditional-date", SKIP, "no Last-Modified")
+
+        if size < 32:
+            report.add("range", SKIP, "file too small")
+            report.add("if-range", SKIP, "file too small")
+            return
+        start, end = size // 3, size // 3 + 15
+        status, headers, body = get_prefix(session, url, {"Range": f"bytes={start}-{end}"}, read=64)
+        wanted = f"bytes {start}-{end}/{size}"
+        if status == 206 and headers.get("Content-Range") == wanted and body == got.body[start:end + 1]:
+            report.add("range", PASS)
+        else:
+            report.add("range", FAIL, f"{status}, Content-Range {headers.get('Content-Range')!r} (wanted {wanted!r}), "
+                                      f"{'matching' if body == got.body[start:end + 1] else 'different'} bytes")
+
+        if etag:
+            matching, _, _ = get_prefix(session, url, {"Range": f"bytes={start}-{end}", "If-Range": etag})
+            stale, _, _ = get_prefix(session, url, {"Range": f"bytes={start}-{end}", "If-Range": OTHER_ETAG})
+            if matching == 206 and stale == 200:
+                report.add("if-range", PASS)
+            else:
+                report.add("if-range", FAIL, f"current ETag -> {matching}, other -> {stale}")
+        else:
+            report.add("if-range", SKIP, "no ETag")
+    except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
+        report.add("conditional/range", FAIL, f"request failed: {exc}")
 
 
 @dataclass
