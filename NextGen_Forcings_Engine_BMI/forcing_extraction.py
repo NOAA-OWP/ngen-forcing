@@ -173,8 +173,14 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
 
 def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
     """Download forecast forcing data based on requested sources in configuration."""
+    missing: list[str] = []
     for job in build_jobs(cfg):
-        make_downloader(cfg, job).run()
+        downloader = make_downloader(cfg, job)
+        if not downloader.run():
+            missing.append(f"{job.forcing} ({job.script})")
+
+    if missing:
+        raise DownloadError("Files are missing upstream for: " + "; ".join(missing))
 
 
 def main() -> None:
