@@ -155,7 +155,7 @@ python -m Forcing_Extraction_Scripts.probe_sources                      # all sc
 python -m Forcing_Extraction_Scripts.probe_sources CONUS/get_conus_HRRR.py --all
 ```
 
-`check_server_behavior` re-checks the assumptions the downloaders make about server metadata: that HEAD and GET agree, that `Content-Length` matches the bytes served, that a plain 32-hex ETag is the MD5 of the content, that no transfer compression is applied, and that the content is GRIB2 as named. It downloads a sample of each product in full (up to `--max-mb`, default 64), and also notes whether each server would compress transfers if allowed to (the downloaders request identity encoding):
+`check_server_behavior` re-checks the assumptions the downloaders make about server metadata: that HEAD and GET agree, that `Content-Length` matches the bytes served, that an MD5-style ETag (plain or multipart) matches the content, that no transfer compression is applied, that the content is GRIB2 as named, and that conditional requests (`If-None-Match`, `If-Modified-Since`) and byte ranges (`Range`, `If-Range`) behave as the change detection above relies on. It downloads a sample of each product in full (up to `--max-mb`, default 64), and also notes whether each server would compress transfers if allowed to (the downloaders request identity encoding):
 
 ```bash
 python -m Forcing_Extraction_Scripts.check_server_behavior                       # all scripts
@@ -163,4 +163,4 @@ python -m Forcing_Extraction_Scripts.check_server_behavior Global/get_prod_GFS.p
 python -m Forcing_Extraction_Scripts.check_server_behavior --url https://host/path/file.grib2
 ```
 
-The downloaders report the same kinds of disagreement at run time: a body whose length differs from `Content-Length`, or whose content is not what its name says, is logged at ERROR as a server inconsistency and retried.
+The downloaders report the same kinds of disagreement at run time: a body whose length differs from `Content-Length`, or whose content is not what its name says, is logged at ERROR as a server inconsistency and retried; so is an ETag/MD5 mismatch, a `304` that contradicts the request, or a `206` whose `Content-Range` does not continue the partial file.
