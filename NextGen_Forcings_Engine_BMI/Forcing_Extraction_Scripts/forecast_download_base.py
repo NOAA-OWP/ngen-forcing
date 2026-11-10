@@ -114,18 +114,24 @@ class ForecastDownloader(ABC):
     def cli_main(cls) -> None:
         """Command-line entry point: parse arguments, run, and exit non-zero on failure."""
         try:
-            cls.from_cli_args().run()
+            ok = cls.from_cli_args().run()
         except DownloadError as exc:
             LOG.error("%s", exc)
             sys.exit(1)
+        sys.exit(0 if ok else 1)
 
-    def run(self) -> None:
-        """Execute cleanup and downloads or verify file availability."""
+    def run(self) -> bool:
+        """
+        Execute cleanup and downloads, or verify file availability.
+
+        Returns True on success. In availability-check mode, returns False if any file is missing
+        upstream. Raises DownloadError if a required download fails.
+        """
         if self.check_file_availability == 1:
-            self._check_data_availability()
-        else:
-            self._cleanup_old_data()
-            self._download_data()
+            return self._check_data_availability()
+        self._cleanup_old_data()
+        self._download_data()
+        return True
 
     @property
     @abstractmethod
@@ -311,8 +317,8 @@ class ForecastDownloader(ABC):
         else:
             raise DownloadError(f"Failed to download {url} after {max_attempts} attempt(s)")
 
-    def _check_data_availability(self) -> None:
-        """Check forecast file availability without fetching content."""
+    def _check_data_availability(self) -> bool:
+        """Check forecast file availability without fetching content; return True if all files exist."""
         LOG.info(
             f"ForecastDownloader: Checking data availability. lookback: {self.lookback_hours} "
             f"lagback: {self.effective_lagback()}"
@@ -365,18 +371,21 @@ class ForecastDownloader(ABC):
             else:
                 LOG.error(f"One or more forcing files missing for timestamp: {d_start}.")
 
-        LOG.info("--- Forcing Availability Verification Summary ---")
-        LOG.info(f"Total files checked: {total_files_checked}")
-        LOG.info(f"Total files available on server: {available_files_count}")
+        return self._log_availability_summary(total_files_checked, available_files_count)
 
-        if available_files_count == total_files_checked:
-            LOG.info("Verification complete: 100% of requested files are available upstream.")
-        else:
-            missing_count: int = total_files_checked - available_files_count
-            LOG.warning(f"Verification complete: {missing_count} file(s) are currently missing from the server.")
+    @staticmethod
+    def _log_availability_summary(total: int, available: int) -> bool:
+        LOG.info("--- Forcing Availability Verification Summary ---")
+        LOG.info("Total files checked: %d", total)
+        LOG.info("Total files available on server: %d", available)
+        if available == total:
+            LOG.info("Verification complete: all %d requested files are available upstream.", total)
+            return True
+        LOG.warning("Verification complete: %d file(s) are currently missing from the server.", total - available)
+        return False
 
     def _check_file_availability(self, url: str) -> bool:
-        """Ping server using HTTP HEAD request to verify file availability."""
+        """Ping server using HTTP HEAD request to verify file availability; return False if not found."""
         max_attempts: int = self.max_download_attempts
         interval: int = self.download_attempt_interval
         attempt: int = 0
@@ -405,11 +414,9 @@ class ForecastDownloader(ABC):
             if attempt < max_attempts:
                 time.sleep(interval)
 
-        if self.last_hour and self.subhourly_avg:
-            LOG.warning(f"Failed to confirm availability after {max_attempts} attempts: {url}")
-            return False
-        else:
-            raise DownloadError(f"Failed to confirm availability of {url} after {max_attempts} attempt(s)")
+        level = logging.WARNING if (self.last_hour and self.subhourly_avg) else logging.ERROR
+        LOG.log(level, "Not available after %d attempt(s): %s", max_attempts, url)
+        return False
 
 
 class FixedFileDownloader(ForecastDownloader, ABC):
@@ -457,8 +464,8 @@ class FixedFileDownloader(ForecastDownloader, ABC):
 
                 self._download_file(url, out_path)
 
-    def _check_data_availability(self) -> None:
-        """Check fixed file availability across time range and specs for MRMS and StageIV."""
+    def _check_data_availability(self) -> bool:
+        """Check fixed file availability across time range and specs; return True if all files exist."""
         LOG.info(f"FixedFileDownloader: Checking data availability. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
         total_files_checked: int = 0
         available_files_count: int = 0
@@ -481,12 +488,4 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                 else:
                     LOG.warning(f"Required file missing from server: {url}")
 
-        LOG.info("--- Fixed File Availability Verification Summary ---")
-        LOG.info(f"Total files checked: {total_files_checked}")
-        LOG.info(f"Total files available on server: {available_files_count}")
-
-        if available_files_count == total_files_checked:
-            LOG.info("Verification complete: 100% of requested fixed files are available upstream.")
-        else:
-            missing_count: int = total_files_checked - available_files_count
-            LOG.warning(f"Verification complete: {missing_count} fixed file(s) are currently missing from the server.")
+        return self._log_availability_summary(total_files_checked, available_files_count)
