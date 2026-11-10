@@ -17,5 +17,4 @@ class MRMSRadarConusDownloader(FixedFileDownloader, ABC):
         return [(subdir, filename)]
 
 if __name__ == "__main__":
-    downloader = MRMSRadarConusDownloader.from_cli_args()
-    downloader.run()
+    MRMSRadarConusDownloader.cli_main()

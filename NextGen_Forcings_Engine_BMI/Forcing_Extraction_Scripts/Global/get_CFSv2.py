@@ -34,5 +34,4 @@ class CFSv2Downloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = CFSv2Downloader.from_cli_args()
-    downloader.run()
+    CFSv2Downloader.cli_main()

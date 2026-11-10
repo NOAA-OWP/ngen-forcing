@@ -20,5 +20,4 @@ class MRMSMultiSensorHawaiiDownloader(FixedFileDownloader, ABC):
         return specs
 
 if __name__ == "__main__":
-    downloader = MRMSMultiSensorHawaiiDownloader.from_cli_args()
-    downloader.run()
+    MRMSMultiSensorHawaiiDownloader.cli_main()

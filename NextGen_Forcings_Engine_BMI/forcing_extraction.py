@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import inspect
+import logging
+import sys
 import typing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,8 +12,11 @@ from pathlib import Path
 
 from config_models import ForcingExtractionConfig
 from Forcing_Extraction_Scripts.forecast_download_base import (
+    DownloadError,
     ForecastDownloader,
 )
+
+LOG = logging.getLogger(__name__)
 
 SCRIPT_DIR: Path = Path(__file__).resolve().parent / "Forcing_Extraction_Scripts"
 
@@ -179,7 +184,11 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg: ForcingExtractionConfig = ForcingExtractionConfig.from_yaml_file(args.cfg)
-    retrieve_forcing(cfg)
+    try:
+        retrieve_forcing(cfg)
+    except DownloadError as exc:
+        LOG.error("%s", exc)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

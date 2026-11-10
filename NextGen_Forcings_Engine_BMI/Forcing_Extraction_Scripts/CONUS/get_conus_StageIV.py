@@ -28,5 +28,4 @@ class StageIVDownloader(ForecastDownloader, ABC):
         return url, filename
 
 if __name__ == "__main__":
-    downloader = StageIVDownloader.from_cli_args()
-    downloader.run()
+    StageIVDownloader.cli_main()

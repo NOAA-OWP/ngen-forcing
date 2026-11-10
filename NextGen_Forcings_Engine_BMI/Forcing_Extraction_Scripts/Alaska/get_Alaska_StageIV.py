@@ -33,5 +33,4 @@ class AlaskaStageIVDownloader(ForecastDownloader):
             shutil.rmtree(self.out_dir)
 
 if __name__ == "__main__":
-    downloader = AlaskaStageIVDownloader.from_cli_args()
-    downloader.run()
+    AlaskaStageIVDownloader.cli_main()

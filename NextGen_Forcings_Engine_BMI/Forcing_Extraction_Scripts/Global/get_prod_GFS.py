@@ -33,5 +33,4 @@ class GFSDownloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = GFSDownloader.from_cli_args()
-    downloader.run()
+    GFSDownloader.cli_main()

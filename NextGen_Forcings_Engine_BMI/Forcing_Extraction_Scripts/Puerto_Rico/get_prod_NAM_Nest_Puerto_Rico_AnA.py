@@ -29,5 +29,4 @@ class NAMNestAnAPuertoRicoDownloader(ForecastDownloader):
         return url, filename
 
 if __name__ == "__main__":
-    downloader = NAMNestAnAPuertoRicoDownloader.from_cli_args()
-    downloader.run()
+    NAMNestAnAPuertoRicoDownloader.cli_main()

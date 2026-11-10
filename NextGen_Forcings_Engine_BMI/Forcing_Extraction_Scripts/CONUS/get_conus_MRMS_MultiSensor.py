@@ -20,5 +20,4 @@ class MRMSMultiSensorConusDownloader(FixedFileDownloader, ABC):
         return specs
 
 if __name__ == "__main__":
-    downloader = MRMSMultiSensorConusDownloader.from_cli_args()
-    downloader.run()
+    MRMSMultiSensorConusDownloader.cli_main()

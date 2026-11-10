@@ -25,5 +25,4 @@ class RAPAnADownloader(ForecastDownloader):
         return results
 
 if __name__ == "__main__":
-    downloader = RAPAnADownloader.from_cli_args()
-    downloader.run()
+    RAPAnADownloader.cli_main()

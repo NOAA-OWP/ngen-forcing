@@ -23,6 +23,10 @@ logging.basicConfig(
 LOG = logging.getLogger()
 
 
+class DownloadError(RuntimeError):
+    """A required file could not be retrieved after all attempts."""
+
+
 class ForecastDownloader(ABC):
     """Abstract base class for structured forecast data downloads."""
 
@@ -105,6 +109,15 @@ class ForecastDownloader(ABC):
             subhourly_avg=args.subhourly_avg,
             gfs_extended=args.gfs_extended,
         )
+
+    @classmethod
+    def cli_main(cls) -> None:
+        """Command-line entry point: parse arguments, run, and exit non-zero on failure."""
+        try:
+            cls.from_cli_args().run()
+        except DownloadError as exc:
+            LOG.error("%s", exc)
+            sys.exit(1)
 
     def run(self) -> None:
         """Execute cleanup and downloads or verify file availability."""
@@ -296,9 +309,7 @@ class ForecastDownloader(ABC):
                 "sub-hourly averaging method. Will use HRRR instead."
             )
         else:
-            LOG.error(f"Failed to download after {max_attempts} attempts: {url}")
-            LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
-            os._exit(1)
+            raise DownloadError(f"Failed to download {url} after {max_attempts} attempt(s)")
 
     def _check_data_availability(self) -> None:
         """Check forecast file availability without fetching content."""
@@ -398,9 +409,7 @@ class ForecastDownloader(ABC):
             LOG.warning(f"Failed to confirm availability after {max_attempts} attempts: {url}")
             return False
         else:
-            LOG.error(f"Failed to confirm file availability after {max_attempts} attempts: {url}")
-            LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
-            os._exit(1)
+            raise DownloadError(f"Failed to confirm availability of {url} after {max_attempts} attempt(s)")
 
 
 class FixedFileDownloader(ForecastDownloader, ABC):

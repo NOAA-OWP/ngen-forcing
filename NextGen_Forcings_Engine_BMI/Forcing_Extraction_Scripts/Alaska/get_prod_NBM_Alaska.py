@@ -31,5 +31,4 @@ class NBMAlaskaDownloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = NBMAlaskaDownloader.from_cli_args()
-    downloader.run()
+    NBMAlaskaDownloader.cli_main()

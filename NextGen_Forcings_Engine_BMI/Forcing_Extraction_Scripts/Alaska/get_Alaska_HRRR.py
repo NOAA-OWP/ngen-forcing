@@ -30,5 +30,4 @@ class AlaskaHRRRDownloader(ForecastDownloader):
         return url, filename
 
 if __name__ == "__main__":
-    downloader = AlaskaHRRRDownloader.from_cli_args()
-    downloader.run()
+    AlaskaHRRRDownloader.cli_main()

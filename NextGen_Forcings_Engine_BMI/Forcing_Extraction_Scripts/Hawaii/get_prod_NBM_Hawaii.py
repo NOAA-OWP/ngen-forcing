@@ -31,5 +31,4 @@ class NBMHawaiiDownloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = NBMHawaiiDownloader.from_cli_args()
-    downloader.run()
+    NBMHawaiiDownloader.cli_main()
