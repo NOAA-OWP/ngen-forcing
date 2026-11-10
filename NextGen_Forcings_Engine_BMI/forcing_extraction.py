@@ -31,6 +31,7 @@ FORCING_SRC: dict[int | str, str] = {
     8: "Hawaii/get_ARW_Hawaii.py",
     13: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
     14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py",
+    15: "Alaska/get_prod_NAM_Nest_Alaska.py",
     16: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
     17: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py",
     18: "Puerto_Rico/get_ARW_Puerto_Rico.py",
