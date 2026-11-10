@@ -110,11 +110,13 @@ cd ngen-forcing/NextGen_Forcings_Engine_BMI/Forcing_Extraction_Scripts
 # 2. Create the dedicated conda environment from the minimal specification
 conda env create -f environment.yml
 
-# 2. Activate the environment
+# 3. Activate the environment
 conda activate forcing_extraction
 
-# 3. Navigate into the BMI engine directory
+# 4. Navigate into the BMI engine directory
 cd ../
 
-# 4. Execute the extraction workflow with the target hydrofabric configuration
+# 5. Execute the extraction workflow with the target hydrofabric configuration
 python forcing_extraction.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
+```
+
