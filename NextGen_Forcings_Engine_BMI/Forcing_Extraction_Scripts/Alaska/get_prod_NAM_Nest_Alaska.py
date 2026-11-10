@@ -11,8 +11,11 @@ class NAMNestAlaskaDownloader(ForecastDownloader):
     def base_url(self):
         return "https://noaa-nam-pds.s3.amazonaws.com"
 
+    def should_process_hour(self, d_start):
+        return d_start.hour in [0, 6, 12, 18]
+
     def get_download_targets(self, d_start):
-        return range(1, 61) if d_start.hour in [0, 6, 12, 18] else []
+        return range(1, 61)
 
     def build_output_dir(self, d_start, _):
         return os.path.join(self.out_dir, f"nam.{d_start.strftime('%Y%m%d')}")
