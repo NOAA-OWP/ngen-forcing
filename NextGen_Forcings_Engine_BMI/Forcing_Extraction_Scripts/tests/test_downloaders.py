@@ -210,11 +210,13 @@ def test_missing_last_hour_tolerated_for_subhourly_averaging(server, tmp_path):
     assert make(HRRR_ANA, tmp_path, subhourly_avg=True).run() is True
 
 
-def test_incomplete_transfer_is_rejected(server, tmp_path):
-    server.add(HRRR_ANA_URL, b"GRIB", declared_length=100)
-    with pytest.raises(fdb.DownloadError, match="incomplete transfer"):
+@pytest.mark.parametrize("declared", [100, 2])
+def test_body_length_disagreeing_with_content_length_is_reported(server, tmp_path, caplog, declared):
+    server.add(HRRR_ANA_URL, b"GRIB", declared_length=declared)
+    with pytest.raises(fdb.DownloadError, match=f"received 4 bytes but Content-Length is {declared}"):
         make(HRRR_ANA, tmp_path).run()
     assert not list((tmp_path / "hrrr.20261110/conus").iterdir())
+    assert any(r.levelname == "ERROR" and "inconsistent with its metadata" in r.message for r in caplog.records)
 
 
 def test_connection_dropped_mid_body_is_retried(server, tmp_path):

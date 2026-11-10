@@ -30,6 +30,10 @@ class DownloadError(RuntimeError):
     """A required file could not be retrieved after all attempts."""
 
 
+class ServerInconsistency(OSError):
+    """A server response contradicts its own metadata (length, checksum, ranges, content type)."""
+
+
 def configure_logging(level: int = logging.INFO) -> None:
     """Configure root logging for command-line entry points."""
     logging.basicConfig(
@@ -359,7 +363,7 @@ class ForecastDownloader(ABC):
                             fh.write(chunk)
                             written += len(chunk)
                     if expected is not None and written != int(expected):
-                        raise OSError(f"incomplete transfer: received {written} of {expected} bytes")
+                        raise ServerInconsistency(f"received {written} bytes but Content-Length is {expected}")
                     return resp.headers
             except requests.HTTPError as exc:
                 last_error = f"HTTP {exc.response.status_code}"
@@ -367,6 +371,9 @@ class ForecastDownloader(ABC):
                 last_error = "timed out"
             except requests.ConnectionError as exc:
                 last_error = f"connection error: {exc}"
+            except ServerInconsistency as exc:
+                last_error = f"server response inconsistent with its metadata: {exc}"
+                LOG.error("%s: %s", url, last_error)
             except (requests.RequestException, urllib3.exceptions.HTTPError, OSError) as exc:
                 # Errors while streaming the body come from urllib3, not requests.
                 last_error = f"{type(exc).__name__}: {exc}"
