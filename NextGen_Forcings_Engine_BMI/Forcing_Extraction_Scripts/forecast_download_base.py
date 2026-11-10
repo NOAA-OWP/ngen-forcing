@@ -581,7 +581,7 @@ class ForecastDownloader(ABC):
             for chunk in iter(lambda: fh.read(CHUNK_SIZE), b""):
                 digest.update(chunk)
         if digest.hexdigest() != expected:
-            raise OSError(f"MD5 mismatch: ETag {expected}, received {digest.hexdigest()}")
+            raise ServerInconsistency(f"MD5 mismatch: ETag says {expected}, content is {digest.hexdigest()}")
         return True
 
     def _fetch(self, url: str, dest_path: str,

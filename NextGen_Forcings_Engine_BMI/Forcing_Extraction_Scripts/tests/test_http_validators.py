@@ -89,11 +89,12 @@ def test_failed_revalidation_keeps_existing_file(server, tmp_path, caplog):
     assert "keeping the existing file" in caplog.text
 
 
-def test_md5_mismatch_is_rejected(server, tmp_path):
+def test_md5_mismatch_is_rejected(server, tmp_path, caplog):
     server.add(HRRR_ANA_URL, DATA, headers={"ETag": f'"{hashlib.md5(b"other").hexdigest()}"'})
     with pytest.raises(fdb.DownloadError, match="MD5 mismatch"):
         make(HRRR_ANA, tmp_path).run()
     assert not (tmp_path / HRRR_PATH).exists()
+    assert any(r.levelname == "ERROR" and "inconsistent with its metadata" in r.message for r in caplog.records)
 
 
 def test_multipart_etag_is_not_treated_as_md5(server, tmp_path):
