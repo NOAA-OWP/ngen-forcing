@@ -33,8 +33,8 @@ from __future__ import annotations
 import argparse
 import email.utils
 import hashlib
+import io
 import json
-import re
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -51,7 +51,7 @@ from Forcing_Extraction_Scripts.forecast_download_base import (
     REQUEST_HEADERS,
     SNIFF_BYTES,
     content_signature_problem,
-    multipart_part_sizes,
+    etag_matches,
     plain_md5_etag,
 )
 from Forcing_Extraction_Scripts.probe_sources import TIMEOUT, get_prefix
@@ -168,21 +168,13 @@ def check_url(url: str, session: requests.Session, max_bytes: int) -> FileReport
         report.add("validators", PASS)
 
     etag = got.headers.get("ETag")
-    expected = plain_md5_etag(etag)
-    multipart = _MULTIPART.match(etag or "")
-    if expected is not None:
-        if expected == got.md5:
-            report.add("etag-md5", PASS)
-        else:
-            report.add("etag-md5", FAIL, f"ETag {etag} but content MD5 {got.md5}")
-    elif multipart:
-        part_size = multipart_part_size(got.body, multipart.group(1), int(multipart.group(2)))
-        if part_size:
-            report.add("etag-md5", PASS, f"multipart, {part_size} byte parts")
-        else:
-            report.add("etag-md5", SKIP, f"multipart ETag {etag} not reproduced with likely part sizes")
+    verdict = etag_matches(io.BytesIO(got.body), etag)
+    if verdict is True:
+        report.add("etag-md5", PASS, "multipart ETag" if plain_md5_etag(etag) is None else "")
+    elif verdict is False:
+        report.add("etag-md5", FAIL, f"ETag {etag} but content MD5 {got.md5}")
     else:
-        report.add("etag-md5", SKIP, f"ETag {etag!r} is not an MD5")
+        report.add("etag-md5", SKIP, f"ETag {etag!r} is not an MD5, or a multipart ETag not reproducible")
 
     problem = content_signature_problem(url, got.head, require_edition2=True)
     report.add("content", FAIL if problem else PASS, problem)
@@ -208,17 +200,7 @@ def check_compression(report: FileReport, url: str, session: requests.Session) -
         report.add("compression", NOTE, f"{encoding} (encoded length not given)")
 
 
-_MULTIPART = re.compile(r"^\"?([0-9a-f]{32})-(\d+)\"?$")
 OTHER_ETAG = '"00000000000000000000000000000000"'
-
-
-def multipart_part_size(body: bytes, md5_hex: str, parts: int) -> int | None:
-    """The part size that reproduces a multipart ETag for ``body``, if any likely one does."""
-    for size in multipart_part_sizes(len(body), parts):
-        digests = b"".join(hashlib.md5(body[i:i + size]).digest() for i in range(0, len(body), size))
-        if hashlib.md5(digests).hexdigest() == md5_hex:
-            return size
-    return None
 
 
 def extra_checks(report: FileReport, url: str, session: requests.Session,

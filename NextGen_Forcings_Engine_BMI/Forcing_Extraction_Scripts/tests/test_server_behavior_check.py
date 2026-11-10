@@ -5,7 +5,7 @@ import hashlib
 
 import pytest
 
-from conftest import FakeResponse
+from conftest import FakeRaw, FakeResponse, FakeServer
 from Forcing_Extraction_Scripts import check_server_behavior as csb
 
 URL = "https://example.test/hrrr.t12z.wrfsfcf01.grib2"
@@ -14,10 +14,11 @@ MD5_ETAG = f'"{hashlib.md5(BODY).hexdigest()}"'
 LM = "Tue, 10 Nov 2026 12:55:00 GMT"
 
 
-class FakeSession:
-    """Serves one URL; each attribute can be changed to break one assumption."""
+class FakeSession(FakeServer):
+    """Serves one URL like FakeServer; each attribute can be changed to break one assumption."""
 
     def __init__(self, body=BODY, url=URL):
+        super().__init__()
         self.url = url
         self.body = body
         self.head_headers = {"ETag": MD5_ETAG, "Last-Modified": LM, "Content-Length": str(len(body))}
@@ -32,22 +33,17 @@ class FakeSession:
         return FakeResponse(url, 200, b"", self.head_headers, declared_length=int(self.head_headers["Content-Length"]))
 
     def get(self, url, headers=None, timeout=None, stream=False):
-        assert timeout is not None
-        headers = headers or {}
-        if "gzip" in headers.get("Accept-Encoding", "") and self.gzip_when_accepted:
-            encoded = gzip.compress(self.body)
-            return FakeResponse(url, 200, encoded, {**self.get_headers, "Content-Encoding": "gzip"})
-        etag = self.get_headers.get("ETag")
-        if self.honor_conditions and headers.get("If-None-Match") == etag:
-            return FakeResponse(url, 304, b"", {"ETag": etag}, declared_length=0)
-        if self.honor_conditions and headers.get("If-Modified-Since") == LM:
-            return FakeResponse(url, 304, b"", {"ETag": etag}, declared_length=0)
-        if "Range" in headers and headers.get("If-Range") in (None, etag):
-            start, end = (int(v) for v in headers["Range"].split("=")[1].split("-"))
-            part = self.body[start:end + 1 + self.range_shift]
-            content_range = f"bytes {start}-{end}/{len(self.body)}"
-            return FakeResponse(url, 206, part, {**self.get_headers, "Content-Range": content_range})
-        return FakeResponse(url, 200, self.body, self.get_headers, self.get_length)
+        headers = dict(headers or {})
+        if self.gzip_when_accepted and "gzip" in headers.get("Accept-Encoding", ""):
+            return FakeResponse(url, 200, gzip.compress(self.body), {**self.get_headers, "Content-Encoding": "gzip"})
+        if not self.honor_conditions:
+            headers.pop("If-None-Match", None)
+            headers.pop("If-Modified-Since", None)
+        self.add(url, self.body, headers=self.get_headers, declared_length=self.get_length)
+        response = super().get(url, stream=stream, timeout=timeout, headers=headers)
+        if response.status_code == 206 and self.range_shift:
+            response.raw = FakeRaw(response.raw.read() + b"\x00" * self.range_shift)
+        return response
 
 
 def statuses(report):

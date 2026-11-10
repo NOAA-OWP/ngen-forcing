@@ -168,27 +168,53 @@ def multipart_part_sizes(size: int, parts: int) -> list[int]:
     return sizes
 
 
-def s3_multipart_etag(path: str, part_size: int) -> str:
-    """The ETag S3 assigns to a multipart upload of ``path`` with ``part_size``-byte parts."""
+def s3_multipart_etag(fh: typing.BinaryIO, part_size: int) -> str:
+    """The ETag S3 assigns to a multipart upload of ``fh``'s content with ``part_size``-byte parts."""
+    fh.seek(0)
     digests = b""
     parts = 0
-    with open(path, "rb") as fh:
-        while True:
-            part = hashlib.md5()
-            remaining = part_size
-            while remaining:
-                chunk = fh.read(min(CHUNK_SIZE, remaining))
-                if not chunk:
-                    break
-                part.update(chunk)
-                remaining -= len(chunk)
-            if remaining == part_size:
+    while True:
+        part = hashlib.md5()
+        remaining = part_size
+        while remaining:
+            chunk = fh.read(min(CHUNK_SIZE, remaining))
+            if not chunk:
                 break
-            digests += part.digest()
-            parts += 1
-            if remaining:
-                break
+            part.update(chunk)
+            remaining -= len(chunk)
+        if remaining == part_size:
+            break
+        digests += part.digest()
+        parts += 1
+        if remaining:
+            break
     return f"{hashlib.md5(digests).hexdigest()}-{parts}"
+
+
+def etag_matches(fh: typing.BinaryIO, etag: str | None) -> bool | None:
+    """
+    Whether ``fh``'s content matches an S3-style ETag.
+
+    For a plain-MD5 ETag: True or False. For a multipart ETag ("<md5>-<parts>"): True when one of
+    the likely part sizes reproduces it, else None, since the upload part size is unknown. None for
+    any other ETag.
+    """
+    expected = plain_md5_etag(etag)
+    if expected is not None:
+        fh.seek(0)
+        digest = hashlib.md5()
+        for chunk in iter(lambda: fh.read(CHUNK_SIZE), b""):
+            digest.update(chunk)
+        return digest.hexdigest() == expected
+    match = _MULTIPART_ETAG.match(etag or "")
+    if not match:
+        return None
+    size = fh.seek(0, os.SEEK_END)
+    wanted = f"{match.group(1)}-{match.group(2)}"
+    for part_size in multipart_part_sizes(size, int(match.group(2))):
+        if s3_multipart_etag(fh, part_size) == wanted:
+            return True
+    return None
 
 
 def set_mtime_from_header(path: str, last_modified: str | None) -> None:
@@ -619,31 +645,19 @@ class ForecastDownloader(ABC):
     @staticmethod
     def _verify_md5(path: str, etag: str | None) -> bool:
         """
-        Check the file against an S3-style ETag; return True if verified.
+        Check the file against an S3-style ETag (see etag_matches); return True if verified.
 
-        A plain-MD5 ETag must match the content, else ServerInconsistency is raised. A multipart
-        ETag ("<md5>-<parts>") is verified when one of the likely part sizes reproduces it; if none
-        does, the part size is unknown, so the content is left unverified rather than rejected.
+        A plain-MD5 ETag that does not match the content raises ServerInconsistency. A multipart
+        ETag that no likely part size reproduces leaves the content unverified, not rejected.
         """
-        expected = plain_md5_etag(etag)
-        if expected is None:
-            match = _MULTIPART_ETAG.match(etag or "")
-            if not match:
-                return False
-            wanted = f"{match.group(1)}-{match.group(2)}"
-            for part_size in multipart_part_sizes(os.path.getsize(path), int(match.group(2))):
-                if s3_multipart_etag(path, part_size) == wanted:
-                    return True
+        with open(path, "rb") as fh:
+            verdict = etag_matches(fh, etag)
+        if verdict is False:
+            raise ServerInconsistency(f"MD5 mismatch: content does not match ETag {etag}")
+        if verdict is None and _MULTIPART_ETAG.match(etag or ""):
             LOG.debug("Multipart ETag %s not reproduced for %s with likely part sizes; content unverified.",
                       etag, path)
-            return False
-        digest = hashlib.md5()
-        with open(path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(CHUNK_SIZE), b""):
-                digest.update(chunk)
-        if digest.hexdigest() != expected:
-            raise ServerInconsistency(f"MD5 mismatch: ETag says {expected}, content is {digest.hexdigest()}")
-        return True
+        return bool(verdict)
 
     def _fetch(self, url: str, dest_path: str,
                conditional: typing.Mapping[str, str] | None = None) -> FetchResult:
