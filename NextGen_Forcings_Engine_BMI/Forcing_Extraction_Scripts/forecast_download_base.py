@@ -279,15 +279,32 @@ class ForecastDownloader(ABC):
             return [result]
         return list(result)
 
+    def _cycle_files(self, d_start: datetime) -> list[tuple[str, str]]:
+        """(remote URL, local path) for every file one cycle needs."""
+        output_dir = self.build_output_dir(d_start, self.ens_number)
+        return [
+            (url, os.path.join(output_dir, filename))
+            for target in self._targets(d_start)
+            for url, filename in self._url_name_pairs(d_start, target)
+        ]
+
+    def _cycles(self) -> typing.Iterator[tuple[datetime, list[tuple[str, str]]]]:
+        """Yield (cycle time, files) for each cycle in the window that has files; sets ``last_hour``."""
+        final_hour: int = self.effective_lagback() + 1
+        for hour, d_start in self._window():
+            self.last_hour = hour == final_hour
+            if not self.should_process_hour(d_start):
+                LOG.debug("Skipping hour offset: %s, timestamp: %s", hour, d_start)
+                continue
+            files = self._cycle_files(d_start)
+            if files:
+                yield d_start, files
+
     def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
         """Yield (cycle time, remote URL, local path) for every file the processing window needs."""
-        for _, d_start in self._window():
-            if not self.should_process_hour(d_start):
-                continue
-            output_dir = self.build_output_dir(d_start, self.ens_number)
-            for target in self._targets(d_start):
-                for url, filename in self._url_name_pairs(d_start, target):
-                    yield d_start, url, os.path.join(output_dir, filename)
+        for d_start, files in self._cycles():
+            for url, path in files:
+                yield d_start, url, path
 
     def _warn_nothing_processed(self) -> None:
         first = self.start_time - timedelta(hours=self.lookback_hours)
@@ -346,29 +363,15 @@ class ForecastDownloader(ABC):
             "%s: downloading. lookback: %s lagback: %s",
             type(self).__name__, self.lookback_hours, self.effective_lagback(),
         )
-        final_hour: int = self.effective_lagback() + 1
         processed = 0
-
-        for hour, d_start in self._window():
-            self.last_hour = hour == final_hour
-            if not self.should_process_hour(d_start):
-                LOG.debug("Skipping hour offset: %s, timestamp: %s", hour, d_start)
-                continue
-            targets = self._targets(d_start)
-            if not targets:
-                continue
+        for d_start, files in self._cycles():
             processed += 1
-
-            output_dir: str = self.build_output_dir(d_start, self.ens_number)
-            os.makedirs(output_dir, exist_ok=True)
             self.pre_download_hook(d_start)
-            for target in targets:
-                for url, filename in self._url_name_pairs(d_start, target):
-                    out_path: str = os.path.join(output_dir, filename)
-                    if os.path.isfile(out_path):
-                        LOG.debug("Skipping existing: %s", out_path)
-                        continue
-                    self._download_file(url, out_path)
+            for url, out_path in files:
+                if os.path.isfile(out_path):
+                    LOG.debug("Skipping existing: %s", out_path)
+                    continue
+                self._download_file(url, out_path)
             self.post_download_hook(d_start)
 
         if processed == 0:
@@ -473,23 +476,15 @@ class ForecastDownloader(ABC):
         )
         total_files_checked: int = 0
         available_files_count: int = 0
-        final_hour: int = self.effective_lagback() + 1
-
-        for hour, d_start in self._window():
-            self.last_hour = hour == final_hour
-            if not self.should_process_hour(d_start):
-                continue
-
+        for d_start, files in self._cycles():
             self.pre_download_hook(d_start)
             all_files_available: bool = True
-            for target in self._targets(d_start):
-                for url, filename in self._url_name_pairs(d_start, target):
-                    total_files_checked += 1
-                    LOG.debug("Checking upstream availability for %s", filename)
-                    if self._check_file_availability(url):
-                        available_files_count += 1
-                    else:
-                        all_files_available = False
+            for url, _ in files:
+                total_files_checked += 1
+                if self._check_file_availability(url):
+                    available_files_count += 1
+                else:
+                    all_files_available = False
 
             if all_files_available:
                 LOG.info("All required forcing files are available for timestamp: %s", d_start)
@@ -585,29 +580,25 @@ class FixedFileDownloader(ForecastDownloader, ABC):
     def _local_path(self, spec: FileSpec) -> str:
         return os.path.join(str(self.out_dir), spec.local_dir, spec.filename)
 
-    def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
-        for _, d_start in self._window():
-            if not self.should_process_hour(d_start):
-                continue
-            for spec in self._specs(d_start):
-                yield d_start, self._remote_url(spec), self._local_path(spec)
+    def _cycle_files(self, d_start: datetime) -> list[tuple[str, str]]:
+        return [(self._remote_url(spec), self._local_path(spec)) for spec in self._specs(d_start)]
 
     def _cleanup_old_data(self) -> None:
         """Remove files of hours older than the window; files the window needs are never removed."""
         if self.cleanback_hours <= self.lookback_hours:
             return
         keep = {
-            os.path.normpath(self._local_path(spec))
+            os.path.normpath(path)
             for d in self._protected_cycles()
             if self.should_process_hour(d)
-            for spec in self._specs(d)
+            for _, path in self._cycle_files(d)
         }
         for hour in range(self.cleanback_hours, self.lookback_hours, -1):
             d_start = self.start_time - timedelta(hours=hour)
             if not self.should_process_hour(d_start):
                 continue
-            for spec in self._specs(d_start):
-                path = os.path.normpath(self._local_path(spec))
+            for _, local_path in self._cycle_files(d_start):
+                path = os.path.normpath(local_path)
                 if path in keep or not os.path.isfile(path):
                     continue
                 LOG.debug("Removing old file: %s", path)
@@ -615,50 +606,6 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                 parent = os.path.dirname(path)
                 if parent != os.path.normpath(str(self.out_dir)) and not os.listdir(parent):
                     os.rmdir(parent)
-
-    def _download_data(self) -> None:
-        LOG.info(
-            "%s: downloading. lookback: %s lagback: %s",
-            type(self).__name__, self.lookback_hours, self.effective_lagback(),
-        )
-        final_hour: int = self.effective_lagback() + 1
-        processed = 0
-
-        for hour, d_start in self._window():
-            self.last_hour = hour == final_hour
-            if not self.should_process_hour(d_start):
-                continue
-            processed += 1
-            for spec in self._specs(d_start):
-                out_path = self._local_path(spec)
-                if os.path.isfile(out_path):
-                    LOG.debug("Skipping existing: %s", out_path)
-                    continue
-                self._download_file(self._remote_url(spec), out_path)
-
-        if processed == 0:
-            self._warn_nothing_processed()
-
-    def _check_data_availability(self) -> bool:
-        """Check fixed file availability across the window; return True if all files exist."""
-        LOG.info(
-            "%s: checking data availability. lookback: %s lagback: %s",
-            type(self).__name__, self.lookback_hours, self.effective_lagback(),
-        )
-        total_files_checked: int = 0
-        available_files_count: int = 0
-        final_hour: int = self.effective_lagback() + 1
-
-        for hour, d_start in self._window():
-            self.last_hour = hour == final_hour
-            if not self.should_process_hour(d_start):
-                continue
-            for spec in self._specs(d_start):
-                total_files_checked += 1
-                if self._check_file_availability(self._remote_url(spec)):
-                    available_files_count += 1
-
-        return self._log_availability_summary(total_files_checked, available_files_count)
 
 
 class MRMSMultiSensorDownloader(FixedFileDownloader, ABC):
