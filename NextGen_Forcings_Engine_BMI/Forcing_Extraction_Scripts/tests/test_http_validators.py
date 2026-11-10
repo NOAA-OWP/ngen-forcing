@@ -123,10 +123,25 @@ def test_md5_mismatch_is_rejected(server, tmp_path, caplog):
     assert any(r.levelname == "ERROR" and "inconsistent with its metadata" in r.message for r in caplog.records)
 
 
-def test_multipart_etag_is_not_treated_as_md5(server, tmp_path):
+def test_unreproducible_multipart_etag_is_left_unverified(server, tmp_path):
     server.add(HRRR_ANA_URL, DATA, headers={"ETag": '"0123456789abcdef0123456789abcdef-4"'})
     make(HRRR_ANA, tmp_path).run()
     assert fdb.read_meta(str(tmp_path / HRRR_PATH))["md5_verified"] is False
+
+
+def test_multipart_etag_is_verified_when_part_size_is_inferred(server, tmp_path):
+    data = b"GRIB" + bytes(range(26))  # 30 bytes in 3 parts of 10
+    digests = b"".join(hashlib.md5(data[i:i + 10]).digest() for i in range(0, 30, 10))
+    etag = f'"{hashlib.md5(digests).hexdigest()}-3"'
+    server.add(HRRR_ANA_URL, data, headers={"ETag": etag})
+    make(HRRR_ANA, tmp_path).run()
+    assert fdb.read_meta(str(tmp_path / HRRR_PATH))["md5_verified"] is True
+
+
+@pytest.mark.parametrize("size,parts,first", [(30, 3, 10), (31, 4, 8), ((1 << 20) * 20, 3, 6990507)])
+def test_multipart_part_sizes(size, parts, first):
+    sizes = fdb.multipart_part_sizes(size, parts)
+    assert sizes[0] == first and all(-(-size // p) == parts for p in sizes)
 
 
 def test_interrupted_body_resumes_with_range(server, tmp_path):
