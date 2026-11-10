@@ -27,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
+import urllib3
 
 from Forcing_Extraction_Scripts.forecast_download_base import (
     CONNECT_TIMEOUT,
@@ -147,7 +148,7 @@ def probe_url(url: str, session: requests.Session) -> FileProbe:
         resp = session.get(url, headers={"Range": f"bytes=0-{SNIFF_BYTES - 1}"}, timeout=timeout, stream=True)
         data = resp.raw.read(SNIFF_BYTES)
         resp.close()
-    except requests.RequestException as exc:
+    except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
         return FileProbe(url, False, head.status_code, size, f"ranged GET failed: {exc}")
     problem = looks_like_grib2(data, gzipped=url.endswith(".gz"))
     return FileProbe(url, not problem, head.status_code, size, problem or "GRIB2")
