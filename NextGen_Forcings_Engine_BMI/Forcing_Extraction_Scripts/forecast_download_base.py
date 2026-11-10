@@ -26,6 +26,12 @@ CHUNK_SIZE: int = 1 << 20
 #: Bytes read from the start of a file to identify its content.
 SNIFF_BYTES: int = 4096
 #: Ask servers and proxies for the stored bytes, never a transfer-compressed form.
+#:
+#: This keeps Content-Length, MD5 ETags and byte ranges referring to the stored object. On
+#: 2026-11-10 it cost nothing: offered gzip, the S3 buckets returned the stored bytes and NOMADS
+#: compressed only directory listings. gzip would shrink some products substantially (Stage IV and
+#: NDFD ~75%, NBM ~34%, GFS/HRRR ~15%), so check_server_behavior.py reports whether servers would
+#: compress; if they start to, accepting gzip with decoding (and without MD5/resume) is worth it.
 REQUEST_HEADERS: dict[str, str] = {"Accept-Encoding": "identity"}
 
 
