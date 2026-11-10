@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import shutil
 import sys
 import time
@@ -71,6 +72,15 @@ def configure_logging(level: int = logging.INFO) -> None:
 def parse_forcing_id(value: str) -> int | str:
     """Parse a forcing identifier: plain digits become an int, anything else (e.g. ``supp12``) stays a str."""
     return int(value) if value.isdigit() else value
+
+
+_PLAIN_MD5_ETAG = re.compile(r'^"?([0-9a-f]{32})"?$')
+
+
+def plain_md5_etag(etag: str | None) -> str | None:
+    """Return the MD5 hex digest an ETag stands for, or None for multipart/opaque ETags."""
+    match = _PLAIN_MD5_ETAG.match(etag or "")
+    return match.group(1) if match else None
 
 
 def cap_forecast_hours(targets: list[typing.Any], max_hour: int) -> list[typing.Any]:

@@ -47,6 +47,32 @@ AGE_HOURS_OVERRIDE: dict[str, int] = {"NDFDConusDownloader": 0}
 SEARCH_HOURS = 48
 
 
+TIMEOUT = (CONNECT_TIMEOUT, READ_TIMEOUT)
+
+
+def head(session: requests.Session, url: str) -> requests.Response:
+    """HEAD ``url`` as the downloaders would (identity encoding, timeouts)."""
+    return session.head(url, headers=REQUEST_HEADERS, timeout=TIMEOUT, allow_redirects=True)
+
+
+def get_prefix(session: requests.Session, url: str, extra_headers: dict[str, str] | None = None,
+               read: int = 0) -> tuple[int, dict[str, str], bytes]:
+    """GET ``url`` and return (status, headers, up to ``read`` bytes of a 200/206 body)."""
+    with session.get(url, headers={**REQUEST_HEADERS, **(extra_headers or {})}, timeout=TIMEOUT,
+                     stream=True) as resp:
+        body = resp.raw.read(read) if read and resp.status_code in (200, 206) else b""
+        return resp.status_code, dict(resp.headers), body
+
+
+@dataclass
+class ScriptCycle:
+    """The cycle chosen for a script and the remote files its downloader would fetch for it."""
+
+    downloader: str
+    cycle: datetime
+    urls: list[str]
+
+
 @dataclass
 class FileProbe:
     url: str
@@ -105,23 +131,19 @@ def pick_cycle(cls: type[ForecastDownloader], now: datetime, age_hours: int, out
 
 
 def probe_url(url: str, session: requests.Session) -> FileProbe:
-    timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
     try:
-        head = session.head(url, timeout=timeout, allow_redirects=True, headers=REQUEST_HEADERS)
+        response = head(session, url)
     except requests.RequestException as exc:
         return FileProbe(url, False, detail=f"HEAD failed: {exc}")
-    size = int(head.headers["Content-Length"]) if "Content-Length" in head.headers else None
-    if head.status_code != 200:
-        return FileProbe(url, False, head.status_code, size, f"HEAD returned {head.status_code}")
+    size = int(response.headers["Content-Length"]) if "Content-Length" in response.headers else None
+    if response.status_code != 200:
+        return FileProbe(url, False, response.status_code, size, f"HEAD returned {response.status_code}")
     try:
-        resp = session.get(url, headers={**REQUEST_HEADERS, "Range": f"bytes=0-{SNIFF_BYTES - 1}"},
-                           timeout=timeout, stream=True)
-        data = resp.raw.read(SNIFF_BYTES)
-        resp.close()
+        _, _, data = get_prefix(session, url, {"Range": f"bytes=0-{SNIFF_BYTES - 1}"}, read=SNIFF_BYTES)
     except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
-        return FileProbe(url, False, head.status_code, size, f"ranged GET failed: {exc}")
+        return FileProbe(url, False, response.status_code, size, f"ranged GET failed: {exc}")
     problem = content_signature_problem(url, data, require_edition2=True)
-    return FileProbe(url, not problem, head.status_code, size, problem or "GRIB2")
+    return FileProbe(url, not problem, response.status_code, size, problem or "GRIB2")
 
 
 def sample(urls: list[str]) -> list[str]:
@@ -130,30 +152,33 @@ def sample(urls: list[str]) -> list[str]:
     return list(dict.fromkeys(picks))
 
 
-def probe_script(script: str, *, probe_all: bool = False, now: datetime | None = None,
-                 regs: dict[str, list[str]] | None = None) -> ScriptProbe:
+def script_cycle(script: str, now: datetime | None = None) -> ScriptCycle:
+    """Choose a recently published cycle for ``script`` and list the files its downloader would fetch."""
     import forcing_extraction as fe
 
-    result = ScriptProbe(script, registered_as=(regs or {}).get(script, []))
-    now = now or datetime.now(timezone.utc)
     with tempfile.TemporaryDirectory() as out_dir:
-        try:
-            cls = fe.load_downloader_class(SCRIPT_DIR / script)
-            result.downloader = cls.__name__
-            age = AGE_HOURS_OVERRIDE.get(cls.__name__, DEFAULT_AGE_HOURS)
-            cycle = pick_cycle(cls, now, age, out_dir)
-            if cycle is None:
-                result.error = f"no cycle in the {SEARCH_HOURS} h before now-{age} h yields any files"
-                return result
-            result.cycle = cycle.strftime("%Y-%m-%d %HZ")
-            urls = list(dict.fromkeys(url for _, url, _ in
-                                      make_probe_downloader(cls, cycle, out_dir).iter_remote_files()))
-        except Exception as exc:  # report and continue with the other scripts
-            result.error = f"{type(exc).__name__}: {exc}"
-            return result
-    result.files_for_cycle = len(urls)
+        cls = fe.load_downloader_class(SCRIPT_DIR / script)
+        age = AGE_HOURS_OVERRIDE.get(cls.__name__, DEFAULT_AGE_HOURS)
+        cycle = pick_cycle(cls, now or datetime.now(timezone.utc), age, out_dir)
+        if cycle is None:
+            raise LookupError(f"no cycle in the {SEARCH_HOURS} h before now-{age} h yields any files")
+        urls = list(dict.fromkeys(u for _, u, _ in make_probe_downloader(cls, cycle, out_dir).iter_remote_files()))
+    return ScriptCycle(cls.__name__, cycle, urls)
+
+
+def probe_script(script: str, *, probe_all: bool = False, now: datetime | None = None,
+                 regs: dict[str, list[str]] | None = None) -> ScriptProbe:
+    result = ScriptProbe(script, registered_as=(regs or {}).get(script, []))
+    try:
+        chosen = script_cycle(script, now)
+    except Exception as exc:  # report and continue with the other scripts
+        result.error = f"{type(exc).__name__}: {exc}"
+        return result
+    result.downloader = chosen.downloader
+    result.cycle = chosen.cycle.strftime("%Y-%m-%d %HZ")
+    result.files_for_cycle = len(chosen.urls)
     with requests.Session() as session:
-        result.probes = [probe_url(u, session) for u in (urls if probe_all else sample(urls))]
+        result.probes = [probe_url(u, session) for u in (chosen.urls if probe_all else sample(chosen.urls))]
     return result
 
 
