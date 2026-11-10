@@ -120,6 +120,8 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
             return
         jobs.append(ExtractionJob(forcing, script, out_dir, horizon))
 
+    if len(cfg.input_force_dirs) < len(cfg.input_forcings):
+        raise ValueError("InputForcingDirectories must have one entry per InputForcings value.")
     for i, forcing in enumerate(cfg.input_forcings):
         add(forcing, cfg.input_force_dirs[i], horizons[i] if i < len(horizons) else None)
 
@@ -129,8 +131,9 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
     supp_dirs = _supp_dirs(cfg)
     supp_horizon = horizons[0] if horizons else None
 
-    for j, supp_id in enumerate(supp):
-        out_dir = supp_dirs[j]
+    if len(supp_dirs) < len(supp):
+        raise ValueError("SuppPcpDirectories must have one entry per SuppPcp value.")
+    for supp_id, out_dir in zip(supp, supp_dirs):
         if supp_id == "supp16":
             # Sub-hourly MRMS cycling also needs hourly MultiSensor MRMS for bias correction.
             add("supp16", f"{out_dir}/MRMS_SubHourly", supp_horizon)
@@ -138,6 +141,14 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
         else:
             add(supp_id, out_dir, supp_horizon)
     return jobs
+
+
+def validate(cfg: ForcingExtractionConfig) -> None:
+    """Reject configurations the extraction cannot interpret."""
+    if cfg.ana_flag not in (0, 1):
+        raise ValueError(f"AnAFlag must be 0 or 1, got {cfg.ana_flag!r}.")
+    if cfg.ana_flag == 1 and cfg.look_back < 60:
+        raise ValueError(f"LookBack must be at least 60 minutes for an AnA run, got {cfg.look_back!r}.")
 
 
 def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> ForecastDownloader:
@@ -181,6 +192,7 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
 
 def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
     """Download forecast forcing data based on requested sources in configuration."""
+    validate(cfg)
     missing: list[str] = []
     for job in build_jobs(cfg):
         downloader = make_downloader(cfg, job)
