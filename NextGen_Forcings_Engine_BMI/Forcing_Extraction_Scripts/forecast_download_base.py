@@ -13,13 +13,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stdout,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-
-LOG = logging.getLogger()
+LOG = logging.getLogger(__name__)
 
 #: Seconds to wait for a TCP connection to an upstream server.
 CONNECT_TIMEOUT: float = 15.0
@@ -30,6 +24,15 @@ CHUNK_SIZE: int = 1 << 20
 
 class DownloadError(RuntimeError):
     """A required file could not be retrieved after all attempts."""
+
+
+def configure_logging(level: int = logging.INFO) -> None:
+    """Configure root logging for command-line entry points."""
+    logging.basicConfig(
+        level=level,
+        stream=sys.stdout,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
 
 
 def parse_forcing_id(value: str) -> int | str:
@@ -126,7 +129,7 @@ class ForecastDownloader(ABC):
         parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
         parser.add_argument("--gfs_extended", action="store_true", default=False, help="Unused; retained for compatibility.")
         args = parser.parse_args()
-        print(f"{cls.__name__} args:", vars(args))
+        LOG.info("%s args: %s", cls.__name__, vars(args))
 
         return cls(
             out_dir=args.outDir,
@@ -147,6 +150,7 @@ class ForecastDownloader(ABC):
     @classmethod
     def cli_main(cls) -> None:
         """Command-line entry point: parse arguments, run, and exit non-zero on failure."""
+        configure_logging()
         try:
             ok = cls.from_cli_args().run()
         except DownloadError as exc:
@@ -278,14 +282,14 @@ class ForecastDownloader(ABC):
     def _remove_dir_and_empty_parents(path: str, levels: int = 2) -> None:
         """Removes a directory and prunes up to levels empty parent directories."""
         if os.path.isdir(path):
-            LOG.debug(f"Removing directory: {path}")
+            LOG.debug("Removing directory: %s", path)
             shutil.rmtree(path)
 
             current_path: str = path
             for _ in range(levels):
                 current_path = os.path.dirname(current_path)
                 if os.path.isdir(current_path) and not os.listdir(current_path):
-                    LOG.debug(f"Removing empty parent directory: {current_path}")
+                    LOG.debug("Removing empty parent directory: %s", current_path)
                     os.rmdir(current_path)
                 else:
                     break
@@ -295,8 +299,8 @@ class ForecastDownloader(ABC):
     def _download_data(self) -> None:
         """Download forecast files across desired time horizons and targets."""
         LOG.info(
-            f"ForecastDownloader: Download data. lookback: {self.lookback_hours} "
-            f"lagback: {self.effective_lagback()}"
+            "%s: downloading. lookback: %s lagback: %s",
+            type(self).__name__, self.lookback_hours, self.effective_lagback(),
         )
         final_hour: int = self.effective_lagback() + 1
         processed = 0
@@ -304,7 +308,7 @@ class ForecastDownloader(ABC):
         for hour, d_start in self._window():
             self.last_hour = hour == final_hour
             if not self.should_process_hour(d_start):
-                LOG.debug(f"Skipping hour offset: {hour}, timestamp: {d_start}")
+                LOG.debug("Skipping hour offset: %s, timestamp: %s", hour, d_start)
                 continue
             targets = self._targets(d_start)
             if not targets:
@@ -317,9 +321,8 @@ class ForecastDownloader(ABC):
             for target in targets:
                 for url, filename in self._url_name_pairs(d_start, target):
                     out_path: str = os.path.join(output_dir, filename)
-                    LOG.info(f"Looking for file {out_path}")
                     if os.path.isfile(out_path):
-                        LOG.info(f"Skipping existing: {out_path}")
+                        LOG.debug("Skipping existing: %s", out_path)
                         continue
                     self._download_file(url, out_path)
             self.post_download_hook(d_start)
@@ -412,8 +415,8 @@ class ForecastDownloader(ABC):
     def _check_data_availability(self) -> bool:
         """Check forecast file availability without fetching content; return True if all files exist."""
         LOG.info(
-            f"ForecastDownloader: Checking data availability. lookback: {self.lookback_hours} "
-            f"lagback: {self.effective_lagback()}"
+            "%s: checking data availability. lookback: %s lagback: %s",
+            type(self).__name__, self.lookback_hours, self.effective_lagback(),
         )
         total_files_checked: int = 0
         available_files_count: int = 0
@@ -429,18 +432,17 @@ class ForecastDownloader(ABC):
             for target in self._targets(d_start):
                 for url, filename in self._url_name_pairs(d_start, target):
                     total_files_checked += 1
-                    LOG.info(f"Checking upstream availability for {filename} via HEAD request")
+                    LOG.debug("Checking upstream availability for %s", filename)
                     if self._check_file_availability(url):
                         available_files_count += 1
                     else:
                         all_files_available = False
-                        LOG.warning(f"Required file missing from server: {url}")
 
             if all_files_available:
-                LOG.info(f"All required forcing files are available for timestamp: {d_start}")
+                LOG.info("All required forcing files are available for timestamp: %s", d_start)
                 self.post_download_hook(d_start)
             else:
-                LOG.error(f"One or more forcing files missing for timestamp: {d_start}.")
+                LOG.error("One or more forcing files missing for timestamp: %s.", d_start)
 
         return self._log_availability_summary(total_files_checked, available_files_count)
 
@@ -457,36 +459,27 @@ class ForecastDownloader(ABC):
 
     def _check_file_availability(self, url: str) -> bool:
         """Ping server using HTTP HEAD request to verify file availability; return False if not found."""
-        max_attempts: int = self.max_download_attempts
-        interval: int = self.download_attempt_interval
-        attempt: int = 0
-
-        while attempt < max_attempts:
+        attempts: int = self.max_download_attempts
+        last_error = "unknown error"
+        for attempt in range(1, attempts + 1):
             try:
-                LOG.info(f"Attempt {attempt + 1}: Pinging {url} for availability...")
                 response: requests.Response = requests.head(url, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
-
                 if response.status_code == requests.codes.ok:
-                    LOG.info(f"File is available: {url}")
+                    LOG.debug("File is available: %s", url)
                     return True
-                elif response.status_code == 404:
-                    LOG.warning(f"File not found (404): {url}")
-                else:
-                    LOG.error(f"Server returned status code {response.status_code} while pinging {url}")
-
-            except requests.exceptions.Timeout:
-                LOG.error(f"Timeout occurred while trying to connect to {url}")
-            except requests.exceptions.ConnectionError:
-                LOG.error(f"ConnectionError (Network issue) while pinging {url}")
-            except requests.exceptions.RequestException as e:
-                LOG.error(f"An error occurred with the request: {e}")
-
-            attempt += 1
-            if attempt < max_attempts:
-                time.sleep(interval)
+                last_error = f"HTTP {response.status_code}"
+            except requests.Timeout:
+                last_error = "timed out"
+            except requests.ConnectionError as exc:
+                last_error = f"connection error: {exc}"
+            except requests.RequestException as exc:
+                last_error = str(exc)
+            LOG.debug("Availability attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)
+            if attempt < attempts:
+                time.sleep(self.download_attempt_interval)
 
         level = logging.WARNING if (self.last_hour and self.subhourly_avg) else logging.ERROR
-        LOG.log(level, "Not available after %d attempt(s): %s", max_attempts, url)
+        LOG.log(level, "Not available after %d attempt(s): %s (%s)", attempts, url, last_error)
         return False
 
 
@@ -512,7 +505,10 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                 yield d_start, os.path.join(self.base_url, subdir, filename), os.path.join(self.out_dir, subdir, filename)
 
     def _download_data(self) -> None:
-        LOG.info(f"FixedFileDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
+        LOG.info(
+            "%s: downloading. lookback: %s lagback: %s",
+            type(self).__name__, self.lookback_hours, self.effective_lagback(),
+        )
         final_hour: int = self.effective_lagback() + 1
         processed = 0
 
@@ -528,7 +524,7 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                 out_path: str = os.path.join(full_dir, filename)
 
                 if os.path.isfile(out_path):
-                    LOG.info(f"Skipping existing: {out_path}")
+                    LOG.debug("Skipping existing: %s", out_path)
                     continue
 
                 self._download_file(url, out_path)
@@ -538,7 +534,10 @@ class FixedFileDownloader(ForecastDownloader, ABC):
 
     def _check_data_availability(self) -> bool:
         """Check fixed file availability across time range and specs; return True if all files exist."""
-        LOG.info(f"FixedFileDownloader: Checking data availability. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
+        LOG.info(
+            "%s: checking data availability. lookback: %s lagback: %s",
+            type(self).__name__, self.lookback_hours, self.effective_lagback(),
+        )
         total_files_checked: int = 0
         available_files_count: int = 0
         final_hour: int = self.effective_lagback() + 1
@@ -552,11 +551,7 @@ class FixedFileDownloader(ForecastDownloader, ABC):
             for subdir, filename in self.get_file_specs(d_start):
                 total_files_checked += 1
                 url: str = os.path.join(self.base_url, subdir, filename)
-                LOG.info(f"Checking upstream availability for {subdir}/{filename} via HEAD request")
-
                 if self._check_file_availability(url):
                     available_files_count += 1
-                else:
-                    LOG.warning(f"Required file missing from server: {url}")
 
         return self._log_availability_summary(total_files_checked, available_files_count)

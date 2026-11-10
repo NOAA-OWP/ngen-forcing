@@ -15,6 +15,7 @@ from config_models import ForcingExtractionConfig
 from Forcing_Extraction_Scripts.forecast_download_base import (
     DownloadError,
     ForecastDownloader,
+    configure_logging,
 )
 
 LOG = logging.getLogger(__name__)
@@ -189,6 +190,7 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
 
 def main() -> None:
     """Download forecast forcing data using CLI YAML config input."""
+    configure_logging()
     parser = argparse.ArgumentParser(description="Download forecast forcing data")
     parser.add_argument("cfg", type=Path, help="Path to YAML config file")
     args = parser.parse_args()
