@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import inspect
 import logging
+import math
 import sys
 import typing
 from dataclasses import dataclass
@@ -143,6 +144,7 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
         look_back_hours = 1
         start_time = refcstbdate + timedelta(hours=1)
         subhourly_avg = False
+        max_forecast_hour = math.ceil(job.horizon_minutes / 60) if job.horizon_minutes else None
     else:
         look_back_hours = int(cfg.look_back / 60) + 1
         start_delt = timedelta(hours=1)
@@ -152,6 +154,7 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
         if job.forcing in HOURLY_OBS_SUPP:
             start_delt += timedelta(hours=1)
         start_time = refcstbdate + start_delt
+        max_forecast_hour = None
 
     ens_number = cfg.cfsv2EnsMember
     downloader_class = load_downloader_class(SCRIPT_DIR / job.script)
@@ -168,6 +171,7 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
         check_file_availability=cfg.check_file_availability,
         subhourly_avg=subhourly_avg,
         gfs_extended=(3 in cfg.input_forcings and len(cfg.input_forcings) == 1),
+        max_forecast_hour=max_forecast_hour,
     )
 
 
