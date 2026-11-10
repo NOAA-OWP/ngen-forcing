@@ -141,3 +141,13 @@ The live probe can also be run on its own from `NextGen_Forcings_Engine_BMI/`. F
 python -m Forcing_Extraction_Scripts.probe_sources                      # all scripts, three files each
 python -m Forcing_Extraction_Scripts.probe_sources CONUS/get_conus_HRRR.py --all
 ```
+
+`check_server_behavior` re-checks the assumptions the downloaders make about server metadata: that HEAD and GET agree, that `Content-Length` matches the bytes served, that a plain 32-hex ETag is the MD5 of the content, that no transfer compression is applied, and that the content is GRIB2 as named. It downloads a sample of each product in full (up to `--max-mb`, default 64), and also notes whether each server would compress transfers if allowed to (the downloaders request identity encoding):
+
+```bash
+python -m Forcing_Extraction_Scripts.check_server_behavior                       # all scripts
+python -m Forcing_Extraction_Scripts.check_server_behavior Global/get_prod_GFS.py --max-mb 400
+python -m Forcing_Extraction_Scripts.check_server_behavior --url https://host/path/file.grib2
+```
+
+The downloaders report the same kinds of disagreement at run time: a body whose length differs from `Content-Length`, or whose content is not what its name says, is logged at ERROR as a server inconsistency and retried.
