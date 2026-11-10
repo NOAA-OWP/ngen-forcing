@@ -60,6 +60,10 @@ class ServerInconsistency(OSError):
     """A server response contradicts its own metadata (length, checksum, ranges, content type)."""
 
 
+class _InconsistentNotModified(ServerInconsistency):
+    """A 304 whose ETag contradicts the request; the file is then fetched unconditionally."""
+
+
 def describe_request_error(exc: BaseException) -> str:
     """A short description of why an HTTP request or transfer failed."""
     if isinstance(exc, requests.HTTPError) and exc.response is not None:
@@ -607,12 +611,20 @@ class ForecastDownloader(ABC):
             resp_etag: str | None = None
             ranges_ok = False
             body_started = False
+            retry_now = False
             try:
                 LOG.info("%s %s (attempt %d/%d%s)", "Revalidating" if conditional else "Downloading",
                          url, attempt, attempts, f", resuming at byte {offset}" if offset else "")
                 with requests.get(url, stream=True, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
                                   headers=headers) as resp:
                     if resp.status_code == 304:
+                        if not conditional:
+                            raise ServerInconsistency("answered 304 Not Modified to a request without conditions")
+                        asked, answered = conditional.get("If-None-Match"), resp.headers.get("ETag")
+                        if asked and answered and answered != asked:
+                            raise _InconsistentNotModified(
+                                f"answered 304 Not Modified with ETag {answered} to If-None-Match {asked}; "
+                                "fetching it unconditionally")
                         return FetchResult(304, resp.headers)
                     resp.raise_for_status()
                     resp_etag = resp.headers.get("ETag")
@@ -653,12 +665,15 @@ class ForecastDownloader(ABC):
                 last_error = describe_request_error(exc)
                 if isinstance(exc, ServerInconsistency):
                     LOG.error("%s: %s", url, last_error)
+                if isinstance(exc, _InconsistentNotModified):
+                    conditional = None
+                    retry_now = True
             keep_partial = body_started and ranges_ok and bool(resp_etag)
             resume_etag = resp_etag if keep_partial else None
             if not keep_partial and os.path.exists(dest_path):
                 os.remove(dest_path)
             LOG.warning("Attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)
-            if attempt < attempts:
+            if attempt < attempts and not retry_now:
                 time.sleep(self.download_attempt_interval)
         raise DownloadError(f"Failed to download {url} after {attempts} attempt(s): {last_error}")
 
