@@ -43,6 +43,19 @@ class ServerInconsistency(OSError):
     """A server response contradicts its own metadata (length, checksum, ranges, content type)."""
 
 
+def describe_request_error(exc: BaseException) -> str:
+    """A short description of why an HTTP request or transfer failed."""
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return f"HTTP {exc.response.status_code}"
+    if isinstance(exc, requests.Timeout):
+        return "timed out"
+    if isinstance(exc, requests.ConnectionError):
+        return f"connection error: {exc}"
+    if isinstance(exc, ServerInconsistency):
+        return f"server response inconsistent with its metadata: {exc}"
+    return f"{type(exc).__name__}: {exc}"
+
+
 def configure_logging(level: int = logging.INFO) -> None:
     """Configure root logging for command-line entry points."""
     logging.basicConfig(
@@ -415,18 +428,11 @@ class ForecastDownloader(ABC):
                     if problem:
                         raise ServerInconsistency(f"content does not match {url.rsplit('/', 1)[-1]}: {problem}")
                     return resp.headers
-            except requests.HTTPError as exc:
-                last_error = f"HTTP {exc.response.status_code}"
-            except requests.Timeout:
-                last_error = "timed out"
-            except requests.ConnectionError as exc:
-                last_error = f"connection error: {exc}"
-            except ServerInconsistency as exc:
-                last_error = f"server response inconsistent with its metadata: {exc}"
-                LOG.error("%s: %s", url, last_error)
             except (requests.RequestException, urllib3.exceptions.HTTPError, OSError) as exc:
                 # Errors while streaming the body come from urllib3, not requests.
-                last_error = f"{type(exc).__name__}: {exc}"
+                last_error = describe_request_error(exc)
+                if isinstance(exc, ServerInconsistency):
+                    LOG.error("%s: %s", url, last_error)
             if os.path.exists(dest_path):
                 os.remove(dest_path)
             LOG.warning("Attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)
@@ -538,12 +544,8 @@ class ForecastDownloader(ABC):
                     LOG.debug("File is available: %s", url)
                     return True
                 last_error = f"HTTP {response.status_code}"
-            except requests.Timeout:
-                last_error = "timed out"
-            except requests.ConnectionError as exc:
-                last_error = f"connection error: {exc}"
             except requests.RequestException as exc:
-                last_error = str(exc)
+                last_error = describe_request_error(exc)
             LOG.debug("Availability attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)
             if attempt < attempts:
                 time.sleep(self.download_attempt_interval)
