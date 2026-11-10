@@ -1,23 +1,11 @@
-from abc import ABC
-from Forcing_Extraction_Scripts.forecast_download_base import FixedFileDownloader
+from Forcing_Extraction_Scripts.forecast_download_base import MRMSMultiSensorDownloader
 
-class MRMSMultiSensorHawaiiDownloader(FixedFileDownloader, ABC):
-    """Downloader for MRMS MultiSensor QPE (Pass1 and Pass2) for Hawaii."""
 
-    @property
-    def base_url(self):
-        return "https://noaa-mrms-pds.s3.amazonaws.com/HAWAII"
+class MRMSMultiSensorHawaiiDownloader(MRMSMultiSensorDownloader):
+    """Downloader for MRMS MultiSensor hourly QPE (Pass1 and Pass2) for Hawaii."""
 
-    def build_output_dir(self, _, __):
-        return self.out_dir
+    region = "HAWAII"
 
-    def get_file_specs(self, d_start):
-        specs = []
-        for pass_num in ["Pass1", "Pass2"]:
-            subdir = f"MultiSensor_QPE_01H_{pass_num}_00.00/{d_start.strftime('%Y%m%d')}"
-            filename = f"MRMS_MultiSensor_QPE_01H_{pass_num}_00.00_{d_start.strftime('%Y%m%d')}-{d_start.strftime('%H')}0000.grib2.gz"
-            specs.append((subdir, filename))
-        return specs
 
 if __name__ == "__main__":
     MRMSMultiSensorHawaiiDownloader.cli_main()
