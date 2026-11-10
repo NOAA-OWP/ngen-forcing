@@ -6,6 +6,7 @@ the readers in NextGen_Forcings_Engine/core/time_handling.py on the ensemble_mvp
 """
 
 import datetime as dt
+import gzip
 import logging
 import os
 import sys
@@ -183,6 +184,8 @@ def test_stageiv_flat_output(tmp_path, script, name):
 
 HRRR_ANA = "CONUS/get_conus_HRRR_AnA.py"
 HRRR_ANA_URL = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20261110/conus/hrrr.t12z.wrfsfcf01.grib2"
+MRMS_URL = ("https://noaa-mrms-pds.s3.amazonaws.com/CONUS/MultiSensor_QPE_01H_Pass1_00.00/20261110/"
+            "MRMS_MultiSensor_QPE_01H_Pass1_00.00_20261110-120000.grib2.gz")
 
 
 def test_download_publishes_file(server, tmp_path):
@@ -224,6 +227,31 @@ def test_connection_dropped_mid_body_is_retried(server, tmp_path):
     assert make(HRRR_ANA, tmp_path, max_download_attempts=2).run() is True
     assert (tmp_path / "hrrr.20261110/conus/hrrr.t12z.wrfsfcf01.grib2").read_bytes() == b"GRIB-0123456789"
     assert server.gets == [HRRR_ANA_URL] * 2
+
+
+@pytest.mark.parametrize("url,body,match", [
+    (HRRR_ANA_URL, b"<html>Service Unavailable</html>", "no GRIB marker"),
+    (MRMS_URL, b"GRIB\x00\x00\x00\x02not-compressed", "named .gz"),
+])
+def test_content_not_matching_its_name_is_reported(server, tmp_path, caplog, url, body, match):
+    server.add(url, body)
+    script = HRRR_ANA if url == HRRR_ANA_URL else "CONUS/get_conus_MRMS_MultiSensor.py"
+    with pytest.raises(fdb.DownloadError, match=match):
+        make(script, tmp_path).run()
+    assert any(r.levelname == "ERROR" and "content does not match" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("name,head,problem", [
+    ("x.grib2", b"GRIB\x00\x00\x00\x02", ""),
+    ("ds.temp.bin", b"****0000000000****\r\r\nGRIB\x00\x00\x00\x02", ""),
+    ("x.grib2.gz", gzip.compress(b"GRIB\x00\x00\x00\x02"), ""),
+    ("x.grb2", b"<html>", "no GRIB marker"),
+    ("x.grib2.gz", b"GRIB", "named .gz"),
+    ("https://h/p/x.grib2?sig=1", b"GRIB", ""),
+])
+def test_content_signature_problem(name, head, problem):
+    assert problem in fdb.content_signature_problem(name, head)
+    assert bool(fdb.content_signature_problem(name, head)) == bool(problem)
 
 
 def test_requests_ask_for_identity_encoding(server, tmp_path, monkeypatch):

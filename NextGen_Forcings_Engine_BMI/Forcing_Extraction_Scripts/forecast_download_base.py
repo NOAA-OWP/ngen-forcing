@@ -8,6 +8,7 @@ import sys
 import time
 import typing
 import uuid
+import zlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,8 @@ CONNECT_TIMEOUT: float = 15.0
 #: Seconds to wait between bytes once a response has started.
 READ_TIMEOUT: float = 120.0
 CHUNK_SIZE: int = 1 << 20
+#: Bytes read from the start of a file to identify its content.
+SNIFF_BYTES: int = 4096
 #: Ask servers and proxies for the stored bytes, never a transfer-compressed form.
 REQUEST_HEADERS: dict[str, str] = {"Accept-Encoding": "identity"}
 
@@ -63,6 +66,32 @@ def cap_forecast_hours(targets: list[typing.Any], max_hour: int) -> list[typing.
     if beyond and max_hour not in kept:
         kept.append(min(beyond))
     return kept
+
+
+def content_signature_problem(name: str, head: bytes, require_edition2: bool = False) -> str:
+    """
+    Check the first bytes of a file against what its name (or URL) says it is.
+
+    ``.gz`` files must be gzip whose decompressed start is checked in turn; ``.grib2``, ``.grb2``
+    and ``.bin`` files must contain a GRIB marker (operational bulletins carry a WMO header before
+    it). Returns '' if consistent, else a description of what was found.
+    """
+    lower = name.rsplit("/", 1)[-1].split("?", 1)[0].lower()
+    if lower.endswith(".gz"):
+        if head[:2] != b"\x1f\x8b":
+            return f"named .gz but starts with {head[:8]!r}"
+        try:
+            head = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(head)
+        except zlib.error as exc:
+            return f"gzip data is undecodable: {exc}"
+        lower = lower[:-3]
+    if lower.endswith((".grib2", ".grb2", ".bin")):
+        offset = head.find(b"GRIB")
+        if offset < 0:
+            return f"no GRIB marker in the first {len(head)} bytes (starts {head[:8]!r})"
+        if require_edition2 and len(head) > offset + 7 and head[offset + 7] != 2:
+            return f"GRIB edition {head[offset + 7]}, expected 2"
+    return ""
 
 
 class ForecastDownloader(ABC):
@@ -364,6 +393,10 @@ class ForecastDownloader(ABC):
                             written += len(chunk)
                     if expected is not None and written != int(expected):
                         raise ServerInconsistency(f"received {written} bytes but Content-Length is {expected}")
+                    with open(dest_path, "rb") as fh:
+                        problem = content_signature_problem(url, fh.read(SNIFF_BYTES))
+                    if problem:
+                        raise ServerInconsistency(f"content does not match {url.rsplit('/', 1)[-1]}: {problem}")
                     return resp.headers
             except requests.HTTPError as exc:
                 last_error = f"HTTP {exc.response.status_code}"
