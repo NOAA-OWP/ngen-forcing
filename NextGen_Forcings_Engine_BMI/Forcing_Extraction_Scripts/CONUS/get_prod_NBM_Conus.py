@@ -2,7 +2,7 @@ import os
 from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 
 class NBMConusDownloader(ForecastDownloader):
-    """Downloader for CONUS NBM forecast data on the Gaussian grid in GRIB2 format."""
+    """Downloader for CONUS NBM core forecast data (GRIB2)."""
 
     @property
     def base_url(self):
