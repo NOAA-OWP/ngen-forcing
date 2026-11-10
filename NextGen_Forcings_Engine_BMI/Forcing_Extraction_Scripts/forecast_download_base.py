@@ -241,6 +241,14 @@ class ForecastDownloader(ABC):
                 for url, filename in self._url_name_pairs(d_start, target):
                     yield d_start, url, os.path.join(output_dir, filename)
 
+    def _warn_nothing_processed(self) -> None:
+        first = self.start_time - timedelta(hours=self.lookback_hours)
+        last = self.start_time - timedelta(hours=self.effective_lagback() + 1)
+        LOG.warning(
+            "%s: no cycle between %s and %s matches this product's cycle schedule; nothing was downloaded.",
+            type(self).__name__, first, last,
+        )
+
     # ------------------------------------------------------------------ cleanup
 
     def _cleanup_old_data(self) -> None:
@@ -291,17 +299,22 @@ class ForecastDownloader(ABC):
             f"lagback: {self.effective_lagback()}"
         )
         final_hour: int = self.effective_lagback() + 1
+        processed = 0
 
         for hour, d_start in self._window():
             self.last_hour = hour == final_hour
             if not self.should_process_hour(d_start):
                 LOG.debug(f"Skipping hour offset: {hour}, timestamp: {d_start}")
                 continue
+            targets = self._targets(d_start)
+            if not targets:
+                continue
+            processed += 1
 
             output_dir: str = self.build_output_dir(d_start, self.ens_number)
             os.makedirs(output_dir, exist_ok=True)
             self.pre_download_hook(d_start)
-            for target in self._targets(d_start):
+            for target in targets:
                 for url, filename in self._url_name_pairs(d_start, target):
                     out_path: str = os.path.join(output_dir, filename)
                     LOG.info(f"Looking for file {out_path}")
@@ -310,6 +323,9 @@ class ForecastDownloader(ABC):
                         continue
                     self._download_file(url, out_path)
             self.post_download_hook(d_start)
+
+        if processed == 0:
+            self._warn_nothing_processed()
 
     def _fetch(self, url: str, dest_path: str) -> typing.Mapping[str, str]:
         """
@@ -498,13 +514,13 @@ class FixedFileDownloader(ForecastDownloader, ABC):
     def _download_data(self) -> None:
         LOG.info(f"FixedFileDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
         final_hour: int = self.effective_lagback() + 1
+        processed = 0
 
         for hour, d_start in self._window():
             self.last_hour = hour == final_hour
-
             if not self.should_process_hour(d_start):
                 continue
-
+            processed += 1
             for subdir, filename in self.get_file_specs(d_start):
                 full_dir: str = os.path.join(self.out_dir, subdir)
                 os.makedirs(full_dir, exist_ok=True)
@@ -516,6 +532,9 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                     continue
 
                 self._download_file(url, out_path)
+
+        if processed == 0:
+            self._warn_nothing_processed()
 
     def _check_data_availability(self) -> bool:
         """Check fixed file availability across time range and specs; return True if all files exist."""
