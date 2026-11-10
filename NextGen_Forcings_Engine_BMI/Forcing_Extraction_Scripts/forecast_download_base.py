@@ -37,6 +37,23 @@ def parse_forcing_id(value: str) -> int | str:
     return int(value) if value.isdigit() else value
 
 
+def cap_forecast_hours(targets: list[typing.Any], max_hour: int) -> list[typing.Any]:
+    """
+    Restrict integer forecast-hour targets to those needed for a horizon of ``max_hour`` hours.
+
+    Targets at or below ``max_hour`` are kept. If ``max_hour`` itself is not a target, the first
+    target beyond it is also kept so the engine can interpolate up to the horizon. Non-integer
+    targets (e.g. NDFD field names) are returned unchanged.
+    """
+    if not targets or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
+        return targets
+    kept = [t for t in targets if t <= max_hour]
+    beyond = [t for t in targets if t > max_hour]
+    if beyond and max_hour not in kept:
+        kept.append(min(beyond))
+    return kept
+
+
 class ForecastDownloader(ABC):
     """Abstract base class for structured forecast data downloads."""
 
@@ -58,6 +75,7 @@ class ForecastDownloader(ABC):
         check_file_availability: int,
         subhourly_avg: bool,
         gfs_extended: bool,
+        max_forecast_hour: int | None = None,
     ) -> None:
         if lookback_hours <= lagback_hours:
             raise ValueError(
@@ -75,7 +93,9 @@ class ForecastDownloader(ABC):
         self.download_attempt_interval: int = download_attempt_interval
         self.check_file_availability: int = check_file_availability
         self.subhourly_avg: bool = subhourly_avg
+        # Retained for interface compatibility; forecast length is controlled by max_forecast_hour.
         self.gfs_extended: bool = gfs_extended
+        self.max_forecast_hour: int | None = max_forecast_hour
 
         self.last_hour: bool | None = None
         self.d_now: datetime = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
@@ -98,11 +118,13 @@ class ForecastDownloader(ABC):
         parser.add_argument("--ensNumber", type=int, default=None)
         parser.add_argument("--inputforcing", type=parse_forcing_id, default=None,
                             help="Forcing identifier (e.g. 6 or supp12); informational only.")
+        parser.add_argument("--maxForecastHour", type=int, default=None,
+                            help="Download only forecast hours needed to reach this horizon.")
         parser.add_argument("--max_download_attempts", type=int, default=10, help="Number of attempts to download a file.")
         parser.add_argument("--download_attempt_interval", type=int, default=30, help="Wait time (s) between retries.")
         parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
         parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
-        parser.add_argument("--gfs_extended", action="store_true", default=False, help="Flag GFS extended horizon.")
+        parser.add_argument("--gfs_extended", action="store_true", default=False, help="Unused; retained for compatibility.")
         args = parser.parse_args()
         print(f"{cls.__name__} args:", vars(args))
 
@@ -119,6 +141,7 @@ class ForecastDownloader(ABC):
             check_file_availability=args.check_file_availability,
             subhourly_avg=args.subhourly_avg,
             gfs_extended=args.gfs_extended,
+            max_forecast_hour=args.maxForecastHour,
         )
 
     @classmethod
@@ -196,6 +219,12 @@ class ForecastDownloader(ABC):
         for hour in range(self.lookback_hours, -1, -1):
             yield self.start_time - timedelta(hours=hour)
 
+    def _targets(self, d_start: datetime) -> list[typing.Any]:
+        targets = list(self.get_download_targets(d_start))
+        if self.max_forecast_hour is None:
+            return targets
+        return cap_forecast_hours(targets, self.max_forecast_hour)
+
     def _url_name_pairs(self, d_start: datetime, target: typing.Any) -> list[tuple[str, str]]:
         result = self.build_file_url_and_name(d_start, target, self.ens_number)
         if isinstance(result, tuple):
@@ -208,7 +237,7 @@ class ForecastDownloader(ABC):
             if not self.should_process_hour(d_start):
                 continue
             output_dir = self.build_output_dir(d_start, self.ens_number)
-            for target in self.get_download_targets(d_start):
+            for target in self._targets(d_start):
                 for url, filename in self._url_name_pairs(d_start, target):
                     yield d_start, url, os.path.join(output_dir, filename)
 
@@ -272,7 +301,7 @@ class ForecastDownloader(ABC):
             output_dir: str = self.build_output_dir(d_start, self.ens_number)
             os.makedirs(output_dir, exist_ok=True)
             self.pre_download_hook(d_start)
-            for target in self.get_download_targets(d_start):
+            for target in self._targets(d_start):
                 for url, filename in self._url_name_pairs(d_start, target):
                     out_path: str = os.path.join(output_dir, filename)
                     LOG.info(f"Looking for file {out_path}")
@@ -381,7 +410,7 @@ class ForecastDownloader(ABC):
 
             self.pre_download_hook(d_start)
             all_files_available: bool = True
-            for target in self.get_download_targets(d_start):
+            for target in self._targets(d_start):
                 for url, filename in self._url_name_pairs(d_start, target):
                     total_files_checked += 1
                     LOG.info(f"Checking upstream availability for {filename} via HEAD request")
