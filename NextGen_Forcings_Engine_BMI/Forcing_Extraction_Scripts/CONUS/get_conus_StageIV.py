@@ -6,6 +6,7 @@ class StageIVDownloader(FixedFileDownloader):
     default_lookback = 36
     default_cleanback = 240
     default_lagback = 0
+    mutable_upstream = True  # Stage IV analyses are rewritten upstream about 24 h after valid time
 
     @property
     def base_url(self):

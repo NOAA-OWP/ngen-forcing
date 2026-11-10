@@ -1,6 +1,7 @@
 import gzip
 import io
 import sys
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,7 @@ class FakeServer:
         self.serve_all = False
         self.gets = []
         self.heads = []
+        self.request_headers = []
 
     def add(self, url, data=b"GRIB\x00\x00\x00\x02payload", headers=None, declared_length=None,
             fail_times=0, fail_after=None):
@@ -91,21 +93,36 @@ class FakeServer:
 
     def get(self, url, stream=False, timeout=None, headers=None):
         assert timeout is not None, "requests must always use a timeout"
+        headers = dict(headers or {})
         self.gets.append(url)
+        self.request_headers.append(headers)
         entry = self._lookup(url)
         if entry is None:
             return FakeResponse(url, 404)
         data, hdrs, declared = entry
+        etag = hdrs.get("ETag")
+        if etag and headers.get("If-None-Match") == etag:
+            return FakeResponse(url, 304, b"", hdrs, declared_length=0)
+        if "If-None-Match" not in headers and hdrs.get("Last-Modified") and headers.get("If-Modified-Since"):
+            if parsedate_to_datetime(headers["If-Modified-Since"]) >= parsedate_to_datetime(hdrs["Last-Modified"]):
+                return FakeResponse(url, 304, b"", hdrs, declared_length=0)
         fail_after = None
         if self.failures.get(url, [0])[0] > 0:
             self.failures[url][0] -= 1
             fail_after = self.failures[url][1]
+        if "Range" in headers and (headers.get("If-Range") in (None, etag)):
+            start = int(headers["Range"].split("=")[1].rstrip("-"))
+            return FakeResponse(url, 206, data[start:], hdrs, None, fail_after)
         return FakeResponse(url, 200, data, hdrs, declared, fail_after)
 
     def head(self, url, timeout=None, **_):
         assert timeout is not None, "requests must always use a timeout"
         self.heads.append(url)
-        return FakeResponse(url, 200 if self._lookup(url) else 404)
+        entry = self._lookup(url)
+        if entry is None:
+            return FakeResponse(url, 404)
+        data, hdrs, _declared = entry
+        return FakeResponse(url, 200, b"", hdrs, declared_length=len(data))
 
 
 @pytest.fixture

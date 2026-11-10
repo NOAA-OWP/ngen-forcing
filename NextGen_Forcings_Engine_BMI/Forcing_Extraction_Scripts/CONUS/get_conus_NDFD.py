@@ -25,6 +25,7 @@ class NDFDConusDownloader(ForecastDownloader):
 
     default_lookback = 6
     default_lagback = 0
+    mutable_upstream = True
 
     #: Engine field tag (as read by find_ndfd_neighbors) -> operational bin file.
     FIELD_MAP: dict[str, str] = {
@@ -83,16 +84,13 @@ class NDFDConusDownloader(ForecastDownloader):
         if f"/{PRIMARY_PERIOD}/" in url:
             self._check_issuance(headers, url)
 
-    def pre_download_hook(self, d_start: datetime.datetime) -> None:
-        self._cycle = d_start
-
     def _check_issuance(self, headers, url: str) -> None:
         """Refuse an upstream issuance that does not belong to the cycle being filled."""
         last_modified = headers.get("Last-Modified")
         if not last_modified:
             return
         issued = email.utils.parsedate_to_datetime(last_modified).astimezone(datetime.timezone.utc)
-        cycle = self._cycle.replace(tzinfo=datetime.timezone.utc)
+        cycle = self._cycle_time.replace(tzinfo=datetime.timezone.utc)
         if abs(issued - cycle) > self.MAX_ISSUANCE_OFFSET:
             raise DownloadError(
                 f"{url} was issued at {issued:%Y-%m-%d %H:%M} UTC, more than "
