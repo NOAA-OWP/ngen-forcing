@@ -91,7 +91,7 @@ class ForecastDownloader(ABC):
         self.lookback_hours: int = lookback_hours
         self.cleanback_hours: int = cleanback_hours
         self.lagback_hours: int = lagback_hours
-        self.ens_number: str = str(ens_number).zfill(2) if ens_number is not None else "00"
+        self.ens_number: str = str(ens_number).zfill(2) if ens_number not in (None, "") else "00"
         self.input_forcing: int | str | None = input_forcing
         self.max_download_attempts: int = max(1, int(max_download_attempts))
         self.download_attempt_interval: int = download_attempt_interval
