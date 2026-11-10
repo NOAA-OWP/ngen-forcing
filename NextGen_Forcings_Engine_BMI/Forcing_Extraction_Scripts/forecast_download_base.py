@@ -184,6 +184,13 @@ class ForecastDownloader(ABC):
         """Hook called after downloading completes for a specific cycle."""
         pass
 
+    # ------------------------------------------------------------------ window helpers
+
+    def _window(self) -> typing.Iterator[tuple[int, datetime]]:
+        """Yield (hour offset, cycle time) pairs for the processing window, oldest first."""
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            yield hour, self.start_time - timedelta(hours=hour)
+
     def _protected_cycles(self) -> typing.Iterator[datetime]:
         """Cycle times whose data must survive cleanup: the processing window and anything newer."""
         for hour in range(self.lookback_hours, -1, -1):
@@ -197,14 +204,15 @@ class ForecastDownloader(ABC):
 
     def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
         """Yield (cycle time, remote URL, local path) for every file the processing window needs."""
-        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
-            d_start = self.start_time - timedelta(hours=hour)
+        for _, d_start in self._window():
             if not self.should_process_hour(d_start):
                 continue
             output_dir = self.build_output_dir(d_start, self.ens_number)
             for target in self.get_download_targets(d_start):
                 for url, filename in self._url_name_pairs(d_start, target):
                     yield d_start, url, os.path.join(output_dir, filename)
+
+    # ------------------------------------------------------------------ cleanup
 
     def _cleanup_old_data(self) -> None:
         """Remove output directories of cycles older than the window, never touching data the window needs."""
@@ -245,6 +253,8 @@ class ForecastDownloader(ABC):
                 else:
                     break
 
+    # ------------------------------------------------------------------ download
+
     def _download_data(self) -> None:
         """Download forecast files across desired time horizons and targets."""
         LOG.info(
@@ -253,23 +263,16 @@ class ForecastDownloader(ABC):
         )
         final_hour: int = self.effective_lagback() + 1
 
-        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
-            d_start: datetime = self.start_time - timedelta(hours=hour)
-
-            if self.should_process_hour(d_start):
-                LOG.debug(f"Processing hour offset: {hour}, timestamp: {d_start}")
-            else:
+        for hour, d_start in self._window():
+            self.last_hour = hour == final_hour
+            if not self.should_process_hour(d_start):
                 LOG.debug(f"Skipping hour offset: {hour}, timestamp: {d_start}")
                 continue
 
             output_dir: str = self.build_output_dir(d_start, self.ens_number)
             os.makedirs(output_dir, exist_ok=True)
-
             self.pre_download_hook(d_start)
-            targets: list[typing.Any] = self.get_download_targets(d_start)
-            self.last_hour = (hour == final_hour)
-
-            for target in targets:
+            for target in self.get_download_targets(d_start):
                 for url, filename in self._url_name_pairs(d_start, target):
                     out_path: str = os.path.join(output_dir, filename)
                     LOG.info(f"Looking for file {out_path}")
@@ -359,6 +362,8 @@ class ForecastDownloader(ABC):
         LOG.info("Downloaded %s", out_path)
         return True
 
+    # ------------------------------------------------------------------ availability check
+
     def _check_data_availability(self) -> bool:
         """Check forecast file availability without fetching content; return True if all files exist."""
         LOG.info(
@@ -369,17 +374,14 @@ class ForecastDownloader(ABC):
         available_files_count: int = 0
         final_hour: int = self.effective_lagback() + 1
 
-        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
-            d_start: datetime = self.start_time - timedelta(hours=hour)
+        for hour, d_start in self._window():
+            self.last_hour = hour == final_hour
             if not self.should_process_hour(d_start):
                 continue
 
             self.pre_download_hook(d_start)
-            targets: list[typing.Any] = self.get_download_targets(d_start)
-            self.last_hour = (hour == final_hour)
             all_files_available: bool = True
-
-            for target in targets:
+            for target in self.get_download_targets(d_start):
                 for url, filename in self._url_name_pairs(d_start, target):
                     total_files_checked += 1
                     LOG.info(f"Checking upstream availability for {filename} via HEAD request")
@@ -458,8 +460,7 @@ class FixedFileDownloader(ForecastDownloader, ABC):
         pass
 
     def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
-        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
-            d_start = self.start_time - timedelta(hours=hour)
+        for _, d_start in self._window():
             if not self.should_process_hour(d_start):
                 continue
             for subdir, filename in self.get_file_specs(d_start):
@@ -469,9 +470,8 @@ class FixedFileDownloader(ForecastDownloader, ABC):
         LOG.info(f"FixedFileDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
         final_hour: int = self.effective_lagback() + 1
 
-        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
-            d_start: datetime = self.start_time - timedelta(hours=hour)
-            self.last_hour = (hour == final_hour)
+        for hour, d_start in self._window():
+            self.last_hour = hour == final_hour
 
             if not self.should_process_hour(d_start):
                 continue
@@ -495,9 +495,8 @@ class FixedFileDownloader(ForecastDownloader, ABC):
         available_files_count: int = 0
         final_hour: int = self.effective_lagback() + 1
 
-        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
-            d_start: datetime = self.start_time - timedelta(hours=hour)
-            self.last_hour = (hour == final_hour)
+        for hour, d_start in self._window():
+            self.last_hour = hour == final_hour
 
             if not self.should_process_hour(d_start):
                 continue
