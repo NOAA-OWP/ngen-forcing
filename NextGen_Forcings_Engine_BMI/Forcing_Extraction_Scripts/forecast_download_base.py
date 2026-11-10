@@ -678,3 +678,30 @@ class MRMSMultiSensorDownloader(FixedFileDownloader, ABC):
             filename = f"MRMS_{product}_{date}-{d_start.strftime('%H')}0000.grib2.gz"
             specs.append(FileSpec(f"{product}/{date}", filename, self.local_layout.format(pass_=pass_, date=date)))
         return specs
+
+
+class NAMNestAnADownloader(ForecastDownloader, ABC):
+    """NAM nest AnA: forecast hours 1-6 of the 00/06/12/18Z cycle covering each hour, for one nest."""
+
+    #: Nest name used in NAM file names, e.g. hawaiinest or priconest.
+    domain: str = ""
+
+    @property
+    def base_url(self) -> str:
+        return "https://noaa-nam-pds.s3.amazonaws.com"
+
+    @staticmethod
+    def nam_cycle(d_start: datetime) -> datetime:
+        """Return the 00/06/12/18Z NAM cycle that covers d_start."""
+        return d_start - timedelta(hours=d_start.hour % 6)
+
+    def get_download_targets(self, d_start: datetime) -> list[typing.Any]:
+        return list(range(1, 7))
+
+    def build_output_dir(self, d_start: datetime, ens_number: str) -> str:
+        return os.path.join(str(self.out_dir), f"nam.{self.nam_cycle(d_start).strftime('%Y%m%d')}")
+
+    def build_file_url_and_name(self, d_start: datetime, target: typing.Any, ens_number: str) -> tuple[str, str]:
+        cycle = self.nam_cycle(d_start)
+        filename = f"nam.t{cycle.strftime('%H')}z.{self.domain}.hiresf{target:02d}.tm00.grib2"
+        return f"{self.base_url}/nam.{cycle.strftime('%Y%m%d')}/{filename}", filename
