@@ -1,16 +1,20 @@
 # Forcing Extraction Workflow
 
-The `Forcing_Extraction_Scripts` subsystem provides modular, parallelized downloaders for retrieving and staging atmospheric and hydrologic model forcing data required by the National Water Model v4 (NWMv4) NextGen framework.
+The `Forcing_Extraction_Scripts` subsystem provides modular downloaders for retrieving and staging atmospheric and hydrologic model forcing data required by the National Water Model v4 (NWMv4) NextGen framework.
 
 ---
 
 ## Architecture Overview
 
 All downloaders inherit from `ForecastDownloader` (`forecast_download_base.py`), establishing a standard lifecycle across datasets:
-1. **Cycle Window Evaluation**: Computes lookback/lagback windows aligned to model operational cadences.
-2. **Availability Verification**: Queries upstream endpoints (`HTTP HEAD` / NOMADS / AWS S3 Open Data buckets) to ensure grids are staged before dispatching retrieval jobs.
-3. **Parallel Dispatch**: Orchestrates concurrent downloads across variables and timesteps via `ThreadPoolExecutor`.
-4. **Binary / Horizon Staging**: Downloads, verifies, and (where necessary) concatenates multi-period binary bins into unified GRIB2 files ready for regridding and ESMF mesh mapping.
+1. **Cycle Window Evaluation**: Computes lookback/lagback windows aligned to model operational cadences, optionally limited to the configured forecast horizon.
+2. **Cleanup**: Removes data of cycles older than the window (standalone runs only; never data the window needs).
+3. **Download**: Fetches each missing file with retries and timeouts, verifies the byte count, and publishes it atomically.
+4. **Availability Verification** (`check_file_availability: 1`): Sends `HTTP HEAD` requests instead of downloading and reports which files are missing upstream.
+
+`FixedFileDownloader` covers observation products (MRMS, Stage IV) with one or more fixed files per hour; `MRMSMultiSensorDownloader` covers the hourly MRMS MultiSensor products of every MRMS domain. NDFD additionally concatenates its valid-period bins into one GRIB2 file per field.
+
+A failed download raises `DownloadError`; the standalone scripts and `forcing_extraction.py` exit with status 1.
 
 ---
 
