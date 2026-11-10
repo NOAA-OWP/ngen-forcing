@@ -627,6 +627,8 @@ class ForecastDownloader(ABC):
                                 "fetching it unconditionally")
                         return FetchResult(304, resp.headers)
                     resp.raise_for_status()
+                    if resp.status_code == 206:
+                        self._check_content_range(resp.headers, offset)
                     resp_etag = resp.headers.get("ETag")
                     ranges_ok = (resp.headers.get("Accept-Ranges", "").lower() == "bytes"
                                  or resp.status_code == 206)
@@ -676,6 +678,22 @@ class ForecastDownloader(ABC):
             if attempt < attempts and not retry_now:
                 time.sleep(self.download_attempt_interval)
         raise DownloadError(f"Failed to download {url} after {attempts} attempt(s): {last_error}")
+
+    @staticmethod
+    def _check_content_range(headers: typing.Mapping[str, str], offset: int) -> None:
+        """Verify a 206 response continues the file from ``offset`` to the end of the object."""
+        if not offset:
+            raise ServerInconsistency("answered 206 Partial Content to a request without Range")
+        content_range = headers.get("Content-Range", "")
+        match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+|\*)", content_range.strip())
+        if not match or int(match.group(1)) != offset:
+            raise ServerInconsistency(f"asked for bytes {offset}- but got Content-Range {content_range!r}")
+        last, complete = int(match.group(2)), match.group(3)
+        if complete != "*" and last != int(complete) - 1:
+            raise ServerInconsistency(f"Content-Range {content_range!r} stops before the end of the object")
+        length = headers.get("Content-Length")
+        if length is not None and int(length) != last - offset + 1:
+            raise ServerInconsistency(f"Content-Range {content_range!r} disagrees with Content-Length {length}")
 
     @staticmethod
     def _publish(temp_path: str, out_path: str, replace: bool = False) -> None:

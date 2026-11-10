@@ -112,7 +112,8 @@ class FakeServer:
             fail_after = self.failures[url][1]
         if "Range" in headers and (headers.get("If-Range") in (None, etag)):
             start = int(headers["Range"].split("=")[1].rstrip("-"))
-            return FakeResponse(url, 206, data[start:], hdrs, None, fail_after)
+            content_range = f"bytes {start}-{len(data) - 1}/{len(data)}"
+            return FakeResponse(url, 206, data[start:], {**hdrs, "Content-Range": content_range}, None, fail_after)
         return FakeResponse(url, 200, data, hdrs, declared, fail_after)
 
     def head(self, url, timeout=None, **_):
