@@ -49,7 +49,7 @@ FORCING_SRC: dict[int | str, str] = {
 FORCING_ANA_SRC: dict[int | str, str] = {
     5: "CONUS/get_conus_HRRR_AnA.py",
     6: "CONUS/get_conus_RAP_AnA.py",
-    13: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
+    13: "Hawaii/get_prod_NAM_Nest_Hawaii_AnA.py",
     14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py",
     19: "Alaska/get_Alaska_HRRR.py",
     20: "Alaska/get_Alaska_HRRR_AnA.py",
