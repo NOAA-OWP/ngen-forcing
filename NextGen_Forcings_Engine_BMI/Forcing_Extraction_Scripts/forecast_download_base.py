@@ -149,6 +149,48 @@ def conditional_headers(validators: dict[str, typing.Any] | None, no_cache: bool
     return headers
 
 
+_MULTIPART_ETAG = re.compile(r'^"?([0-9a-f]{32})-(\d+)"?$')
+#: Part sizes (MiB) commonly used by S3 upload tools, tried when inferring a multipart ETag.
+_COMMON_PART_SIZES_MIB = (5, 8, 16, 32, 64, 100, 128, 256, 512)
+
+
+def multipart_part_sizes(size: int, parts: int) -> list[int]:
+    """Part sizes in bytes that split ``size`` bytes into exactly ``parts`` parts, likeliest first."""
+    if parts < 1 or size < parts:
+        return []
+    mib = 1 << 20
+    smallest = -(-size // parts)
+    candidates = [smallest, -(-smallest // mib) * mib] + [m * mib for m in _COMMON_PART_SIZES_MIB]
+    sizes: list[int] = []
+    for part_size in candidates:
+        if -(-size // part_size) == parts and part_size not in sizes:
+            sizes.append(part_size)
+    return sizes
+
+
+def s3_multipart_etag(path: str, part_size: int) -> str:
+    """The ETag S3 assigns to a multipart upload of ``path`` with ``part_size``-byte parts."""
+    digests = b""
+    parts = 0
+    with open(path, "rb") as fh:
+        while True:
+            part = hashlib.md5()
+            remaining = part_size
+            while remaining:
+                chunk = fh.read(min(CHUNK_SIZE, remaining))
+                if not chunk:
+                    break
+                part.update(chunk)
+                remaining -= len(chunk)
+            if remaining == part_size:
+                break
+            digests += part.digest()
+            parts += 1
+            if remaining:
+                break
+    return f"{hashlib.md5(digests).hexdigest()}-{parts}"
+
+
 def set_mtime_from_header(path: str, last_modified: str | None) -> None:
     if not last_modified:
         return
@@ -576,9 +618,24 @@ class ForecastDownloader(ABC):
 
     @staticmethod
     def _verify_md5(path: str, etag: str | None) -> bool:
-        """Compare the file's MD5 with a plain-MD5 ETag; return True if verified, raise on mismatch."""
+        """
+        Check the file against an S3-style ETag; return True if verified.
+
+        A plain-MD5 ETag must match the content, else ServerInconsistency is raised. A multipart
+        ETag ("<md5>-<parts>") is verified when one of the likely part sizes reproduces it; if none
+        does, the part size is unknown, so the content is left unverified rather than rejected.
+        """
         expected = plain_md5_etag(etag)
         if expected is None:
+            match = _MULTIPART_ETAG.match(etag or "")
+            if not match:
+                return False
+            wanted = f"{match.group(1)}-{match.group(2)}"
+            for part_size in multipart_part_sizes(os.path.getsize(path), int(match.group(2))):
+                if s3_multipart_etag(path, part_size) == wanted:
+                    return True
+            LOG.debug("Multipart ETag %s not reproduced for %s with likely part sizes; content unverified.",
+                      etag, path)
             return False
         digest = hashlib.md5()
         with open(path, "rb") as fh:
