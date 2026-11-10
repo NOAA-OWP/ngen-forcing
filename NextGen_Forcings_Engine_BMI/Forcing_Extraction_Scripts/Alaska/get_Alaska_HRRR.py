@@ -16,7 +16,8 @@ class AlaskaHRRRDownloader(ForecastDownloader):
 
     def get_download_targets(self, d_start):
         if d_start.hour % 3 == 0:
-            return range(0, 49) if d_start.hour == 0 else range(0, 19)
+            # 00, 06, 12 and 18Z cycles run to 48 hours; the other 3-hourly cycles to 18 hours.
+            return range(0, 49) if d_start.hour % 6 == 0 else range(0, 19)
         return []
 
     def build_output_dir(self, d_start, _):
