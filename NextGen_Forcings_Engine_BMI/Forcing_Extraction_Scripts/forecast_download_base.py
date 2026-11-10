@@ -10,7 +10,6 @@ import typing
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
-from urllib import error, request
 
 import requests
 
@@ -21,6 +20,12 @@ logging.basicConfig(
 )
 
 LOG = logging.getLogger()
+
+#: Seconds to wait for a TCP connection to an upstream server.
+CONNECT_TIMEOUT: float = 15.0
+#: Seconds to wait between bytes once a response has started.
+READ_TIMEOUT: float = 120.0
+CHUNK_SIZE: int = 1 << 20
 
 
 class DownloadError(RuntimeError):
@@ -61,7 +66,7 @@ class ForecastDownloader(ABC):
         self.lagback_hours: int = lagback_hours
         self.ens_number: str = str(ens_number).zfill(2) if ens_number is not None else "00"
         self.input_forcing: int = input_forcing
-        self.max_download_attempts: int = max_download_attempts
+        self.max_download_attempts: int = max(1, int(max_download_attempts))
         self.download_attempt_interval: int = download_attempt_interval
         self.check_file_availability: int = check_file_availability
         self.subhourly_avg: bool = subhourly_avg
@@ -270,52 +275,80 @@ class ForecastDownloader(ABC):
                     self._download_file(url, out_path)
                 self.post_download_hook(d_start)
 
-    def _download_file(self, url: str, out_path: str) -> None:
-        """Download remote URL to temporary path and publish atomically."""
-        max_attempts: int = self.max_download_attempts
-        interval: int = self.download_attempt_interval
-        attempt: int = 0
+    def _fetch(self, url: str, dest_path: str) -> typing.Mapping[str, str]:
+        """
+        Download ``url`` to ``dest_path`` with retries, verifying the byte count against Content-Length.
 
-        out_dir: str = os.path.dirname(out_path)
-        base: str = os.path.basename(out_path)
-        temp_path: str = os.path.join(out_dir, f".{base}.tmp.{uuid.uuid4()}")
-
-        while attempt < max_attempts:
+        Returns the response headers. Raises DownloadError after the last failed attempt.
+        """
+        attempts: int = self.max_download_attempts
+        last_error = "unknown error"
+        for attempt in range(1, attempts + 1):
             try:
-                LOG.info(f"Attempt {attempt + 1}: Downloading {url} -> {temp_path}")
-                request.urlretrieve(url, temp_path)
-                try:
-                    os.link(temp_path, out_path)
-                    os.remove(temp_path)
-                    LOG.info(f"Download complete: {out_path}")
-                    return
-                except FileExistsError:
-                    LOG.info(f"{out_path} already exists; another process wrote it first. Removing temp.")
-                    os.remove(temp_path)
-                    return
-            except error.HTTPError as e:
-                LOG.error(f"HTTPError {e.code} while downloading {url}: {e.reason}")
-            except error.URLError as e:
-                LOG.error(f"URLError while downloading {url}: {e.reason}")
-            except Exception as e:
-                LOG.error(f"Unexpected error while downloading {url}: {e}")
-            finally:
-                if os.path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                    except Exception:
-                        pass
-            attempt += 1
-            time.sleep(interval)
+                LOG.info("Downloading %s (attempt %d/%d)", url, attempt, attempts)
+                with requests.get(url, stream=True, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)) as resp:
+                    resp.raise_for_status()
+                    expected = resp.headers.get("Content-Length")
+                    written = 0
+                    with open(dest_path, "wb") as fh:
+                        while True:
+                            chunk = resp.raw.read(CHUNK_SIZE)
+                            if not chunk:
+                                break
+                            fh.write(chunk)
+                            written += len(chunk)
+                    if expected is not None and written != int(expected):
+                        raise OSError(f"incomplete transfer: received {written} of {expected} bytes")
+                    return resp.headers
+            except requests.HTTPError as exc:
+                last_error = f"HTTP {exc.response.status_code}"
+            except requests.Timeout:
+                last_error = "timed out"
+            except requests.ConnectionError as exc:
+                last_error = f"connection error: {exc}"
+            except (requests.RequestException, OSError) as exc:
+                last_error = str(exc)
+            if os.path.exists(dest_path):
+                os.remove(dest_path)
+            LOG.warning("Attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)
+            time.sleep(self.download_attempt_interval)
+        raise DownloadError(f"Failed to download {url} after {attempts} attempt(s): {last_error}")
 
-        if self.last_hour and self.subhourly_avg:
-            LOG.warning(f"Failed to download after {max_attempts} attempts: {url}")
-            LOG.warning(
-                "This MRMS file is not required to fill in the latest AnA cycle hour for "
-                "sub-hourly averaging method. Will use HRRR instead."
-            )
-        else:
-            raise DownloadError(f"Failed to download {url} after {max_attempts} attempt(s)")
+    @staticmethod
+    def _publish(temp_path: str, out_path: str) -> None:
+        """Move a completed temporary file into place without clobbering a concurrent writer."""
+        try:
+            os.link(temp_path, out_path)
+        except FileExistsError:
+            LOG.info("%s already exists; another process wrote it first.", out_path)
+        os.remove(temp_path)
+
+    def _download_file(self, url: str, out_path: str) -> bool:
+        """
+        Download remote URL to a temporary path and publish it atomically.
+
+        Returns True when the file was published, False when a tolerated sub-hourly file is missing.
+        Raises DownloadError otherwise.
+        """
+        out_dir: str = os.path.dirname(out_path)
+        os.makedirs(out_dir, exist_ok=True)
+        temp_path: str = os.path.join(out_dir, f".{os.path.basename(out_path)}.tmp.{uuid.uuid4()}")
+        try:
+            self._fetch(url, temp_path)
+            self._publish(temp_path, out_path)
+        except DownloadError as exc:
+            if self.last_hour and self.subhourly_avg:
+                LOG.warning(
+                    "%s. This file is not required for the latest AnA hour when sub-hourly averaging; "
+                    "continuing without it.", exc,
+                )
+                return False
+            raise
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        LOG.info("Downloaded %s", out_path)
+        return True
 
     def _check_data_availability(self) -> bool:
         """Check forecast file availability without fetching content; return True if all files exist."""
@@ -393,7 +426,7 @@ class ForecastDownloader(ABC):
         while attempt < max_attempts:
             try:
                 LOG.info(f"Attempt {attempt + 1}: Pinging {url} for availability...")
-                response: requests.Response = requests.head(url, timeout=10)
+                response: requests.Response = requests.head(url, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
 
                 if response.status_code == requests.codes.ok:
                     LOG.info(f"File is available: {url}")
