@@ -12,7 +12,7 @@ import uuid
 import zlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import requests
 import urllib3
