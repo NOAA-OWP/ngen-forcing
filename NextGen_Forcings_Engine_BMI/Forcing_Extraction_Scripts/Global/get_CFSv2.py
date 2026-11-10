@@ -7,6 +7,15 @@ class CFSv2Downloader(ForecastDownloader):
     default_lookback = 24
     default_cleanback = 720
     default_lagback = 6
+    ensemble_members = ("01", "02", "03", "04")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.ens_number not in self.ensemble_members:
+            raise ValueError(
+                f"CFSv2 requires an ensemble member in {', '.join(self.ensemble_members)} "
+                f"(cfsEnsNumber / --ensNumber); got {self.ens_number!r}."
+            )
 
     @property
     def base_url(self):
