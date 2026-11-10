@@ -184,6 +184,11 @@ class ForecastDownloader(ABC):
         """Hook called after downloading completes for a specific cycle."""
         pass
 
+    def _protected_cycles(self) -> typing.Iterator[datetime]:
+        """Cycle times whose data must survive cleanup: the processing window and anything newer."""
+        for hour in range(self.lookback_hours, -1, -1):
+            yield self.start_time - timedelta(hours=hour)
+
     def _url_name_pairs(self, d_start: datetime, target: typing.Any) -> list[tuple[str, str]]:
         result = self.build_file_url_and_name(d_start, target, self.ens_number)
         if isinstance(result, tuple):
@@ -202,20 +207,27 @@ class ForecastDownloader(ABC):
                     yield d_start, url, os.path.join(output_dir, filename)
 
     def _cleanup_old_data(self) -> None:
-        """Clean up old forecast cycles using timestamp or recursive pruning."""
+        """Remove output directories of cycles older than the window, never touching data the window needs."""
+        if self.cleanback_hours <= self.lookback_hours:
+            return
+        out_root = os.path.normpath(self.out_dir)
+        keep = {
+            os.path.normpath(self.build_output_dir(d, self.ens_number))
+            for d in self._protected_cycles()
+            if self.should_process_hour(d)
+        }
         for hour in range(self.cleanback_hours, self.lookback_hours, -1):
-            d_start: datetime = self.start_time - timedelta(hours=hour)
+            d_start = self.start_time - timedelta(hours=hour)
             if not self.should_process_hour(d_start):
                 continue
-
+            path = os.path.normpath(self.build_output_dir(d_start, self.ens_number))
+            if path == out_root or path in keep or any(k.startswith(path + os.sep) for k in keep):
+                continue
             if self.recursive_cleanup:
-                leaf_dir: str = self.build_output_dir(d_start, self.ens_number)
-                self._remove_dir_and_empty_parents(leaf_dir, levels=2)
-            else:
-                dir_path: str = self.build_output_dir(d_start, self.ens_number)
-                if os.path.isdir(dir_path):
-                    LOG.debug(f"Removing old data: {dir_path}")
-                    shutil.rmtree(dir_path)
+                self._remove_dir_and_empty_parents(path, levels=2)
+            elif os.path.isdir(path):
+                LOG.debug("Removing old data: %s", path)
+                shutil.rmtree(path)
 
     @staticmethod
     def _remove_dir_and_empty_parents(path: str, levels: int = 2) -> None:
