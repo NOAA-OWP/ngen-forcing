@@ -622,6 +622,8 @@ class MRMSMultiSensorDownloader(FixedFileDownloader, ABC):
 
     #: Flat per-pass directories, read for SuppPcp 2, 5, 6 and 10.
     LAYOUT_FLAT: typing.ClassVar[str] = "MultiSensor_QPE_01H_{pass_}_00.00"
+    #: Per-date directories without the product version, read for the MRMS half of SuppPcp 11 and 12.
+    LAYOUT_STAGE4_BLEND: typing.ClassVar[str] = "MultiSensor_QPE_01H_{pass_}/{date}"
 
     local_layout: str = LAYOUT_FLAT
 
