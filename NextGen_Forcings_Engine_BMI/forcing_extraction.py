@@ -28,7 +28,7 @@ FORCING_SRC: dict[int | str, str] = {
     5: "CONUS/get_conus_HRRR.py",
     6: "CONUS/get_conus_RAP.py",
     7: "Global/get_CFSv2.py",
-    8: "Hawaii/get_AWR_Hawaii.py",
+    8: "Hawaii/get_ARW_Hawaii.py",
     13: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
     14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py",
     16: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
