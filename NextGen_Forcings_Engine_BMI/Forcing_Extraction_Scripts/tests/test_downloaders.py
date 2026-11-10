@@ -411,3 +411,25 @@ def test_validate_rejects_bad_configs(kw, match):
 def test_supp_dirs_must_match_supp_ids():
     with pytest.raises(ValueError, match="SuppPcpDirectories"):
         fe.build_jobs(config(supp_precip_forcings=[1, 6], supp_precip_dirs=["/only-one"]))
+
+
+# ----------------------------------------------------------------------------- retired products
+
+NAM_AK = "Alaska/get_prod_NAM_Nest_Alaska.py"
+
+
+def test_retired_product_fails_after_retirement_without_requests(server, tmp_path):
+    with pytest.raises(fdb.DownloadError, match="retired on 2026-11-03"):
+        make(NAM_AK, tmp_path, start=dt.datetime(2026, 11, 10, 13)).run()
+    assert server.gets == []
+
+
+def test_retired_product_still_downloads_earlier_cycles(server, tmp_path):
+    server.serve_all = True
+    make(NAM_AK, tmp_path, start=dt.datetime(2026, 11, 2, 13), max_forecast_hour=1).run()
+    assert server.gets == ["https://noaa-nam-pds.s3.amazonaws.com/nam.20261102/nam.t12z.alaskanest.hiresf01.tm00.grib2"]
+
+
+def test_retired_product_reported_missing_in_check_mode(server, tmp_path, caplog):
+    assert make(NAM_AK, tmp_path, start=dt.datetime(2026, 11, 10, 13), check_file_availability=1).run() is False
+    assert server.heads == [] and "retired on 2026-11-03" in caplog.text

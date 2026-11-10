@@ -45,6 +45,8 @@ Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.p
 | **supp12** | CONUS | Stage IV + MRMS | `CONUS/get_conus_StageIV.py` (+ MRMS, see below) | NOMADS HTTPS | hourly analyses |
 | **supp15** | Puerto Rico | NBM Puerto Rico APCP | `Puerto_Rico/get_prod_NBM_Puerto_Rico.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
 
+> **Retired products**: NAM (forcings 13-17 and AnA 13/14) and HiResW Hawaii/Puerto Rico (8, 18) were retired on 2026-11-03 and replaced by RRFS ([SCN 26-47](https://www.weather.gov/media/notification/pdf_2026/SCN26-47_Updated_Retire_NAM_SREF_HREF_HiresW_NAM_MOS.aab.pdf), [SCN 26-48](https://www.weather.gov/media/notification/pdf_2026/scn26-048_Updated_RRFS_and_REFS_Implementation_aae.pdf)). Their downloaders still fetch cycles up to the last one (2026-11-03 06Z), for retrospective runs, and fail immediately for later cycles. The S3 NAM archive (`noaa-nam-pds`) holds the Alaska, Hawaii and Puerto Rico nests; HiResW Hawaii/Puerto Rico was only on NOMADS, which keeps about two days, so its history is not available from this source.
+
 ---
 
 ## Analysis & Assimilation Sources (`AnAFlag: 1`)

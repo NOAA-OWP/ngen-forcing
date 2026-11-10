@@ -39,6 +39,15 @@ SNIFF_BYTES: int = 4096
 REQUEST_HEADERS: dict[str, str] = {"Accept-Encoding": "identity"}
 
 
+#: NAM and HiResW (except Guam) ended with the RRFS implementation on 2026-11-03; the last NAM cycle
+#: in the S3 archive is 06Z that day. Earlier cycles are still fetched, for retrospective runs.
+NAM_HIRESW_RETIRED_AFTER = datetime(2026, 11, 3, 6)
+NAM_HIRESW_RETIREMENT_NOTE = (
+    "NAM and HiResW were retired on 2026-11-03 and replaced by RRFS "
+    "(NWS Service Change Notices 26-47 and 26-48)"
+)
+
+
 class DownloadError(RuntimeError):
     """A required file could not be retrieved after all attempts."""
 
@@ -132,6 +141,11 @@ class ForecastDownloader(ABC):
     default_lookback: int = 24
     default_cleanback: int = 240
     default_lagback: int = 6
+
+    #: Last cycle the upstream product exists for, if it has been retired; later cycles fail at once.
+    retired_after: typing.ClassVar[datetime | None] = None
+    #: Why the product ended, with a reference; included in the error for later cycles.
+    retirement_note: typing.ClassVar[str] = ""
 
     def __init__(
         self,
@@ -342,6 +356,13 @@ class ForecastDownloader(ABC):
                 for part in self._part_urls(url, path):
                     yield d_start, part, path
 
+    def retirement_problem(self, d_start: datetime) -> str | None:
+        """Why no data can exist for cycle ``d_start``, if the product was retired before it."""
+        if self.retired_after is None or d_start <= self.retired_after:
+            return None
+        return (f"{type(self).__name__}: no data after the {self.retired_after:%Y-%m-%d %HZ} cycle "
+                f"({self.retirement_note}); cannot supply {d_start:%Y-%m-%d %HZ}")
+
     def _warn_nothing_processed(self) -> None:
         first = self.start_time - timedelta(hours=self.lookback_hours)
         last = self.start_time - timedelta(hours=self.effective_lagback() + 1)
@@ -402,6 +423,9 @@ class ForecastDownloader(ABC):
         processed = 0
         for d_start, files in self._cycles():
             processed += 1
+            problem = self.retirement_problem(d_start)
+            if problem:
+                raise DownloadError(problem)
             self.pre_download_hook(d_start)
             for url, out_path in files:
                 if os.path.isfile(out_path):
@@ -518,6 +542,11 @@ class ForecastDownloader(ABC):
         total_files_checked: int = 0
         available_files_count: int = 0
         for d_start, files in self._cycles():
+            problem = self.retirement_problem(d_start)
+            if problem:
+                LOG.error("%s", problem)
+                total_files_checked += sum(len(self._part_urls(u, p)) for u, p in files)
+                continue
             self.pre_download_hook(d_start)
             all_files_available: bool = True
             for url, path in files:
@@ -682,6 +711,9 @@ class MRMSMultiSensorDownloader(FixedFileDownloader, ABC):
 
 class NAMNestAnADownloader(ForecastDownloader, ABC):
     """NAM nest AnA: forecast hours 1-6 of the 00/06/12/18Z cycle covering each hour, for one nest."""
+
+    retired_after = NAM_HIRESW_RETIRED_AFTER
+    retirement_note = NAM_HIRESW_RETIREMENT_NOTE
 
     #: Nest name used in NAM file names, e.g. hawaiinest or priconest.
     domain: str = ""

@@ -1,8 +1,14 @@
 import os
-from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
+from Forcing_Extraction_Scripts.forecast_download_base import (
+    NAM_HIRESW_RETIRED_AFTER,
+    NAM_HIRESW_RETIREMENT_NOTE,
+    ForecastDownloader,
+)
 
 class ARWPuertoRicoDownloader(ForecastDownloader):
     """Downloader for WRF-ARW 2.5 km Puerto Rico forecasts."""
+    retired_after = NAM_HIRESW_RETIRED_AFTER
+    retirement_note = NAM_HIRESW_RETIREMENT_NOTE
 
     @property
     def base_url(self):
