@@ -6,12 +6,13 @@ Extracts and concatenates operational GRIB2 bins for temperature, wind, and prec
 from __future__ import annotations
 
 import datetime
+import email.utils
 import logging
 import os
 import shutil
 import uuid
 
-from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
+from Forcing_Extraction_Scripts.forecast_download_base import DownloadError, ForecastDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,15 @@ EXTENDED_PERIOD = "VP.004-007"
 
 
 class NDFDConusDownloader(ForecastDownloader):
-    """Downloader implementation for operational CONUS NDFD forecasts."""
+    """
+    Downloader implementation for operational CONUS NDFD forecasts.
+
+    The operational feed (``opnl/AR.conus``) only holds the latest issuance under fixed names, so a
+    cycle can only be populated while that issuance is close to the cycle time.
+    """
+
+    default_lookback = 6
+    default_lagback = 0
 
     #: Engine field tag (as read by find_ndfd_neighbors) -> operational bin file.
     FIELD_MAP: dict[str, str] = {
@@ -38,6 +47,9 @@ class NDFDConusDownloader(ForecastDownloader):
         "wspd": [PRIMARY_PERIOD, EXTENDED_PERIOD],
         "qpf": [PRIMARY_PERIOD],
     }
+
+    #: Largest accepted difference between the upstream issuance time and the cycle being filled.
+    MAX_ISSUANCE_OFFSET = datetime.timedelta(hours=6)
 
     @property
     def base_url(self) -> str:
@@ -74,6 +86,23 @@ class NDFDConusDownloader(ForecastDownloader):
             for vp in self.FIELD_VALID_PERIODS[field]:
                 yield d_current, primary_url.replace(PRIMARY_PERIOD, vp), local_path
 
+    def pre_download_hook(self, d_start: datetime.datetime) -> None:
+        self._cycle = d_start
+
+    def _check_issuance(self, headers, url: str) -> None:
+        """Refuse an upstream issuance that does not belong to the cycle being filled."""
+        last_modified = headers.get("Last-Modified")
+        if not last_modified:
+            return
+        issued = email.utils.parsedate_to_datetime(last_modified).astimezone(datetime.timezone.utc)
+        cycle = self._cycle.replace(tzinfo=datetime.timezone.utc)
+        if abs(issued - cycle) > self.MAX_ISSUANCE_OFFSET:
+            raise DownloadError(
+                f"{url} was issued at {issued:%Y-%m-%d %H:%M} UTC, more than "
+                f"{self.MAX_ISSUANCE_OFFSET} from cycle {cycle:%Y-%m-%d %H:%M} UTC. The operational NDFD "
+                "feed only holds the latest issuance, so it cannot supply this cycle."
+            )
+
     def _download_file(self, url: str, out_path: str) -> bool:
         """Download every valid period of one field and publish their concatenation, or nothing."""
         field = os.path.basename(out_path)[len("ndfd_conus_"):-len(".grib2")]
@@ -88,7 +117,9 @@ class NDFDConusDownloader(ForecastDownloader):
                 vp_url = f"{self.base_url}/{vp}/{bin_file}"
                 part = os.path.join(out_dir, f".{os.path.basename(out_path)}.{vp}.{token}")
                 parts.append(part)
-                self._fetch(vp_url, part)
+                headers = self._fetch(vp_url, part)
+                if vp == PRIMARY_PERIOD:
+                    self._check_issuance(headers, vp_url)
             with open(temp_out, "wb") as outfile:
                 for part in parts:
                     with open(part, "rb") as infile:
