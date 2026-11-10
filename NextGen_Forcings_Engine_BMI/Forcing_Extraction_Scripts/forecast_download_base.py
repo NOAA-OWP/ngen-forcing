@@ -102,8 +102,6 @@ class ForecastDownloader(ABC):
 
         self.last_hour: bool | None = None
 
-        os.makedirs(self.out_dir, exist_ok=True)
-
     def effective_lagback(self) -> int:
         """Return the lag-back (in hours) that ends the processing window; subclasses may override."""
         return self.lagback_hours
