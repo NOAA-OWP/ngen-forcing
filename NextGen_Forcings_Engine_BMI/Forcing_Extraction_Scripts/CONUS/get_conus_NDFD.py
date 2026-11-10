@@ -8,13 +8,15 @@ from __future__ import annotations
 import datetime
 import logging
 import os
-from pathlib import Path
-import typing
-import requests
+import shutil
+import uuid
 
 from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 
 logger = logging.getLogger(__name__)
+
+PRIMARY_PERIOD = "VP.001-003"
+EXTENDED_PERIOD = "VP.004-007"
 
 
 class NDFDConusDownloader(ForecastDownloader):
@@ -31,10 +33,10 @@ class NDFDConusDownloader(ForecastDownloader):
     # QPF is only produced operationally through 72 hours (VP.001-003).
     # Instantaneous elements (TMP, WDIR, WSPD) extend through Day 7 (VP.004-007).
     FIELD_VALID_PERIODS: dict[str, list[str]] = {
-        "tmp": ["VP.001-003", "VP.004-007"],
-        "wdir": ["VP.001-003", "VP.004-007"],
-        "wspd": ["VP.001-003", "VP.004-007"],
-        "qpf": ["VP.001-003"],
+        "tmp": [PRIMARY_PERIOD, EXTENDED_PERIOD],
+        "wdir": [PRIMARY_PERIOD, EXTENDED_PERIOD],
+        "wspd": [PRIMARY_PERIOD, EXTENDED_PERIOD],
+        "qpf": [PRIMARY_PERIOD],
     }
 
     @property
@@ -44,10 +46,6 @@ class NDFDConusDownloader(ForecastDownloader):
     def should_process_hour(self, d_current: datetime.datetime) -> bool:
         """Process 6-hourly operational cycles (00, 06, 12, 18 UTC)."""
         return d_current.hour in (0, 6, 12, 18)
-
-    def get_valid_cycles(self, cycle_time: datetime.datetime) -> list[datetime.datetime]:
-        """NDFD operates continuously; cycles align to 6-hour NextGen steps."""
-        return [cycle_time]
 
     def get_download_targets(self, d_current: datetime.datetime) -> list[str]:
         """Return the field tags expected by the engine."""
@@ -64,61 +62,44 @@ class NDFDConusDownloader(ForecastDownloader):
         target: str,
         _=None,
     ) -> tuple[str, str]:
-        """Return primary VP.001-003 URL for availability ping and local filename."""
-        bin_file = self.FIELD_MAP.get(target, f"ds.{target.lower()}.bin")
-        url = f"{self.base_url}/VP.001-003/{bin_file}"
+        """Return the primary-period URL (used for availability checks) and the local filename."""
+        url = f"{self.base_url}/{PRIMARY_PERIOD}/{self.FIELD_MAP[target]}"
         filename = f"ndfd_conus_{target}.grib2"
         return url, filename
 
-    def _execute_multi_vp_download(self, url: str, out_file: str, attempt_limit: int = 10, interval: int = 10) -> bool:
-        """Download and concatenate GRIB2 records across supported valid periods."""
-        base_name = os.path.basename(out_file)
-        field = base_name.replace("ndfd_conus_", "").replace(".grib2", "")
-        bin_file = self.FIELD_MAP.get(field)
+    def iter_remote_files(self):
+        """Yield every valid-period part; the local file is their concatenation."""
+        for d_current, primary_url, local_path in super().iter_remote_files():
+            field = os.path.basename(local_path)[len("ndfd_conus_"):-len(".grib2")]
+            for vp in self.FIELD_VALID_PERIODS[field]:
+                yield d_current, primary_url.replace(PRIMARY_PERIOD, vp), local_path
 
-        valid_periods = self.FIELD_VALID_PERIODS.get(field, ["VP.001-003"])
-        if field == "qpf":
-            logger.info("NDFD QPF (APCP) is capped at 72 hours (VP.001-003) by operational design; omitting extended periods.")
-
-        out_path = Path(out_file)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_out = out_path.with_name(f".{out_path.name}.tmp")
-
-        headers = {"User-Agent": "Mozilla/5.0 (NextGen-Forcing-Engine)"}
-        base_success = False
-
-        with open(temp_out, "wb") as outfile:
-            for vp in valid_periods:
+    def _download_file(self, url: str, out_path: str) -> bool:
+        """Download every valid period of one field and publish their concatenation, or nothing."""
+        field = os.path.basename(out_path)[len("ndfd_conus_"):-len(".grib2")]
+        bin_file = self.FIELD_MAP[field]
+        out_dir = os.path.dirname(out_path)
+        os.makedirs(out_dir, exist_ok=True)
+        token = uuid.uuid4()
+        parts: list[str] = []
+        temp_out = os.path.join(out_dir, f".{os.path.basename(out_path)}.tmp.{token}")
+        try:
+            for vp in self.FIELD_VALID_PERIODS[field]:
                 vp_url = f"{self.base_url}/{vp}/{bin_file}"
-                logger.info(f"Attempting download of {vp}/{bin_file} -> {out_file}")
-                try:
-                    resp = requests.get(vp_url, headers=headers, stream=True, timeout=30)
-                    if resp.status_code == 200:
-                        for chunk in resp.iter_content(chunk_size=1048576):
-                            if chunk:
-                                outfile.write(chunk)
-                        logger.info(f"Appended {vp}/{bin_file} to {out_file}")
-                        if vp == "VP.001-003":
-                            base_success = True
-                    else:
-                        logger.warning(f"Unexpected HTTP {resp.status_code} for {vp_url}")
-                except Exception as exc:
-                    logger.warning(f"Failed to retrieve {vp_url}: {exc}")
-
-        if base_success and temp_out.stat().st_size > 0:
-            temp_out.replace(out_path)
-            logger.info(f"Consolidated download complete: {out_file} ({out_path.stat().st_size} bytes)")
-            return True
-        else:
-            if temp_out.exists():
-                temp_out.unlink()
-            return False
-
-    def _download_file(self, *args, **kwargs) -> bool:
-        return self._execute_multi_vp_download(*args, **kwargs)
-
-    def download_file(self, *args, **kwargs) -> bool:
-        return self._execute_multi_vp_download(*args, **kwargs)
+                part = os.path.join(out_dir, f".{os.path.basename(out_path)}.{vp}.{token}")
+                parts.append(part)
+                self._fetch(vp_url, part)
+            with open(temp_out, "wb") as outfile:
+                for part in parts:
+                    with open(part, "rb") as infile:
+                        shutil.copyfileobj(infile, outfile)
+            self._publish(temp_out, out_path)
+        finally:
+            for path in [*parts, temp_out]:
+                if os.path.exists(path):
+                    os.remove(path)
+        logger.info("Downloaded %s (%s)", out_path, ", ".join(self.FIELD_VALID_PERIODS[field]))
+        return True
 
 
 def main() -> None:
