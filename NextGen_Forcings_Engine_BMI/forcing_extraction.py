@@ -13,7 +13,7 @@ from Forcing_Extraction_Scripts.forecast_download_base import (
     ForecastDownloader,
 )
 
-SCRIPT_DIR: Path = Path("./Forcing_Extraction_Scripts")
+SCRIPT_DIR: Path = Path(__file__).resolve().parent / "Forcing_Extraction_Scripts"
 
 #: Forecast-mode (AnAFlag 0) downloaders, keyed by InputForcings value or "supp<SuppPcp>".
 FORCING_SRC: dict[int | str, str] = {
