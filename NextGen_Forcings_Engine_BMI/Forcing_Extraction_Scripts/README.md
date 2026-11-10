@@ -18,26 +18,32 @@ A failed download raises `DownloadError`; the standalone scripts and `forcing_ex
 
 ---
 
-## Registered Forecast Forcing Datasets
+## Registered Forecast Forcing Datasets (`AnAFlag: 0`)
 
-Each standard forecast pipeline is indexed by an operational ID registered in `NextGen_Forcings_Engine_BMI/forcing_extraction.py`:
+Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.py`. Downloads are limited to the hours needed for `ForecastInputHorizons`.
 
-| Forcing ID | Domain | Model / Product | Downloader Class / Script | Source Endpoint | Supported Forecast Horizon |
+| Forcing ID | Domain | Model / Product | Script | Source Endpoint | Forecast Hours Available |
 |:---:|:---|:---|:---|:---|:---:|
-| **1** | CONUS | HRRR | `CONUS/get_HRRR.py` | AWS NODD / NOMADS | 1–48 Hours |
-| **2** | CONUS | RAP | `CONUS/get_RAP.py` | AWS NODD / NOMADS | 1–21 Hours |
-| **3** | CONUS | NAM Nest | `CONUS/get_NAM_Nest.py` | NOMADS / AWS S3 | 1–60 Hours |
-| **4** | Global | GFS | `Global/get_GFS.py` | NOMADS / AWS S3 | 1–384 Hours |
-| **7** | Global | CFSv2 | `Global/get_CFSv2.py` | NOMADS | Seasonal / Subseasonal |
-| **8** | Hawaii | HIRESW WRF-ARW | `Hawaii/get_AWR_Hawaii.py` | NOAA NOMADS HTTPS | 1–48 Hours |
-| **13** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | NOMADS / AWS S3 | 1–60 Hours |
-| **14** | Puerto Rico | NAM Nest PR | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | NOMADS / AWS S3 | 1–60 Hours |
-| **16** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | NOMADS / AWS S3 | 1–60 Hours |
-| **17** | Puerto Rico | NAM Nest PR | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | NOMADS / AWS S3 | 1–60 Hours |
-| **18** | Puerto Rico | HIRESW WRF-ARW | `Puerto_Rico/get_ARW_Puerto_Rico.py` | NOAA NOMADS HTTPS | 1–48 Hours |
-| **19** | Alaska | Alaska HRRR | `Alaska/get_Alaska_HRRR.py` | AWS NODD / NOMADS | 1–48 Hours |
-| **24** | CONUS | NBM CONUS | `CONUS/get_prod_NBM_Conus.py` | AWS NODD / NOMADS | 1–264 Hours |
-| **25** | CONUS | NDFD CONUS | `CONUS/get_conus_NDFD.py` | NOAA NDFD AWS S3 PDS | Up to 168 Hours (Day 7) |
+| **3** | Global | GFS | `Global/get_prod_GFS.py` | AWS S3 (`noaa-gfs-bdp-pds`) | 1–384 |
+| **5** | CONUS | HRRR | `CONUS/get_conus_HRRR.py` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
+| **6** | CONUS | RAP (`pgrb` and `bgrb`) | `CONUS/get_conus_RAP.py` | AWS S3 (`noaa-rap-pds`) | 0–51 (03/09/15/21Z), 0–18 otherwise |
+| **7** | Global | CFSv2 (members 01–04) | `Global/get_CFSv2.py` | AWS S3 (`noaa-cfs-pds`) | 0–720, 6-hourly |
+| **8** | Hawaii | HIRESW WRF-ARW | `Hawaii/get_ARW_Hawaii.py` | NOMADS HTTPS | 1–48 |
+| **13** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **14** | Puerto Rico | NAM Nest Puerto Rico | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **15** | Alaska | NAM Nest Alaska | `Alaska/get_prod_NAM_Nest_Alaska.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **16** | Hawaii | NAM Nest Hawaii (radiation only) | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **17** | Puerto Rico | NAM Nest Puerto Rico (radiation only) | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **18** | Puerto Rico | HIRESW WRF-ARW | `Puerto_Rico/get_ARW_Puerto_Rico.py` | NOMADS HTTPS | 1–48 |
+| **19** | Alaska | Alaska HRRR | `Alaska/get_Alaska_HRRR.py` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
+| **24** | CONUS | NBM CONUS | `CONUS/get_prod_NBM_Conus.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **25** | CONUS | NDFD CONUS | `CONUS/get_conus_NDFD.py` | AWS S3 (`noaa-ndfd-pds`, latest issuance only) | Day 1–7 (QPF Day 1–3) |
+| **26** | CONUS | HRRR 15-minute | `CONUS/get_CONUS_HRRR_subhourly.py` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–18 |
+| **supp8** | CONUS | NBM CONUS APCP | `CONUS/get_prod_NBM_Conus.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **supp9** | Alaska | NBM Alaska APCP | `Alaska/get_prod_NBM_Alaska.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **supp11** | Alaska | Stage IV + MRMS | `Alaska/get_Alaska_StageIV.py` (+ MRMS, see below) | NOMADS HTTPS | 6-hourly analyses |
+| **supp12** | CONUS | Stage IV + MRMS | `CONUS/get_conus_StageIV.py` (+ MRMS, see below) | NOMADS HTTPS | hourly analyses |
+| **supp15** | Puerto Rico | NBM Puerto Rico APCP | `Puerto_Rico/get_prod_NBM_Puerto_Rico.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
 
 ---
 
