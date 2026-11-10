@@ -322,6 +322,10 @@ class ForecastDownloader(ABC):
             os.link(temp_path, out_path)
         except FileExistsError:
             LOG.info("%s already exists; another process wrote it first.", out_path)
+        except OSError:
+            # Filesystem without hard links: fall back to an atomic rename.
+            os.replace(temp_path, out_path)
+            return
         os.remove(temp_path)
 
     def _download_file(self, url: str, out_path: str) -> bool:
