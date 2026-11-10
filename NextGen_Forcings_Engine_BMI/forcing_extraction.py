@@ -161,7 +161,8 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
         if supp_id == "supp16":
             # Sub-hourly MRMS cycling also needs hourly MultiSensor MRMS for bias correction.
             add("supp16", f"{out_dir}/MRMS_SubHourly", supp_horizon)
-            add("supp2", f"{out_dir}/MRMS_Hourly", supp_horizon)
+            add("supp2", f"{out_dir}/MRMS_Hourly", supp_horizon,
+                local_layout=MRMSMultiSensorDownloader.LAYOUT_DATED)
         else:
             add(supp_id, out_dir, supp_horizon)
     return jobs
