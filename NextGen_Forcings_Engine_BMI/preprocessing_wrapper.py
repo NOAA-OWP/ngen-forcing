@@ -10,7 +10,9 @@ example usage: python preprocessing_wrapper.py ./standard_ana_config.yml
 from __future__ import annotations
 
 import argparse
+import logging
 import pathlib
+import sys
 import time
 
 from config_models import ConfigOptionsSubset, ForcingExtractionConfig
@@ -55,6 +57,7 @@ def get_options() -> argparse.Namespace:
 
 def main() -> None:
     """Main CLI entrypoint."""
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(asctime)s - %(levelname)s - %(message)s")
     args: argparse.Namespace = get_options()
     execute(forcing_config_input=args.forcing_config_input)
 
