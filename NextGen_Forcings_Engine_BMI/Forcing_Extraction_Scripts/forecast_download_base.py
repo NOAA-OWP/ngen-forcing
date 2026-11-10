@@ -121,7 +121,7 @@ class ForecastDownloader(ABC):
         parser.add_argument("--maxForecastHour", type=int, default=None,
                             help="Download only forecast hours needed to reach this horizon.")
         parser.add_argument("--max_download_attempts", type=int, default=10, help="Number of attempts to download a file.")
-        parser.add_argument("--download_attempt_interval", type=int, default=30, help="Wait time (s) between retries.")
+        parser.add_argument("--download_attempt_interval", type=int, default=10, help="Wait time (s) between retries.")
         parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
         parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
         parser.add_argument("--gfs_extended", action="store_true", default=False, help="Unused; retained for compatibility.")

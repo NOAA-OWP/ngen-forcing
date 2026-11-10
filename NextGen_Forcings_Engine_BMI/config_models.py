@@ -70,7 +70,7 @@ class ForcingExtractionConfig:
     ana_flag: int
     look_back: int
     max_download_attempts: int = 10
-    download_attempt_interval: int = 30
+    download_attempt_interval: int = 10
     check_file_availability: int = 0
 
     @classmethod
@@ -100,6 +100,6 @@ class ForcingExtractionConfig:
             ana_flag=int(data.get("AnAFlag", 0)),
             look_back=int(data.get("LookBack", 0)),
             max_download_attempts=int(data.get("max_download_attempts", 10)),
-            download_attempt_interval=int(data.get("download_attempt_interval", 30)),
+            download_attempt_interval=int(data.get("download_attempt_interval", 10)),
             check_file_availability=int(data.get("check_file_availability", 0)),
         )
