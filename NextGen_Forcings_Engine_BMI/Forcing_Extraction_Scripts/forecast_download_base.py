@@ -540,6 +540,30 @@ class FixedFileDownloader(ForecastDownloader, ABC):
             for spec in self._specs(d_start):
                 yield d_start, self._remote_url(spec), self._local_path(spec)
 
+    def _cleanup_old_data(self) -> None:
+        """Remove files of hours older than the window; files the window needs are never removed."""
+        if self.cleanback_hours <= self.lookback_hours:
+            return
+        keep = {
+            os.path.normpath(self._local_path(spec))
+            for d in self._protected_cycles()
+            if self.should_process_hour(d)
+            for spec in self._specs(d)
+        }
+        for hour in range(self.cleanback_hours, self.lookback_hours, -1):
+            d_start = self.start_time - timedelta(hours=hour)
+            if not self.should_process_hour(d_start):
+                continue
+            for spec in self._specs(d_start):
+                path = os.path.normpath(self._local_path(spec))
+                if path in keep or not os.path.isfile(path):
+                    continue
+                LOG.debug("Removing old file: %s", path)
+                os.remove(path)
+                parent = os.path.dirname(path)
+                if parent != os.path.normpath(str(self.out_dir)) and not os.listdir(parent):
+                    os.rmdir(parent)
+
     def _download_data(self) -> None:
         LOG.info(
             "%s: downloading. lookback: %s lagback: %s",
