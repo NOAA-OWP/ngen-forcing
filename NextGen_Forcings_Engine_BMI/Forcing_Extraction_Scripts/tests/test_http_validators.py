@@ -8,6 +8,7 @@ from email.utils import parsedate_to_datetime
 
 import pytest
 
+from conftest import FakeResponse
 from Forcing_Extraction_Scripts import forecast_download_base as fdb
 from test_downloaders import CYCLE, HRRR_ANA, HRRR_ANA_URL, NDFD, load, make, serve_ndfd
 
@@ -87,6 +88,31 @@ def test_failed_revalidation_keeps_existing_file(server, tmp_path, caplog):
     assert make(STAGE4, tmp_path).run() is True
     assert (tmp_path / "st4_conus.2026111012.01h.grb2").read_bytes() == b"GRIB first"
     assert "keeping the existing file" in caplog.text
+
+
+def test_304_to_unconditional_request_is_reported(server, tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr("requests.get", lambda url, **kw: FakeResponse(url, 304))
+    with pytest.raises(fdb.DownloadError, match="304 Not Modified to a request without conditions"):
+        make(HRRR_ANA, tmp_path).run()
+    assert not (tmp_path / HRRR_PATH).exists()
+
+
+def test_304_with_a_different_etag_is_reported_and_refetched(server, tmp_path, monkeypatch, caplog):
+    server.add(HRRR_ANA_URL, DATA, headers=S3_HEADERS)
+    make(HRRR_ANA, tmp_path).run()
+    new_data = b"GRIB-new-content"
+    server.add(HRRR_ANA_URL, new_data, headers={"ETag": f'"{hashlib.md5(new_data).hexdigest()}"'})
+    original_get = server.get
+
+    def get(url, **kw):
+        if (kw.get("headers") or {}).get("If-None-Match"):
+            return FakeResponse(url, 304, b"", {"ETag": '"something-else"'})
+        return original_get(url, **kw)
+
+    monkeypatch.setattr("requests.get", get)
+    make(HRRR_ANA, tmp_path, revalidate=True, max_download_attempts=2).run()
+    assert (tmp_path / HRRR_PATH).read_bytes() == new_data
+    assert any(r.levelname == "ERROR" and "304 Not Modified with ETag" in r.message for r in caplog.records)
 
 
 def test_md5_mismatch_is_rejected(server, tmp_path, caplog):
