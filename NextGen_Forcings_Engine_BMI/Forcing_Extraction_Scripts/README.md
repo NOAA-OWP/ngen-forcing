@@ -120,3 +120,9 @@ cd ../
 python forcing_extraction.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
 ```
 
+Individual downloaders can also be run directly as modules from `NextGen_Forcings_Engine_BMI/`:
+
+```bash
+python -m Forcing_Extraction_Scripts.CONUS.get_conus_HRRR ./HRRR "2026-11-10 12:00:00" --lookBackHours 6
+```
+
