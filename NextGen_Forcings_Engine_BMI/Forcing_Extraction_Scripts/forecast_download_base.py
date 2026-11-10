@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import requests
+import urllib3
 
 LOG = logging.getLogger(__name__)
 
@@ -363,8 +364,9 @@ class ForecastDownloader(ABC):
                 last_error = "timed out"
             except requests.ConnectionError as exc:
                 last_error = f"connection error: {exc}"
-            except (requests.RequestException, OSError) as exc:
-                last_error = str(exc)
+            except (requests.RequestException, urllib3.exceptions.HTTPError, OSError) as exc:
+                # Errors while streaming the body come from urllib3, not requests.
+                last_error = f"{type(exc).__name__}: {exc}"
             if os.path.exists(dest_path):
                 os.remove(dest_path)
             LOG.warning("Attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)

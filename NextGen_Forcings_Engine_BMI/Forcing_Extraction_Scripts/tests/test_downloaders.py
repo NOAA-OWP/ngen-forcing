@@ -217,6 +217,13 @@ def test_incomplete_transfer_is_rejected(server, tmp_path):
     assert not list((tmp_path / "hrrr.20261110/conus").iterdir())
 
 
+def test_connection_dropped_mid_body_is_retried(server, tmp_path):
+    server.add(HRRR_ANA_URL, b"GRIB-0123456789", fail_times=1, fail_after=5)
+    assert make(HRRR_ANA, tmp_path, max_download_attempts=2).run() is True
+    assert (tmp_path / "hrrr.20261110/conus/hrrr.t12z.wrfsfcf01.grib2").read_bytes() == b"GRIB-0123456789"
+    assert server.gets == [HRRR_ANA_URL] * 2
+
+
 def test_availability_check_reports_without_exiting(server, tmp_path, caplog):
     caplog.set_level(logging.INFO)
     assert make(HRRR_ANA, tmp_path, check_file_availability=1).run() is False
