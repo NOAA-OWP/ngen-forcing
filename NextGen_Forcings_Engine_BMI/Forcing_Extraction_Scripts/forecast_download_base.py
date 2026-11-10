@@ -23,6 +23,9 @@ CONNECT_TIMEOUT: float = 15.0
 #: Seconds to wait between bytes once a response has started.
 READ_TIMEOUT: float = 120.0
 CHUNK_SIZE: int = 1 << 20
+#: Default number of attempts per file, and seconds between attempts.
+DEFAULT_MAX_ATTEMPTS: int = 10
+DEFAULT_ATTEMPT_INTERVAL: int = 10
 #: Bytes read from the start of a file to identify its content.
 SNIFF_BYTES: int = 4096
 #: Ask servers and proxies for the stored bytes, never a transfer-compressed form.
@@ -125,15 +128,15 @@ class ForecastDownloader(ABC):
         out_dir: str | os.PathLike,
         start_time: datetime,
         lookback_hours: int,
-        cleanback_hours: int,
-        lagback_hours: int,
-        ens_number: int | str | None,
-        input_forcing: int | str | None,
-        max_download_attempts: int,
-        download_attempt_interval: int,
-        check_file_availability: int,
-        subhourly_avg: bool,
-        gfs_extended: bool,
+        cleanback_hours: int = 0,
+        lagback_hours: int = 0,
+        ens_number: int | str | None = None,
+        input_forcing: int | str | None = None,
+        max_download_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        download_attempt_interval: int = DEFAULT_ATTEMPT_INTERVAL,
+        check_file_availability: int = 0,
+        subhourly_avg: bool = False,
+        gfs_extended: bool = False,
         max_forecast_hour: int | None = None,
     ) -> None:
         if lookback_hours <= lagback_hours:
@@ -180,8 +183,10 @@ class ForecastDownloader(ABC):
                             help="Forcing identifier (e.g. 6 or supp12); informational only.")
         parser.add_argument("--maxForecastHour", type=int, default=None,
                             help="Download only forecast hours needed to reach this horizon.")
-        parser.add_argument("--max_download_attempts", type=int, default=10, help="Number of attempts to download a file.")
-        parser.add_argument("--download_attempt_interval", type=int, default=10, help="Wait time (s) between retries.")
+        parser.add_argument("--max_download_attempts", type=int, default=DEFAULT_MAX_ATTEMPTS,
+                            help="Number of attempts to download a file.")
+        parser.add_argument("--download_attempt_interval", type=int, default=DEFAULT_ATTEMPT_INTERVAL,
+                            help="Wait time (s) between retries.")
         parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
         parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
         parser.add_argument("--gfs_extended", action="store_true", default=False, help="Unused; retained for compatibility.")

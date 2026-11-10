@@ -90,20 +90,8 @@ def registrations() -> dict[str, list[str]]:
 
 def make_probe_downloader(cls: type[ForecastDownloader], cycle: datetime, out_dir: str) -> ForecastDownloader:
     """Instantiate a downloader whose processing window is exactly ``cycle``."""
-    return cls(
-        out_dir=out_dir,
-        start_time=cycle + timedelta(hours=1),
-        lookback_hours=1,
-        cleanback_hours=0,
-        lagback_hours=0,
-        ens_number=1,
-        input_forcing=None,
-        max_download_attempts=1,
-        download_attempt_interval=0,
-        check_file_availability=1,
-        subhourly_avg=False,
-        gfs_extended=False,
-    )
+    return cls(out_dir=out_dir, start_time=cycle + timedelta(hours=1), lookback_hours=1, ens_number=1,
+               max_download_attempts=1, download_attempt_interval=0, check_file_availability=1)
 
 
 def pick_cycle(cls: type[ForecastDownloader], now: datetime, age_hours: int, out_dir: str) -> datetime | None:

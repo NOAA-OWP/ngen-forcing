@@ -29,11 +29,8 @@ def load(script):
 
 def make(script_or_cls, out_dir, start=CYCLE + dt.timedelta(hours=1), **overrides):
     cls = load(script_or_cls) if isinstance(script_or_cls, str) else script_or_cls
-    params = dict(
-        out_dir=str(out_dir), start_time=start, lookback_hours=1, cleanback_hours=0, lagback_hours=0,
-        ens_number=1, input_forcing=None, max_download_attempts=1, download_attempt_interval=0,
-        check_file_availability=0, subhourly_avg=False, gfs_extended=False,
-    )
+    params = dict(out_dir=str(out_dir), start_time=start, lookback_hours=1, ens_number=1,
+                  max_download_attempts=1, download_attempt_interval=0)
     params.update(overrides)
     return cls(**params)
 
