@@ -311,7 +311,8 @@ class ForecastDownloader(ABC):
             if os.path.exists(dest_path):
                 os.remove(dest_path)
             LOG.warning("Attempt %d/%d for %s failed: %s", attempt, attempts, url, last_error)
-            time.sleep(self.download_attempt_interval)
+            if attempt < attempts:
+                time.sleep(self.download_attempt_interval)
         raise DownloadError(f"Failed to download {url} after {attempts} attempt(s): {last_error}")
 
     @staticmethod
