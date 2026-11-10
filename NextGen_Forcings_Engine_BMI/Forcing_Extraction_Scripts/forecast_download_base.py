@@ -9,6 +9,7 @@ import time
 import typing
 import uuid
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -484,6 +485,15 @@ class ForecastDownloader(ABC):
         return False
 
 
+@dataclass(frozen=True)
+class FileSpec:
+    """One fixed file: its directory on the server, its name, and its directory under ``out_dir``."""
+
+    remote_dir: str
+    filename: str
+    local_dir: str = ""
+
+
 class FixedFileDownloader(ForecastDownloader, ABC):
     """Subclass for MRMS and StageIV datasets with predefined filenames and subdirectories."""
 
@@ -493,17 +503,42 @@ class FixedFileDownloader(ForecastDownloader, ABC):
     def get_download_targets(self, d_start: datetime) -> list[typing.Any]:
         return []
 
+    def build_output_dir(self, d_start: datetime, ens_number: str) -> str:
+        return str(self.out_dir)
+
     @abstractmethod
-    def get_file_specs(self, d_start: datetime) -> list[tuple[str, str]]:
-        """Return a list of (subdir, filename) tuples for files to be downloaded."""
+    def get_file_specs(self, d_start: datetime) -> list[FileSpec | tuple[str, str]]:
+        """
+        Return the files for one hour.
+
+        Either FileSpec entries, or (subdir, filename) tuples where the same subdir is used remotely
+        and under ``out_dir``.
+        """
         pass
+
+    def _specs(self, d_start: datetime) -> list[FileSpec]:
+        specs: list[FileSpec] = []
+        for spec in self.get_file_specs(d_start):
+            if isinstance(spec, FileSpec):
+                specs.append(spec)
+            else:
+                subdir, filename = spec
+                specs.append(FileSpec(subdir, filename, subdir))
+        return specs
+
+    def _remote_url(self, spec: FileSpec) -> str:
+        parts = [self.base_url.rstrip("/"), spec.remote_dir.strip("/"), spec.filename]
+        return "/".join(p for p in parts if p)
+
+    def _local_path(self, spec: FileSpec) -> str:
+        return os.path.join(str(self.out_dir), spec.local_dir, spec.filename)
 
     def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
         for _, d_start in self._window():
             if not self.should_process_hour(d_start):
                 continue
-            for subdir, filename in self.get_file_specs(d_start):
-                yield d_start, os.path.join(self.base_url, subdir, filename), os.path.join(self.out_dir, subdir, filename)
+            for spec in self._specs(d_start):
+                yield d_start, self._remote_url(spec), self._local_path(spec)
 
     def _download_data(self) -> None:
         LOG.info(
@@ -518,23 +553,18 @@ class FixedFileDownloader(ForecastDownloader, ABC):
             if not self.should_process_hour(d_start):
                 continue
             processed += 1
-            for subdir, filename in self.get_file_specs(d_start):
-                full_dir: str = os.path.join(self.out_dir, subdir)
-                os.makedirs(full_dir, exist_ok=True)
-                url: str = os.path.join(self.base_url, subdir, filename)
-                out_path: str = os.path.join(full_dir, filename)
-
+            for spec in self._specs(d_start):
+                out_path = self._local_path(spec)
                 if os.path.isfile(out_path):
                     LOG.debug("Skipping existing: %s", out_path)
                     continue
-
-                self._download_file(url, out_path)
+                self._download_file(self._remote_url(spec), out_path)
 
         if processed == 0:
             self._warn_nothing_processed()
 
     def _check_data_availability(self) -> bool:
-        """Check fixed file availability across time range and specs; return True if all files exist."""
+        """Check fixed file availability across the window; return True if all files exist."""
         LOG.info(
             "%s: checking data availability. lookback: %s lagback: %s",
             type(self).__name__, self.lookback_hours, self.effective_lagback(),
@@ -545,14 +575,12 @@ class FixedFileDownloader(ForecastDownloader, ABC):
 
         for hour, d_start in self._window():
             self.last_hour = hour == final_hour
-
             if not self.should_process_hour(d_start):
                 continue
-
-            for subdir, filename in self.get_file_specs(d_start):
+            for spec in self._specs(d_start):
                 total_files_checked += 1
-                url: str = os.path.join(self.base_url, subdir, filename)
-                if self._check_file_availability(url):
+                if self._check_file_availability(self._remote_url(spec)):
                     available_files_count += 1
 
         return self._log_availability_summary(total_files_checked, available_files_count)
+
