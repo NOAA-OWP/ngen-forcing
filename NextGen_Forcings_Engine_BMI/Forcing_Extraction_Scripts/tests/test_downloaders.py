@@ -224,6 +224,19 @@ def test_connection_dropped_mid_body_is_retried(server, tmp_path):
     assert server.gets == [HRRR_ANA_URL] * 2
 
 
+def test_requests_ask_for_identity_encoding(server, tmp_path, monkeypatch):
+    seen = []
+
+    def get(url, **kw):
+        seen.append(kw.get("headers") or {})
+        return server.get(url, **kw)
+
+    monkeypatch.setattr("requests.get", get)
+    server.add(HRRR_ANA_URL)
+    make(HRRR_ANA, tmp_path).run()
+    assert seen and all(h.get("Accept-Encoding") == "identity" for h in seen)
+
+
 def test_availability_check_reports_without_exiting(server, tmp_path, caplog):
     caplog.set_level(logging.INFO)
     assert make(HRRR_ANA, tmp_path, check_file_availability=1).run() is False

@@ -32,6 +32,7 @@ import urllib3
 from Forcing_Extraction_Scripts.forecast_download_base import (
     CONNECT_TIMEOUT,
     READ_TIMEOUT,
+    REQUEST_HEADERS,
     ForecastDownloader,
 )
 
@@ -138,14 +139,15 @@ def looks_like_grib2(data: bytes, gzipped: bool) -> str:
 def probe_url(url: str, session: requests.Session) -> FileProbe:
     timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
     try:
-        head = session.head(url, timeout=timeout, allow_redirects=True)
+        head = session.head(url, timeout=timeout, allow_redirects=True, headers=REQUEST_HEADERS)
     except requests.RequestException as exc:
         return FileProbe(url, False, detail=f"HEAD failed: {exc}")
     size = int(head.headers["Content-Length"]) if "Content-Length" in head.headers else None
     if head.status_code != 200:
         return FileProbe(url, False, head.status_code, size, f"HEAD returned {head.status_code}")
     try:
-        resp = session.get(url, headers={"Range": f"bytes=0-{SNIFF_BYTES - 1}"}, timeout=timeout, stream=True)
+        resp = session.get(url, headers={**REQUEST_HEADERS, "Range": f"bytes=0-{SNIFF_BYTES - 1}"},
+                           timeout=timeout, stream=True)
         data = resp.raw.read(SNIFF_BYTES)
         resp.close()
     except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:

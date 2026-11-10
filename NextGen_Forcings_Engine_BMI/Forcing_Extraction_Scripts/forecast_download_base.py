@@ -22,6 +22,8 @@ CONNECT_TIMEOUT: float = 15.0
 #: Seconds to wait between bytes once a response has started.
 READ_TIMEOUT: float = 120.0
 CHUNK_SIZE: int = 1 << 20
+#: Ask servers and proxies for the stored bytes, never a transfer-compressed form.
+REQUEST_HEADERS: dict[str, str] = {"Accept-Encoding": "identity"}
 
 
 class DownloadError(RuntimeError):
@@ -344,7 +346,8 @@ class ForecastDownloader(ABC):
         for attempt in range(1, attempts + 1):
             try:
                 LOG.info("Downloading %s (attempt %d/%d)", url, attempt, attempts)
-                with requests.get(url, stream=True, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)) as resp:
+                with requests.get(url, stream=True, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+                                  headers=REQUEST_HEADERS) as resp:
                     resp.raise_for_status()
                     expected = resp.headers.get("Content-Length")
                     written = 0
@@ -467,7 +470,8 @@ class ForecastDownloader(ABC):
         last_error = "unknown error"
         for attempt in range(1, attempts + 1):
             try:
-                response: requests.Response = requests.head(url, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
+                response: requests.Response = requests.head(url, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+                                                             headers=REQUEST_HEADERS)
                 if response.status_code == requests.codes.ok:
                     LOG.debug("File is available: %s", url)
                     return True
