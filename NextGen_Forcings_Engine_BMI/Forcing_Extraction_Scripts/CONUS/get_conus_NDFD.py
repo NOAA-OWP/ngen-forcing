@@ -20,20 +20,21 @@ logger = logging.getLogger(__name__)
 class NDFDConusDownloader(ForecastDownloader):
     """Downloader implementation for operational CONUS NDFD forecasts."""
 
+    #: Engine field tag (as read by find_ndfd_neighbors) -> operational bin file.
     FIELD_MAP: dict[str, str] = {
-        "TMP": "ds.temp.bin",
-        "WDIR": "ds.wdir.bin",
-        "WSPD": "ds.wspd.bin",
-        "APCP": "ds.qpf.bin",
+        "tmp": "ds.temp.bin",
+        "wdir": "ds.wdir.bin",
+        "wspd": "ds.wspd.bin",
+        "qpf": "ds.qpf.bin",
     }
 
-    # APCP (QPF) is only produced operationally through 72 hours (VP.001-003).
+    # QPF is only produced operationally through 72 hours (VP.001-003).
     # Instantaneous elements (TMP, WDIR, WSPD) extend through Day 7 (VP.004-007).
     FIELD_VALID_PERIODS: dict[str, list[str]] = {
-        "TMP": ["VP.001-003", "VP.004-007"],
-        "WDIR": ["VP.001-003", "VP.004-007"],
-        "WSPD": ["VP.001-003", "VP.004-007"],
-        "APCP": ["VP.001-003"],
+        "tmp": ["VP.001-003", "VP.004-007"],
+        "wdir": ["VP.001-003", "VP.004-007"],
+        "wspd": ["VP.001-003", "VP.004-007"],
+        "qpf": ["VP.001-003"],
     }
 
     @property
@@ -49,8 +50,8 @@ class NDFDConusDownloader(ForecastDownloader):
         return [cycle_time]
 
     def get_download_targets(self, d_current: datetime.datetime) -> list[str]:
-        """Return the target variable names expected by NextGen."""
-        return list(self.FIELD_MAP.keys())
+        """Return the field tags expected by the engine."""
+        return list(self.FIELD_MAP)
 
     def build_output_dir(self, d_current: datetime.datetime, _=None) -> str:
         """Construct <inDir>/NDFD/YYYYMMDD/wgrbbul/ndfd_conus."""
@@ -76,7 +77,7 @@ class NDFDConusDownloader(ForecastDownloader):
         bin_file = self.FIELD_MAP.get(field)
 
         valid_periods = self.FIELD_VALID_PERIODS.get(field, ["VP.001-003"])
-        if field == "APCP":
+        if field == "qpf":
             logger.info("NDFD QPF (APCP) is capped at 72 hours (VP.001-003) by operational design; omitting extended periods.")
 
         out_path = Path(out_file)
