@@ -608,3 +608,32 @@ class FixedFileDownloader(ForecastDownloader, ABC):
 
         return self._log_availability_summary(total_files_checked, available_files_count)
 
+
+class MRMSMultiSensorDownloader(FixedFileDownloader, ABC):
+    """
+    Hourly MRMS MultiSensor QPE (Pass1 and Pass2) for one MRMS domain.
+
+    The server layout is ``<domain>/MultiSensor_QPE_01H_PassN_00.00/YYYYMMDD/<file>``. The local
+    layout depends on which engine reader consumes the files and is selected by ``local_layout``.
+    """
+
+    #: MRMS domain directory on the server: CONUS, ALASKA, HAWAII or CARIB.
+    region: str = ""
+
+    #: Flat per-pass directories, read for SuppPcp 2, 5, 6 and 10.
+    LAYOUT_FLAT: typing.ClassVar[str] = "MultiSensor_QPE_01H_{pass_}_00.00"
+
+    local_layout: str = LAYOUT_FLAT
+
+    @property
+    def base_url(self) -> str:
+        return f"https://noaa-mrms-pds.s3.amazonaws.com/{self.region}"
+
+    def get_file_specs(self, d_start: datetime) -> list[FileSpec]:
+        date = d_start.strftime("%Y%m%d")
+        specs: list[FileSpec] = []
+        for pass_ in ("Pass1", "Pass2"):
+            product = f"MultiSensor_QPE_01H_{pass_}_00.00"
+            filename = f"MRMS_{product}_{date}-{d_start.strftime('%H')}0000.grib2.gz"
+            specs.append(FileSpec(f"{product}/{date}", filename, self.local_layout.format(pass_=pass_, date=date)))
+        return specs
