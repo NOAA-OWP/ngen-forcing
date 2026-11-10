@@ -32,6 +32,11 @@ class DownloadError(RuntimeError):
     """A required file could not be retrieved after all attempts."""
 
 
+def parse_forcing_id(value: str) -> int | str:
+    """Parse a forcing identifier: plain digits become an int, anything else (e.g. ``supp12``) stays a str."""
+    return int(value) if value.isdigit() else value
+
+
 class ForecastDownloader(ABC):
     """Abstract base class for structured forecast data downloads."""
 
@@ -47,7 +52,7 @@ class ForecastDownloader(ABC):
         cleanback_hours: int,
         lagback_hours: int,
         ens_number: int | str | None,
-        input_forcing: int,
+        input_forcing: int | str | None,
         max_download_attempts: int,
         download_attempt_interval: int,
         check_file_availability: int,
@@ -65,7 +70,7 @@ class ForecastDownloader(ABC):
         self.cleanback_hours: int = cleanback_hours
         self.lagback_hours: int = lagback_hours
         self.ens_number: str = str(ens_number).zfill(2) if ens_number is not None else "00"
-        self.input_forcing: int = input_forcing
+        self.input_forcing: int | str | None = input_forcing
         self.max_download_attempts: int = max(1, int(max_download_attempts))
         self.download_attempt_interval: int = download_attempt_interval
         self.check_file_availability: int = check_file_availability
@@ -91,7 +96,8 @@ class ForecastDownloader(ABC):
         parser.add_argument("--cleanBackHours", type=int, default=cls.default_cleanback)
         parser.add_argument("--lagBackHours", type=int, default=cls.default_lagback)
         parser.add_argument("--ensNumber", type=int, default=None)
-        parser.add_argument("--inputforcing", type=int, required=True)
+        parser.add_argument("--inputforcing", type=parse_forcing_id, default=None,
+                            help="Forcing identifier (e.g. 6 or supp12); informational only.")
         parser.add_argument("--max_download_attempts", type=int, default=10, help="Number of attempts to download a file.")
         parser.add_argument("--download_attempt_interval", type=int, default=30, help="Wait time (s) between retries.")
         parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
@@ -162,7 +168,7 @@ class ForecastDownloader(ABC):
     def build_file_url_and_name(
         self, d_start: datetime, target: typing.Any, ens_number: str
     ) -> tuple[str, str] | list[tuple[str, str]]:
-        """Construct remote file URL and local target filename."""
+        """Construct remote file URL and local target filename (or a list of such pairs)."""
         pass
 
     @property
@@ -178,6 +184,12 @@ class ForecastDownloader(ABC):
         """Hook called after downloading completes for a specific cycle."""
         pass
 
+    def _url_name_pairs(self, d_start: datetime, target: typing.Any) -> list[tuple[str, str]]:
+        result = self.build_file_url_and_name(d_start, target, self.ens_number)
+        if isinstance(result, tuple):
+            return [result]
+        return list(result)
+
     def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
         """Yield (cycle time, remote URL, local path) for every file the processing window needs."""
         for hour in range(self.lookback_hours, self.effective_lagback(), -1):
@@ -186,8 +198,7 @@ class ForecastDownloader(ABC):
                 continue
             output_dir = self.build_output_dir(d_start, self.ens_number)
             for target in self.get_download_targets(d_start):
-                result = self.build_file_url_and_name(d_start, target, self.ens_number)
-                for url, filename in (result if isinstance(result, list) else [result]):
+                for url, filename in self._url_name_pairs(d_start, target):
                     yield d_start, url, os.path.join(output_dir, filename)
 
     def _cleanup_old_data(self) -> None:
@@ -246,34 +257,15 @@ class ForecastDownloader(ABC):
             targets: list[typing.Any] = self.get_download_targets(d_start)
             self.last_hour = (hour == final_hour)
 
-            # Special handling for RAP (input_forcing == 6): RAP requires downloading
-            # multiple file extensions (["pgrb", "bgrb"]) to assemble all mandatory
-            # atmospheric and surface forcing fields into NextGen Forcings Engine BMI.
-            if self.input_forcing == 6:
-                for target in targets:
-                    file_list: list[tuple[str, str]] = typing.cast(
-                        list[tuple[str, str]], self.build_file_url_and_name(d_start, target, self.ens_number)
-                    )
-                    for url, filename in file_list:
-                        out_path: str = os.path.join(output_dir, filename)
-                        LOG.info(f"Looking for file {out_path}")
-                        if os.path.isfile(out_path):
-                            LOG.info(f"Skipping existing: {out_path}")
-                            continue
-                        self._download_file(url, out_path)
-                self.post_download_hook(d_start)
-            else:
-                for target in targets:
-                    url, filename = typing.cast(
-                        tuple[str, str], self.build_file_url_and_name(d_start, target, self.ens_number)
-                    )
-                    out_path = os.path.join(output_dir, filename)
+            for target in targets:
+                for url, filename in self._url_name_pairs(d_start, target):
+                    out_path: str = os.path.join(output_dir, filename)
                     LOG.info(f"Looking for file {out_path}")
                     if os.path.isfile(out_path):
                         LOG.info(f"Skipping existing: {out_path}")
                         continue
                     self._download_file(url, out_path)
-                self.post_download_hook(d_start)
+            self.post_download_hook(d_start)
 
     def _fetch(self, url: str, dest_path: str) -> typing.Mapping[str, str]:
         """
@@ -375,26 +367,8 @@ class ForecastDownloader(ABC):
             self.last_hour = (hour == final_hour)
             all_files_available: bool = True
 
-            # Special handling for RAP (input_forcing == 6): verify upstream availability
-            # across all required file extensions (["pgrb", "bgrb"]) returned as (url, filename) pairs.
-            if self.input_forcing == 6:
-                for target in targets:
-                    file_list = typing.cast(
-                        list[tuple[str, str]], self.build_file_url_and_name(d_start, target, self.ens_number)
-                    )
-                    for url, filename in file_list:
-                        total_files_checked += 1
-                        LOG.info(f"Checking upstream availability for {filename} via HEAD request")
-                        if self._check_file_availability(url):
-                            available_files_count += 1
-                        else:
-                            all_files_available = False
-                            LOG.warning(f"Required file missing from server: {url}")
-            else:
-                for target in targets:
-                    url, filename = typing.cast(
-                        tuple[str, str], self.build_file_url_and_name(d_start, target, self.ens_number)
-                    )
+            for target in targets:
+                for url, filename in self._url_name_pairs(d_start, target):
                     total_files_checked += 1
                     LOG.info(f"Checking upstream availability for {filename} via HEAD request")
                     if self._check_file_availability(url):
