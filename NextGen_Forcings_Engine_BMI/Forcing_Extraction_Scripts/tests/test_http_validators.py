@@ -137,6 +137,39 @@ def test_interrupted_body_resumes_with_range(server, tmp_path):
     assert (tmp_path / HRRR_PATH).read_bytes() == DATA
 
 
+@pytest.mark.parametrize("content_range,match", [
+    ("bytes 0-20/21", "asked for bytes 7- but got"),
+    ("bytes 7-15/21", "stops before the end"),
+    ("bytes 7-20/21", None),
+])
+def test_resumed_range_is_verified(server, tmp_path, monkeypatch, caplog, content_range, match):
+    server.add(HRRR_ANA_URL, DATA, headers=S3_HEADERS, fail_times=1, fail_after=7)
+    original_get = server.get
+
+    def get(url, **kw):
+        response = original_get(url, **kw)
+        if response.status_code == 206:
+            response.headers["Content-Range"] = content_range
+        return response
+
+    monkeypatch.setattr("requests.get", get)
+    make(HRRR_ANA, tmp_path, max_download_attempts=3).run()
+    assert (tmp_path / HRRR_PATH).read_bytes() == DATA
+    errors = [r.message for r in caplog.records if r.levelname == "ERROR"]
+    if match:
+        assert any(match in m for m in errors)
+        assert "Range" not in server.request_headers[-1]  # the partial file was discarded
+    else:
+        assert not errors
+
+
+def test_206_to_request_without_range_is_reported(server, tmp_path, monkeypatch):
+    monkeypatch.setattr("requests.get", lambda url, **kw: FakeResponse(
+        url, 206, DATA, {"Content-Range": f"bytes 0-{len(DATA) - 1}/{len(DATA)}"}))
+    with pytest.raises(fdb.DownloadError, match="206 Partial Content to a request without Range"):
+        make(HRRR_ANA, tmp_path).run()
+
+
 def test_resume_restarts_when_object_changed(server, tmp_path, monkeypatch):
     server.add(HRRR_ANA_URL, DATA, headers=S3_HEADERS, fail_times=1, fail_after=7)
     new_data = b"GRIB-replaced-object"
