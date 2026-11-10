@@ -81,7 +81,7 @@ Identifiers without an entry (for example 22, `supp5`) are skipped with a warnin
 
 ## Configuration & Pipeline Integration
 
-Download parameters are set across YAML configs in `BMI_NextGen_Configs/`:
+Download parameters are set in the YAML configs in `BMI_NextGen_Configs/`:
 
 ```yaml
 # Network resilience parameters
@@ -90,16 +90,13 @@ download_attempt_interval: 10
 check_file_availability: 0
 
 # Forcing specification
-Forcing:
-  - 25  # CONUS NDFD
-ForcingDirectories:
-  - "./NDFD"
-ForecastInputHorizons:
-  - 168
+InputForcings: [25]                 # CONUS NDFD
+InputForcingDirectories: ["./data"] # NDFD files go to ./data/NDFD/YYYYMMDD/wgrbbul/ndfd_conus/
+ForecastInputHorizons: [10080]      # minutes (7 days)
 
 # Supplemental precipitation parameters
 SuppPcp: []
-SuppPcpDirectories: ""
+SuppPcpDirectories: ''
 ```
 
 ## Example to Execute the Workflow
