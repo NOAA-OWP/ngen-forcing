@@ -209,7 +209,7 @@ def check_script(script: str, session: requests.Session, max_bytes: int, per_scr
     except Exception as exc:  # report and continue with the other scripts
         result.error = f"{type(exc).__name__}: {exc}"
         return result
-    result.cycle = chosen.cycle.strftime("%Y-%m-%d %HZ")
+    result.cycle = chosen.cycle.strftime("%Y-%m-%d %HZ") + (f" ({chosen.note})" if chosen.note else "")
     for url in probe_sources.sample(chosen.urls)[:per_script]:
         result.files.append(check_url(url, session, max_bytes))
     return result
@@ -254,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     lines: list[str] = []
     files: list[FileReport] = []
     scripts: list[ScriptReport] = []
-    with requests.Session() as session:
+    with probe_sources.PoliteSession() as session:
         if args.url:
             for url in args.url:
                 f = check_url(url, session, max_bytes)
