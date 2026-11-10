@@ -25,5 +25,4 @@ class NBMAnAPuertoRicoDownloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = NBMAnAPuertoRicoDownloader.from_cli_args()
-    downloader.run()
+    NBMAnAPuertoRicoDownloader.cli_main()

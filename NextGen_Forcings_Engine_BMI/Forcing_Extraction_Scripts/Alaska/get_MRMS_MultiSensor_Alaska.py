@@ -20,5 +20,4 @@ class MRMSMultiSensorAlaskaDownloader(FixedFileDownloader, ABC):
         return specs
 
 if __name__ == "__main__":
-    downloader = MRMSMultiSensorAlaskaDownloader.from_cli_args()
-    downloader.run()
+    MRMSMultiSensorAlaskaDownloader.cli_main()

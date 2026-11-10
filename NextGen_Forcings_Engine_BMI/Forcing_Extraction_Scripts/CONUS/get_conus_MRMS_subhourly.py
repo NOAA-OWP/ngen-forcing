@@ -22,5 +22,4 @@ class MRMS_SubHourlyConusDownloader(FixedFileDownloader, ABC):
         return specs
 
 if __name__ == "__main__":
-    downloader = MRMS_SubHourlyConusDownloader.from_cli_args()
-    downloader.run()
+    MRMS_SubHourlyConusDownloader.cli_main()

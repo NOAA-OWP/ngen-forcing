@@ -24,5 +24,4 @@ class NAMNestHawaiiDownloader(ForecastDownloader):
         return url, filename
 
 if __name__ == "__main__":
-    downloader = NAMNestHawaiiDownloader.from_cli_args()
-    downloader.run()
+    NAMNestHawaiiDownloader.cli_main()

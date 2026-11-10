@@ -24,5 +24,4 @@ class HRRRAnAConusDownloader(ForecastDownloader):
         return url, filename
 
 if __name__ == "__main__":
-    downloader = HRRRAnAConusDownloader.from_cli_args()
-    downloader.run()
+    HRRRAnAConusDownloader.cli_main()

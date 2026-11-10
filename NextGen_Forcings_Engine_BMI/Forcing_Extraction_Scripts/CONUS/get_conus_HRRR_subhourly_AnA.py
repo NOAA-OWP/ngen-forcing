@@ -29,5 +29,4 @@ class HRRRSubhourlyAnADownloader(ForecastDownloader):
         return url, filename
 
 if __name__ == "__main__":
-    downloader = HRRRSubhourlyAnADownloader.from_cli_args()
-    downloader.run()
+    HRRRSubhourlyAnADownloader.cli_main()

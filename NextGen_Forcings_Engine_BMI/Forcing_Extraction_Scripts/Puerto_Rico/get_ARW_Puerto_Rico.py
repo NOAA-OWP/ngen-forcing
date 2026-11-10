@@ -28,5 +28,4 @@ class ARWPuertoRicoDownloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = ARWPuertoRicoDownloader.from_cli_args()
-    downloader.run()
+    ARWPuertoRicoDownloader.cli_main()

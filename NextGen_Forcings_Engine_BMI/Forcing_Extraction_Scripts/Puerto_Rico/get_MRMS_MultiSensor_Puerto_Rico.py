@@ -20,5 +20,4 @@ class MRMSMultiSensorPuertoRicoDownloader(FixedFileDownloader, ABC):
         return specs
 
 if __name__ == "__main__":
-    downloader = MRMSMultiSensorPuertoRicoDownloader.from_cli_args()
-    downloader.run()
+    MRMSMultiSensorPuertoRicoDownloader.cli_main()

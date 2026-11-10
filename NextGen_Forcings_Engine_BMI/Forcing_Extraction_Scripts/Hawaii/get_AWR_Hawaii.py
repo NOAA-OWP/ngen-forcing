@@ -28,5 +28,4 @@ class ARWHawaiiDownloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = ARWHawaiiDownloader.from_cli_args()
-    downloader.run()
+    ARWHawaiiDownloader.cli_main()

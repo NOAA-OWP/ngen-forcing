@@ -28,5 +28,4 @@ class RAPDownloader(ForecastDownloader):
         return results
 
 if __name__ == "__main__":
-    downloader = RAPDownloader.from_cli_args()
-    downloader.run()
+    RAPDownloader.cli_main()

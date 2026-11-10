@@ -31,5 +31,4 @@ class NBMConusDownloader(ForecastDownloader):
         return True
 
 if __name__ == "__main__":
-    downloader = NBMConusDownloader.from_cli_args()
-    downloader.run()
+    NBMConusDownloader.cli_main()

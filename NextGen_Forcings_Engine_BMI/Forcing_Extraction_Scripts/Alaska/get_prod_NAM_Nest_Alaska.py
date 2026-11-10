@@ -24,5 +24,4 @@ class NAMNestAlaskaDownloader(ForecastDownloader):
         return url, filename
 
 if __name__ == "__main__":
-    downloader = NAMNestAlaskaDownloader.from_cli_args()
-    downloader.run()
+    NAMNestAlaskaDownloader.cli_main()
