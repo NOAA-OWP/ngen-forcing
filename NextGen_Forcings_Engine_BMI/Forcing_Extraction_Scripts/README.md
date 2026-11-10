@@ -47,29 +47,35 @@ Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.p
 
 ---
 
-## Analysis & Assimilation (AnA) and Supplemental Precipitation Sources
+## Analysis & Assimilation Sources (`AnAFlag: 1`)
 
-When running in Analysis and Assimilation mode (`ana_flag: 1`) or incorporating supplemental precipitation grids (`SuppPcp`), the engine dispatches downloads via `forcing_ana_src`:
+Registered in `FORCING_ANA_SRC`:
 
-| Key / Identifier | Domain | Description / Product | Extraction Script |
+| Forcing ID | Domain | Product | Script |
 |:---:|:---|:---|:---|
-| **5** | CONUS | HRRR Analysis and Assimilation | `CONUS/get_conus_HRRR_AnA.py` |
-| **6** | CONUS | RAP Analysis and Assimilation | `CONUS/get_conus_RAP_AnA.py` |
-| **13** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` |
-| **14** | Puerto Rico | NAM Nest Puerto Rico AnA | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py` |
+| **5** | CONUS | HRRR f01 | `CONUS/get_conus_HRRR_AnA.py` |
+| **6** | CONUS | RAP f01 (`pgrb` and `bgrb`) | `CONUS/get_conus_RAP_AnA.py` |
+| **13** | Hawaii | NAM Nest Hawaii f01–f06 of the covering 6-hourly cycle | `Hawaii/get_prod_NAM_Nest_Hawaii_AnA.py` |
+| **14** | Puerto Rico | NAM Nest Puerto Rico f01–f06 of the covering 6-hourly cycle | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py` |
 | **19** | Alaska | Alaska HRRR | `Alaska/get_Alaska_HRRR.py` |
-| **20** | Alaska | Alaska HRRR Analysis and Assimilation | `Alaska/get_Alaska_HRRR_AnA.py` |
-| **26** | CONUS | HRRR Subhourly Analysis and Assimilation | `CONUS/get_conus_HRRR_subhourly_AnA.py` |
+| **20** | Alaska | Alaska HRRR f01–f04 | `Alaska/get_Alaska_HRRR_AnA.py` |
+| **26** | CONUS | HRRR 15-minute f01 | `CONUS/get_conus_HRRR_subhourly_AnA.py` |
 | **supp1** | CONUS | MRMS Radar-Only QPE | `CONUS/get_conus_MRMS_Radar.py` |
-| **supp2** | CONUS | MRMS Multi-Sensor QPE (Hourly) | `CONUS/get_conus_MRMS_MultiSensor.py` |
-| **supp6** | Hawaii | MRMS Multi-Sensor Hawaii | `Hawaii/get_MRMS_MultiSensor_Hawaii.py` |
-| **supp10** | Alaska | MRMS Multi-Sensor Alaska | `Alaska/get_MRMS_MultiSensor_Alaska.py` |
-| **supp11** | Alaska | Stage IV Precipitation Alaska | `Alaska/get_Alaska_StageIV.py` |
-| **supp12** | CONUS | Stage IV Precipitation CONUS | `CONUS/get_conus_StageIV.py` |
-| **supp15** | Puerto Rico | NBM Puerto Rico Analysis and Assimilation | `Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py` |
-| **supp16** | CONUS | MRMS Multi-Sensor Subhourly QPE | `CONUS/get_conus_MRMS_subhourly.py` |
+| **supp2** | CONUS | MRMS MultiSensor QPE (hourly) | `CONUS/get_conus_MRMS_MultiSensor.py` |
+| **supp6** | Hawaii | MRMS MultiSensor QPE (hourly) | `Hawaii/get_MRMS_MultiSensor_Hawaii.py` |
+| **supp10** | Alaska | MRMS MultiSensor QPE (hourly) | `Alaska/get_MRMS_MultiSensor_Alaska.py` |
+| **supp11** | Alaska | Stage IV + MRMS | `Alaska/get_Alaska_StageIV.py` (+ MRMS, see below) |
+| **supp12** | CONUS | Stage IV + MRMS | `CONUS/get_conus_StageIV.py` (+ MRMS, see below) |
+| **supp15** | Puerto Rico | NBM Puerto Rico f001 | `Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py` |
+| **supp16** | CONUS | MRMS 2-minute precipitation rate | `CONUS/get_conus_MRMS_subhourly.py` |
 
-> **Note on `supp16`**: When `supp16` is designated, the extraction workflow dynamically binds and fetches both subhourly (`supp16`) and hourly (`supp2`) MRMS files under respective `/MRMS_SubHourly` and `/MRMS_Hourly` subdirectories.
+Identifiers without an entry (for example 22, `supp5`) are skipped with a warning.
+
+> **`supp11` / `supp12`**: the engine reads these as one `"<Stage IV dir>,<MRMS dir>"` input, so they must be the only `SuppPcp` option. Stage IV is downloaded into the first `SuppPcpDirectories` entry and MRMS MultiSensor (Alaska or CONUS) into the second, under `MultiSensor_QPE_01H_PassN/YYYYMMDD/`.
+>
+> **`supp16`**: sub-hourly MRMS is downloaded under `<dir>/MRMS_SubHourly/YYYYMMDD/`, and hourly MultiSensor MRMS for bias correction under `<dir>/MRMS_Hourly/MultiSensor_QPE_01H_PassN_00.00/YYYYMMDD/`.
+>
+> **MRMS MultiSensor** for `supp2`, `supp6` and `supp10` is stored flat under `MultiSensor_QPE_01H_PassN_00.00/`.
 
 ---
 
