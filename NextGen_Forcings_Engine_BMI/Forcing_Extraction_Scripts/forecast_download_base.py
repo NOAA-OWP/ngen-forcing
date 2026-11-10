@@ -101,13 +101,12 @@ class ForecastDownloader(ABC):
         self.max_forecast_hour: int | None = max_forecast_hour
 
         self.last_hour: bool | None = None
-        self.d_now: datetime = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
         os.makedirs(self.out_dir, exist_ok=True)
 
     def effective_lagback(self) -> int:
-        """Determines effective lag back window to avoid unpopulated upstream cycles."""
-        return getattr(self, "_override_lagback", self.lagback_hours)
+        """Return the lag-back (in hours) that ends the processing window; subclasses may override."""
+        return self.lagback_hours
 
     @classmethod
     def from_cli_args(cls) -> typing.Self:
