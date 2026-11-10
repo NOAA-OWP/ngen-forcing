@@ -82,6 +82,8 @@ class ForcingExtractionConfig:
     @classmethod
     def from_dict(cls, data: dict[str, typing.Any]) -> typing.Self:
         raw_bdate = data.get("RefcstBDateProc")
+        if isinstance(raw_bdate, int):
+            raw_bdate = str(raw_bdate)
         if isinstance(raw_bdate, str):
             try:
                 b_date = datetime.datetime.strptime(raw_bdate, "%Y-%m-%d %H:%M:%S")
