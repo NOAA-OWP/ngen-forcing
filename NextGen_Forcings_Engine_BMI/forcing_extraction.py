@@ -109,12 +109,14 @@ def _supp_dirs(cfg: ForcingExtractionConfig) -> list[str]:
 def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
     """Translate a configuration into the list of downloader invocations it needs."""
     src = FORCING_SRC if cfg.ana_flag == 0 else FORCING_ANA_SRC
+    mode = "forecast" if cfg.ana_flag == 0 else "AnA"
     horizons = list(cfg.fcst_input_horizons)
     jobs: list[ExtractionJob] = []
 
     def add(forcing: int | str, out_dir: str, horizon: int | None) -> None:
         script = src.get(forcing)
         if script is None:
+            LOG.warning("No downloader is registered for forcing %r in %s mode; skipping it.", forcing, mode)
             return
         jobs.append(ExtractionJob(forcing, script, out_dir, horizon))
 
