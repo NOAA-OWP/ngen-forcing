@@ -21,9 +21,11 @@ import json
 import logging
 import sys
 import tempfile
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import urllib3
@@ -49,6 +51,26 @@ SEARCH_HOURS = 48
 
 TIMEOUT = (CONNECT_TIMEOUT, READ_TIMEOUT)
 
+#: Hosts with request-rate limits: (minimum seconds between requests, files sampled per script).
+RATE_LIMITED_HOSTS: dict[str, tuple[float, int]] = {"nomads.ncep.noaa.gov": (5.0, 1)}
+
+
+class PoliteSession(requests.Session):
+    """A requests session that spaces out requests to rate-limited hosts."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_request: dict[str, float] = {}
+
+    def request(self, method, url, *args, **kwargs):
+        host = urlparse(url).netloc
+        if host in RATE_LIMITED_HOSTS:
+            wait = self._last_request.get(host, 0.0) + RATE_LIMITED_HOSTS[host][0] - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            self._last_request[host] = time.monotonic()
+        return super().request(method, url, *args, **kwargs)
+
 
 def head(session: requests.Session, url: str) -> requests.Response:
     """HEAD ``url`` as the downloaders would (identity encoding, timeouts)."""
@@ -71,6 +93,7 @@ class ScriptCycle:
     downloader: str
     cycle: datetime
     urls: list[str]
+    note: str = ""
 
 
 @dataclass
@@ -121,8 +144,15 @@ def make_probe_downloader(cls: type[ForecastDownloader], cycle: datetime, out_di
 
 
 def pick_cycle(cls: type[ForecastDownloader], now: datetime, age_hours: int, out_dir: str) -> datetime | None:
-    """Most recent cycle at least ``age_hours`` old that the downloader would fetch files for."""
+    """
+    Most recent cycle at least ``age_hours`` old that the downloader would fetch files for.
+
+    For a retired product, the search starts at its last cycle instead, so the probe exercises the
+    historical data retrospective runs use.
+    """
     start = (now - timedelta(hours=age_hours)).replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    if cls.retired_after is not None:
+        start = min(start, cls.retired_after)
     for back in range(SEARCH_HOURS):
         cycle = start - timedelta(hours=back)
         if next(make_probe_downloader(cls, cycle, out_dir).iter_remote_files(), None) is not None:
@@ -147,9 +177,10 @@ def probe_url(url: str, session: requests.Session) -> FileProbe:
 
 
 def sample(urls: list[str]) -> list[str]:
-    """First, middle and last entries, without duplicates."""
-    picks = [urls[0], urls[len(urls) // 2], urls[-1]] if urls else []
-    return list(dict.fromkeys(picks))
+    """First, middle and last entries, without duplicates; fewer for rate-limited hosts."""
+    picks = list(dict.fromkeys([urls[0], urls[len(urls) // 2], urls[-1]])) if urls else []
+    limit = RATE_LIMITED_HOSTS.get(urlparse(urls[0]).netloc, (0.0, len(picks)))[1] if urls else 0
+    return picks[:limit]
 
 
 def script_cycle(script: str, now: datetime | None = None) -> ScriptCycle:
@@ -163,7 +194,8 @@ def script_cycle(script: str, now: datetime | None = None) -> ScriptCycle:
         if cycle is None:
             raise LookupError(f"no cycle in the {SEARCH_HOURS} h before now-{age} h yields any files")
         urls = list(dict.fromkeys(u for _, u, _ in make_probe_downloader(cls, cycle, out_dir).iter_remote_files()))
-    return ScriptCycle(cls.__name__, cycle, urls)
+    note = f"retired after {cls.retired_after:%Y-%m-%d %HZ}" if cls.retired_after is not None else ""
+    return ScriptCycle(cls.__name__, cycle, urls, note)
 
 
 def probe_script(script: str, *, probe_all: bool = False, now: datetime | None = None,
@@ -175,9 +207,9 @@ def probe_script(script: str, *, probe_all: bool = False, now: datetime | None =
         result.error = f"{type(exc).__name__}: {exc}"
         return result
     result.downloader = chosen.downloader
-    result.cycle = chosen.cycle.strftime("%Y-%m-%d %HZ")
+    result.cycle = chosen.cycle.strftime("%Y-%m-%d %HZ") + (f" ({chosen.note})" if chosen.note else "")
     result.files_for_cycle = len(chosen.urls)
-    with requests.Session() as session:
+    with PoliteSession() as session:
         result.probes = [probe_url(u, session) for u in (chosen.urls if probe_all else sample(chosen.urls))]
     return result
 

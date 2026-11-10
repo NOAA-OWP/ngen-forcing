@@ -433,3 +433,30 @@ def test_retired_product_still_downloads_earlier_cycles(server, tmp_path):
 def test_retired_product_reported_missing_in_check_mode(server, tmp_path, caplog):
     assert make(NAM_AK, tmp_path, start=dt.datetime(2026, 11, 10, 13), check_file_availability=1).run() is False
     assert server.heads == [] and "retired on 2026-11-03" in caplog.text
+
+
+# ----------------------------------------------------------------------------- probe politeness
+
+def test_probe_samples_one_file_from_rate_limited_hosts():
+    nomads = [f"https://nomads.ncep.noaa.gov/pub/x/f{i:02d}.grb2" for i in range(5)]
+    s3 = [f"https://noaa-hrrr-bdp-pds.s3.amazonaws.com/x/f{i:02d}.grib2" for i in range(5)]
+    assert probe_sources.sample(nomads) == [nomads[0]]
+    assert probe_sources.sample(s3) == [s3[0], s3[2], s3[4]]
+
+
+def test_polite_session_spaces_requests_to_rate_limited_hosts(monkeypatch):
+    clock, sleeps = [100.0], []
+    monkeypatch.setattr(probe_sources.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(probe_sources.time, "sleep", lambda s: (sleeps.append(s), clock.__setitem__(0, clock[0] + s)))
+    monkeypatch.setattr(probe_sources.requests.Session, "request", lambda self, method, url, *a, **k: url)
+    session = probe_sources.PoliteSession()
+    for url in ("https://nomads.ncep.noaa.gov/a", "https://noaa-mrms-pds.s3.amazonaws.com/b",
+                "https://nomads.ncep.noaa.gov/c"):
+        session.request("GET", url)
+    assert sleeps == [probe_sources.RATE_LIMITED_HOSTS["nomads.ncep.noaa.gov"][0]]
+
+
+def test_probe_picks_last_cycles_before_retirement(tmp_path):
+    cls = load(NAM_AK)
+    cycle = probe_sources.pick_cycle(cls, dt.datetime(2026, 11, 10, 12), 26, str(tmp_path))
+    assert cycle == fdb.NAM_HIRESW_RETIRED_AFTER
