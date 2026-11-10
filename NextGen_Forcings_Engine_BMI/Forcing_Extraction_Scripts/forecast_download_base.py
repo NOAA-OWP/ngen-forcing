@@ -300,11 +300,19 @@ class ForecastDownloader(ABC):
             if files:
                 yield d_start, files
 
+    def _part_urls(self, url: str, out_path: str) -> list[str]:
+        """Remote parts concatenated, in order, into ``out_path``; normally just ``url``."""
+        return [url]
+
+    def _check_part(self, url: str, headers: typing.Mapping[str, str]) -> None:
+        """Hook to reject a downloaded part from its response headers by raising DownloadError."""
+
     def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
-        """Yield (cycle time, remote URL, local path) for every file the processing window needs."""
+        """Yield (cycle time, remote URL, local path) for every remote part the processing window needs."""
         for d_start, files in self._cycles():
             for url, path in files:
-                yield d_start, url, path
+                for part in self._part_urls(url, path):
+                    yield d_start, part, path
 
     def _warn_nothing_processed(self) -> None:
         first = self.start_time - timedelta(hours=self.lookback_hours)
@@ -441,16 +449,27 @@ class ForecastDownloader(ABC):
 
     def _download_file(self, url: str, out_path: str) -> bool:
         """
-        Download remote URL to a temporary path and publish it atomically.
+        Download a file (or all its parts) to temporary paths and publish it atomically.
 
-        Returns True when the file was published, False when a tolerated sub-hourly file is missing.
-        Raises DownloadError otherwise.
+        A multi-part file is published only when every part downloaded. Returns True when the file
+        was published, False when a tolerated sub-hourly file is missing. Raises DownloadError
+        otherwise.
         """
         out_dir: str = os.path.dirname(out_path)
         os.makedirs(out_dir, exist_ok=True)
-        temp_path: str = os.path.join(out_dir, f".{os.path.basename(out_path)}.tmp.{uuid.uuid4()}")
+        parts = self._part_urls(url, out_path)
+        name, token = os.path.basename(out_path), uuid.uuid4()
+        temp_path: str = os.path.join(out_dir, f".{name}.tmp.{token}")
+        part_paths = [temp_path] if len(parts) == 1 else [
+            os.path.join(out_dir, f".{name}.part{i}.{token}") for i in range(len(parts))]
         try:
-            self._fetch(url, temp_path)
+            for part_url, part_path in zip(parts, part_paths):
+                self._check_part(part_url, self._fetch(part_url, part_path))
+            if len(parts) > 1:
+                with open(temp_path, "wb") as outfile:
+                    for part_path in part_paths:
+                        with open(part_path, "rb") as infile:
+                            shutil.copyfileobj(infile, outfile)
             self._publish(temp_path, out_path)
         except DownloadError as exc:
             if self.last_hour and self.subhourly_avg:
@@ -461,8 +480,9 @@ class ForecastDownloader(ABC):
                 return False
             raise
         finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            for path in {temp_path, *part_paths}:
+                if os.path.exists(path):
+                    os.remove(path)
         LOG.info("Downloaded %s", out_path)
         return True
 
@@ -479,12 +499,13 @@ class ForecastDownloader(ABC):
         for d_start, files in self._cycles():
             self.pre_download_hook(d_start)
             all_files_available: bool = True
-            for url, _ in files:
-                total_files_checked += 1
-                if self._check_file_availability(url):
-                    available_files_count += 1
-                else:
-                    all_files_available = False
+            for url, path in files:
+                for part in self._part_urls(url, path):
+                    total_files_checked += 1
+                    if self._check_file_availability(part):
+                        available_files_count += 1
+                    else:
+                        all_files_available = False
 
             if all_files_available:
                 LOG.info("All required forcing files are available for timestamp: %s", d_start)

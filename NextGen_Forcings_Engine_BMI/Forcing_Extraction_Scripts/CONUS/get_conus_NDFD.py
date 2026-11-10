@@ -7,14 +7,9 @@ from __future__ import annotations
 
 import datetime
 import email.utils
-import logging
 import os
-import shutil
-import uuid
 
 from Forcing_Extraction_Scripts.forecast_download_base import DownloadError, ForecastDownloader
-
-logger = logging.getLogger(__name__)
 
 PRIMARY_PERIOD = "VP.001-003"
 EXTENDED_PERIOD = "VP.004-007"
@@ -79,12 +74,14 @@ class NDFDConusDownloader(ForecastDownloader):
         filename = f"ndfd_conus_{target}.grib2"
         return url, filename
 
-    def iter_remote_files(self):
-        """Yield every valid-period part; the local file is their concatenation."""
-        for d_current, primary_url, local_path in super().iter_remote_files():
-            field = os.path.basename(local_path)[len("ndfd_conus_"):-len(".grib2")]
-            for vp in self.FIELD_VALID_PERIODS[field]:
-                yield d_current, primary_url.replace(PRIMARY_PERIOD, vp), local_path
+    def _part_urls(self, url: str, out_path: str) -> list[str]:
+        """A field's valid periods, concatenated into one file."""
+        field = os.path.basename(out_path)[len("ndfd_conus_"):-len(".grib2")]
+        return [url.replace(PRIMARY_PERIOD, vp) for vp in self.FIELD_VALID_PERIODS[field]]
+
+    def _check_part(self, url: str, headers) -> None:
+        if f"/{PRIMARY_PERIOD}/" in url:
+            self._check_issuance(headers, url)
 
     def pre_download_hook(self, d_start: datetime.datetime) -> None:
         self._cycle = d_start
@@ -102,35 +99,6 @@ class NDFDConusDownloader(ForecastDownloader):
                 f"{self.MAX_ISSUANCE_OFFSET} from cycle {cycle:%Y-%m-%d %H:%M} UTC. The operational NDFD "
                 "feed only holds the latest issuance, so it cannot supply this cycle."
             )
-
-    def _download_file(self, url: str, out_path: str) -> bool:
-        """Download every valid period of one field and publish their concatenation, or nothing."""
-        field = os.path.basename(out_path)[len("ndfd_conus_"):-len(".grib2")]
-        bin_file = self.FIELD_MAP[field]
-        out_dir = os.path.dirname(out_path)
-        os.makedirs(out_dir, exist_ok=True)
-        token = uuid.uuid4()
-        parts: list[str] = []
-        temp_out = os.path.join(out_dir, f".{os.path.basename(out_path)}.tmp.{token}")
-        try:
-            for vp in self.FIELD_VALID_PERIODS[field]:
-                vp_url = f"{self.base_url}/{vp}/{bin_file}"
-                part = os.path.join(out_dir, f".{os.path.basename(out_path)}.{vp}.{token}")
-                parts.append(part)
-                headers = self._fetch(vp_url, part)
-                if vp == PRIMARY_PERIOD:
-                    self._check_issuance(headers, vp_url)
-            with open(temp_out, "wb") as outfile:
-                for part in parts:
-                    with open(part, "rb") as infile:
-                        shutil.copyfileobj(infile, outfile)
-            self._publish(temp_out, out_path)
-        finally:
-            for path in [*parts, temp_out]:
-                if os.path.exists(path):
-                    os.remove(path)
-        logger.info("Downloaded %s (%s)", out_path, ", ".join(self.FIELD_VALID_PERIODS[field]))
-        return True
 
 
 def main() -> None:
