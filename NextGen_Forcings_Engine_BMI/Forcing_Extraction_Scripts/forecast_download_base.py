@@ -107,9 +107,13 @@ class ForecastDownloader(ABC):
         return self.lagback_hours
 
     @classmethod
-    def from_cli_args(cls) -> typing.Self:
+    def from_cli_args(
+        cls,
+        desc: str | None = None,
+        argv: typing.Sequence[str] | None = None,
+    ) -> typing.Self:
         """Create an instance of the subclass using command-line arguments."""
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser(description=desc or cls.__doc__)
         parser.add_argument("outDir", type=str, help="Output directory path")
         parser.add_argument("startTime", type=lambda s: datetime.strptime(s, "%Y-%m-%d %H:%M:%S"))
         parser.add_argument("--lookBackHours", type=int, default=cls.default_lookback)
@@ -125,7 +129,7 @@ class ForecastDownloader(ABC):
         parser.add_argument("--check_file_availability", type=int, default=0, help="Check upstream availability only.")
         parser.add_argument("--subhourly_avg", action="store_true", default=False, help="Flag sub-hourly averaging.")
         parser.add_argument("--gfs_extended", action="store_true", default=False, help="Unused; retained for compatibility.")
-        args = parser.parse_args()
+        args = parser.parse_args(argv)
         LOG.info("%s args: %s", cls.__name__, vars(args))
 
         return cls(
@@ -145,11 +149,11 @@ class ForecastDownloader(ABC):
         )
 
     @classmethod
-    def cli_main(cls) -> None:
+    def cli_main(cls, desc: str | None = None) -> None:
         """Command-line entry point: parse arguments, run, and exit non-zero on failure."""
         configure_logging()
         try:
-            ok = cls.from_cli_args().run()
+            ok = cls.from_cli_args(desc).run()
         except DownloadError as exc:
             LOG.error("%s", exc)
             sys.exit(1)

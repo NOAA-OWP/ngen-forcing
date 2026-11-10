@@ -122,10 +122,7 @@ class NDFDConusDownloader(ForecastDownloader):
 
 def main() -> None:
     """CLI entrypoint for standalone NDFD CONUS forcing extraction."""
-    downloader = NDFDConusDownloader.from_cli_args(
-        desc="Download operational NDFD CONUS forecast forcings"
-    )
-    downloader.run()
+    NDFDConusDownloader.cli_main(desc="Download operational NDFD CONUS forecast forcings")
 
 
 if __name__ == "__main__":
