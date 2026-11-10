@@ -1,3 +1,4 @@
+import gzip
 import io
 import sys
 from pathlib import Path
@@ -84,7 +85,8 @@ class FakeServer:
         if url in self.files:
             return self.files[url]
         if self.serve_all:
-            return (b"GRIB\x00\x00\x00\x02payload", {}, None)
+            payload = b"GRIB\x00\x00\x00\x02payload"
+            return (gzip.compress(payload) if url.endswith(".gz") else payload, {}, None)
         return None
 
     def get(self, url, stream=False, timeout=None, headers=None):

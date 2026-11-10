@@ -21,7 +21,6 @@ import json
 import logging
 import sys
 import tempfile
-import zlib
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,7 +32,9 @@ from Forcing_Extraction_Scripts.forecast_download_base import (
     CONNECT_TIMEOUT,
     READ_TIMEOUT,
     REQUEST_HEADERS,
+    SNIFF_BYTES,
     ForecastDownloader,
+    content_signature_problem,
 )
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -44,8 +45,6 @@ DEFAULT_AGE_HOURS = 26
 AGE_HOURS_OVERRIDE: dict[str, int] = {"NDFDConusDownloader": 0}
 #: How far back to search for a cycle the product runs at.
 SEARCH_HOURS = 48
-#: Bytes requested to identify the content.
-SNIFF_BYTES = 4096
 
 
 @dataclass
@@ -117,25 +116,6 @@ def pick_cycle(cls: type[ForecastDownloader], now: datetime, age_hours: int, out
     return None
 
 
-def looks_like_grib2(data: bytes, gzipped: bool) -> str:
-    """Return '' if ``data`` starts a GRIB2 message, else a description of what was found."""
-    if gzipped:
-        if data[:2] != b"\x1f\x8b":
-            return f"expected gzip, found {data[:4]!r}"
-        try:
-            data = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data)
-        except zlib.error as exc:
-            return f"gzip header but undecodable: {exc}"
-    # Operational bulletins (e.g. NDFD ds.*.bin) carry a WMO header before the first message;
-    # GRIB decoders skip leading bytes up to the "GRIB" marker.
-    offset = data.find(b"GRIB")
-    if offset < 0:
-        return f"no GRIB marker in the first {len(data)} bytes (starts {data[:8]!r})"
-    if len(data) > offset + 7 and data[offset + 7] != 2:
-        return f"GRIB edition {data[offset + 7]}, expected 2"
-    return ""
-
-
 def probe_url(url: str, session: requests.Session) -> FileProbe:
     timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
     try:
@@ -152,7 +132,7 @@ def probe_url(url: str, session: requests.Session) -> FileProbe:
         resp.close()
     except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
         return FileProbe(url, False, head.status_code, size, f"ranged GET failed: {exc}")
-    problem = looks_like_grib2(data, gzipped=url.endswith(".gz"))
+    problem = content_signature_problem(url, data, require_edition2=True)
     return FileProbe(url, not problem, head.status_code, size, problem or "GRIB2")
 
 
