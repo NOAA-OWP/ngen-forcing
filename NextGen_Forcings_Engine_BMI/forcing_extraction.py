@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
 import typing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -9,7 +10,6 @@ from pathlib import Path
 
 from config_models import ForcingExtractionConfig
 from Forcing_Extraction_Scripts.forecast_download_base import (
-    FixedFileDownloader,
     ForecastDownloader,
 )
 
@@ -72,20 +72,23 @@ class ExtractionJob:
 
 
 def load_downloader_class(script: Path) -> type[ForecastDownloader]:
-    """Import a downloader script and return the downloader class it contains."""
+    """Import a downloader script and return the concrete downloader class it defines."""
     spec = importlib.util.spec_from_file_location(f"forcing_{script.stem}", script)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load specification for {script}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    base_classes = (ForecastDownloader, FixedFileDownloader)
-    return next(
+    candidates = [
         obj
         for obj in vars(module).values()
         if isinstance(obj, type)
-        and issubclass(obj, base_classes)
-        and obj not in base_classes
-    )
+        and issubclass(obj, ForecastDownloader)
+        and obj.__module__ == module.__name__
+        and not inspect.isabstract(obj)
+    ]
+    if len(candidates) != 1:
+        raise ImportError(f"Expected one downloader class in {script}, found {[c.__name__ for c in candidates]}")
+    return candidates[0]
 
 
 def _supp_dirs(cfg: ForcingExtractionConfig) -> list[str]:
