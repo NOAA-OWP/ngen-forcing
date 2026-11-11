@@ -126,3 +126,18 @@ Individual downloaders can also be run directly as modules from `NextGen_Forcing
 python -m Forcing_Extraction_Scripts.CONUS.get_conus_HRRR ./HRRR "2026-11-10 12:00:00" --lookBackHours 6
 ```
 
+## Testing
+
+From `NextGen_Forcings_Engine_BMI/Forcing_Extraction_Scripts` (requires `pytest`):
+
+```bash
+python -m pytest tests            # offline tests; upstream servers are simulated
+python -m pytest tests --live     # also probe every downloader against its live upstream server
+```
+
+The live probe can also be run on its own from `NextGen_Forcings_Engine_BMI/`. For each downloader it picks a recently published cycle, lists the files the downloader would fetch, and checks a sample of them with `HEAD` plus a ranged `GET` that must contain a GRIB2 message:
+
+```bash
+python -m Forcing_Extraction_Scripts.probe_sources                      # all scripts, three files each
+python -m Forcing_Extraction_Scripts.probe_sources CONUS/get_conus_HRRR.py --all
+```
