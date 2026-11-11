@@ -28,12 +28,13 @@ from pathlib import Path
 
 import requests
 
-from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
+from Forcing_Extraction_Scripts.forecast_download_base import (
+    CONNECT_TIMEOUT,
+    READ_TIMEOUT,
+    ForecastDownloader,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-
-CONNECT_TIMEOUT = 15.0
-READ_TIMEOUT = 120.0
 
 #: How old (hours) a cycle must be before it is expected to be complete upstream.
 DEFAULT_AGE_HOURS = 26
@@ -79,7 +80,8 @@ def registrations() -> dict[str, list[str]]:
     import forcing_extraction as fe
 
     regs: dict[str, list[str]] = {}
-    for label, table in (("forecast", fe.FORCING_SRC), ("AnA", fe.FORCING_ANA_SRC)):
+    for label, table in (("forecast", fe.FORCING_SRC), ("AnA", fe.FORCING_ANA_SRC),
+                         ("Stage IV MRMS", fe.STAGE4_MRMS_SRC)):
         for key, script in table.items():
             regs.setdefault(script, []).append(f"{label} {key}")
     return regs

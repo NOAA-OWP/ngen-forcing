@@ -9,8 +9,23 @@ import pytest
 
 from Forcing_Extraction_Scripts import probe_sources
 
+#: Scripts whose upstream data was confirmed unavailable on 2026-11-10. Non-strict, so a recovered
+#: source shows up as XPASS rather than failing the run.
+KNOWN_UPSTREAM_GAPS = {
+    "Alaska/get_prod_NAM_Nest_Alaska.py": "noaa-nam-pds on S3 has no data after 2026-11-03",
+    "Hawaii/get_prod_NAM_Nest_Hawaii.py": "NAM retired 2026-11-03; noaa-nam-pds has no later cycles",
+    "Hawaii/get_prod_NAM_Nest_Hawaii_AnA.py": "NAM retired 2026-11-03; noaa-nam-pds has no later cycles",
+    "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py": "NAM retired 2026-11-03; noaa-nam-pds has no later cycles",
+    "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py": "NAM retired 2026-11-03; noaa-nam-pds has no later cycles",
+    "Hawaii/get_ARW_Hawaii.py": "NOMADS hiresw/prod only carries the Guam domain",
+    "Puerto_Rico/get_ARW_Puerto_Rico.py": "NOMADS hiresw/prod only carries the Guam domain",
+}
+
+
 def _param(script):
-    return pytest.param(script, id=script)
+    reason = KNOWN_UPSTREAM_GAPS.get(script)
+    marks = [pytest.mark.xfail(reason=reason, strict=False)] if reason else []
+    return pytest.param(script, marks=marks, id=script)
 
 
 @pytest.mark.live
