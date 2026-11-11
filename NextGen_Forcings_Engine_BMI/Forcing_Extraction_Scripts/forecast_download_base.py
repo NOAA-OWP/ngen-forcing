@@ -154,6 +154,18 @@ class ForecastDownloader(ABC):
         """Hook called after downloading completes for a specific cycle."""
         pass
 
+    def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
+        """Yield (cycle time, remote URL, local path) for every file the processing window needs."""
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            d_start = self.start_time - timedelta(hours=hour)
+            if not self.should_process_hour(d_start):
+                continue
+            output_dir = self.build_output_dir(d_start, self.ens_number)
+            for target in self.get_download_targets(d_start):
+                result = self.build_file_url_and_name(d_start, target, self.ens_number)
+                for url, filename in (result if isinstance(result, list) else [result]):
+                    yield d_start, url, os.path.join(output_dir, filename)
+
     def _cleanup_old_data(self) -> None:
         """Clean up old forecast cycles using timestamp or recursive pruning."""
         for hour in range(self.cleanback_hours, self.lookback_hours, -1):
@@ -404,6 +416,14 @@ class FixedFileDownloader(ForecastDownloader, ABC):
     def get_file_specs(self, d_start: datetime) -> list[tuple[str, str]]:
         """Return a list of (subdir, filename) tuples for files to be downloaded."""
         pass
+
+    def iter_remote_files(self) -> typing.Iterator[tuple[datetime, str, str]]:
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            d_start = self.start_time - timedelta(hours=hour)
+            if not self.should_process_hour(d_start):
+                continue
+            for subdir, filename in self.get_file_specs(d_start):
+                yield d_start, os.path.join(self.base_url, subdir, filename), os.path.join(self.out_dir, subdir, filename)
 
     def _download_data(self) -> None:
         LOG.info(f"FixedFileDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
