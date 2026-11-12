@@ -93,6 +93,8 @@
  - ./NextGen_Forcings_Engine/bmi_model.py: This is the Basic Model Interface that talks with the model. This is the NextGen Forcings Engine BMI class.
  - run_bmi_model.py: This is a file that mimics the framework, in the sense that it initializes the model with the BMI function. Then it runs the model with the BMI Update function, etc.
  - run_bmi_unit_test.py: This is a file that runs each BMI unit test to make sure that the BMI is complete and functioning as expected.
+ - preprocessing_wrapper.py: Produces the ESMF mesh for a configuration file (`python preprocessing_wrapper.py <config.yml>`). This is needed once per mesh and is idempotent.
+ - forcing_extraction.py: Downloads the forcing data a configuration file needs (`python forcing_extraction.py <config.yml>`). Run it for every cycle. See ./Forcing_Extraction_Scripts/README.md.
  - config.yml: This is a configuration file that the BMI reads to set inital_time (initial value of current_model_time) and all the required variables needed to drive the NextGen Forcings Engine.
  - environment.yml: Environment file with the required Python libraries needed to run the model with BMI and the NextGen Forcings Engine. Create the environment with this command: `conda env create -f environment.yml`, then activate it with `conda activate bmi_test`
  - slurm.job: Example Python submission script for a slurm job manager that is utilized to execute a MPI Python script (NextGen Forcings Engine) on the NOAA RDHPCS Hera supercomputer.

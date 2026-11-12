@@ -131,9 +131,32 @@ SuppPcp: []
 SuppPcpDirectories: ''
 ```
 
-## Example to Execute the Workflow
+## Preprocessing and Extraction Are Separate Steps
 
-Follow these steps from the root of the repository to set up the minimal environment and execute the extraction workflow end-to-end:
+A forcing engine run needs two things prepared from its configuration file, by two separate commands run from `NextGen_Forcings_Engine_BMI/`:
+
+| Step | Command | When to run |
+|:---|:---|:---|
+| ESMF mesh production | `python preprocessing_wrapper.py <config.yml>` | Once per mesh. It is idempotent: running it again for the same mesh produces the same result. |
+| Forcing extraction (downloads) | `python forcing_extraction.py <config.yml>` | For every cycle run, with the configuration of that cycle (`RefcstBDateProc`, `LookBack`, `ForecastInputHorizons`). |
+
+`preprocessing_wrapper.py` does not download anything, and `forcing_extraction.py` does not touch the mesh, so a cycle that reuses an existing mesh only needs the second command:
+
+```bash
+cd ngen-forcing/NextGen_Forcings_Engine_BMI
+
+# Once, when the mesh for a domain is first needed (requires the forcing engine environment, with ESMF)
+python preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
+
+# For each cycle run (the minimal forcing_extraction environment below is enough)
+python forcing_extraction.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
+```
+
+`forcing_extraction.py` exits with status 1 if a required file could not be downloaded, or, with `check_file_availability: 1`, if any file is missing upstream. Files already downloaded are not fetched again, so it can be re-run for the same cycle.
+
+## Example to Execute the Extraction
+
+Follow these steps from the root of the repository to set up the minimal environment and execute the extraction step end-to-end:
 
 ```bash
 # 1. Navigate to the Forcing Extraction Script Directory
@@ -148,7 +171,7 @@ conda activate forcing_extraction
 # 4. Navigate into the BMI engine directory
 cd ../
 
-# 5. Execute the extraction workflow with the target hydrofabric configuration
+# 5. Execute the extraction with the target hydrofabric configuration
 python forcing_extraction.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
 ```
 
