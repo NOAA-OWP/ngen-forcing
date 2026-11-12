@@ -324,8 +324,6 @@ class ForecastDownloader(ABC):
     default_cleanback: int = 240
     default_lagback: int = 6
 
-    #: Last cycle the upstream product exists for, if it has been retired; later cycles fail at once.
-    retired_after: typing.ClassVar[datetime | None] = None
     #: Why the product ended, with a reference; included in the error for later cycles.
     retirement_note: typing.ClassVar[str] = ""
 
@@ -407,6 +405,15 @@ class ForecastDownloader(ABC):
         name = cls.__name__.removesuffix("Downloader")
         resolved = cls.resolve_region(region)
         return name if resolved is None else f"{name}[{resolved}]"
+
+    @classmethod
+    def retirement_date(cls, region: Region | None) -> datetime | None:
+        """
+        Last cycle the source has data for in ``region``, or None if it is still produced there.
+
+        A retired source overrides this; cycles after the date fail at once, with ``retirement_note``.
+        """
+        return None
 
     @classmethod
     def window_defaults(cls, region: Region | None) -> tuple[int, int, int]:
@@ -600,9 +607,10 @@ class ForecastDownloader(ABC):
 
     def retirement_problem(self, d_start: datetime) -> str | None:
         """Why no data can exist for cycle ``d_start``, if the product was retired before it."""
-        if self.retired_after is None or d_start <= self.retired_after:
+        last_cycle = self.retirement_date(self.region)
+        if last_cycle is None or d_start <= last_cycle:
             return None
-        return (f"{self.label(self.region)}: no data after the {self.retired_after:%Y-%m-%d %HZ} cycle "
+        return (f"{self.label(self.region)}: no data after the {last_cycle:%Y-%m-%d %HZ} cycle "
                 f"({self.retirement_note}); cannot supply {d_start:%Y-%m-%d %HZ}")
 
     def _warn_nothing_processed(self) -> None:

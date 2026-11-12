@@ -1,4 +1,4 @@
-"""High-Resolution Window (HiResW) downloader. HiResW (except Guam) was retired on 2026-11-03."""
+"""High-Resolution Window (HiResW) downloader. HiResW was retired on 2026-11-03, except for Guam."""
 
 from __future__ import annotations
 
@@ -22,15 +22,24 @@ class HiResWDomain:
     tag: str
     #: Cycle hours (UTC) the domain runs at.
     cycles: tuple[int, ...]
+    #: Whether the domain ended with the 2026-11-03 retirement.
+    retired: bool = True
 
 
 class HiResWARWDownloader(ForecastDownloader):
     """Downloader for HiResW WRF-ARW 2.5 km forecasts."""
 
-    REGIONS = {Region.HAWAII: HiResWDomain("hi", (0, 12)), Region.PUERTO_RICO: HiResWDomain("pr", (6, 18))}
+    REGIONS = {
+        Region.HAWAII: HiResWDomain("hi", (0, 12)),
+        Region.PUERTO_RICO: HiResWDomain("pr", (6, 18)),
+        Region.GUAM: HiResWDomain("guam", (0, 12), retired=False),
+    }
 
-    retired_after = RETIRED_AFTER
     retirement_note = RETIREMENT_NOTE
+
+    @classmethod
+    def retirement_date(cls, region):
+        return RETIRED_AFTER if cls.REGIONS[region].retired else None
 
     @property
     def base_url(self):

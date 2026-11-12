@@ -21,7 +21,7 @@ from Forcing_Extraction_Scripts import forecast_download_base as fdb
 from Forcing_Extraction_Scripts import download, probe_sources
 from Forcing_Extraction_Scripts import sources as src
 from Forcing_Extraction_Scripts.forecast_download_base import Region
-from Forcing_Extraction_Scripts.sources import nam
+from Forcing_Extraction_Scripts.sources import hiresw, nam
 
 #: Yesterday's 12Z cycle: recent enough that a 404 is retried rather than treated as archived.
 CYCLE = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).replace(
@@ -108,7 +108,7 @@ def test_region_is_required(tmp_path):
 
 
 def test_region_not_covered_is_rejected(tmp_path):
-    with pytest.raises(ValueError, match="HiResWARWDownloader does not cover region CONUS; it covers Hawaii, Puerto_Rico"):
+    with pytest.raises(ValueError, match="HiResWARWDownloader does not cover region CONUS; it covers Hawaii, Puerto_Rico, Guam"):
         make((src.HiResWARWDownloader, Region.CONUS), tmp_path)
 
 
@@ -280,6 +280,7 @@ def test_mrms_radar_only_and_precip_rate_paths(tmp_path):
     ((src.NAMNestDownloader, Region.HAWAII), "nam.{day}/nam.t12z.hawaiinest.hiresf01.tm00.grib2", "nam.{day}"),
     ((src.NAMNestDownloader, Region.PUERTO_RICO), "nam.{day}/nam.t12z.priconest.hiresf01.tm00.grib2", "nam.{day}"),
     ((src.HiResWARWDownloader, Region.HAWAII), "hiresw.{day}/hiresw.t12z.arw_2p5km.f01.hi.grib2", "hiresw.{day}"),
+    ((src.HiResWARWDownloader, Region.GUAM), "hiresw.{day}/hiresw.t12z.arw_2p5km.f01.guam.grib2", "hiresw.{day}"),
     ((src.NAMNestDownloader, Region.CONUS), "nam.{day}/nam.t12z.conusnest.hiresf01.tm00.grib2", "nam.{day}"),
     ((src.NAMNestAnADownloader, Region.CONUS), "nam.{day}/nam.t12z.conusnest.hiresf01.tm00.grib2", "nam.{day}"),
     ((src.MRMSPrecipRateDownloader, Region.GUAM),
@@ -645,6 +646,18 @@ def test_retired_product_still_downloads_earlier_cycles(server, tmp_path):
 def test_retired_product_reported_missing_in_check_mode(server, tmp_path, caplog):
     assert make(NAM_AK, tmp_path, start=dt.datetime(2026, 11, 10, 13), check_file_availability=1).run() is False
     assert server.heads == [] and "retired on 2026-11-03" in caplog.text
+
+
+def test_hiresw_guam_is_not_retired(server, tmp_path):
+    assert src.HiResWARWDownloader.retirement_date(Region.GUAM) is None
+    assert src.HiResWARWDownloader.retirement_date(Region.HAWAII) == hiresw.RETIRED_AFTER
+    server.serve_all = True
+    after = hiresw.RETIRED_AFTER + dt.timedelta(days=7)
+    make((src.HiResWARWDownloader, Region.GUAM), tmp_path, start=after.replace(hour=13), max_forecast_hour=1).run()
+    assert server.gets == [f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/hiresw/prod/hiresw.{after:%Y%m%d}/"
+                           "hiresw.t12z.arw_2p5km.f01.guam.grib2"]
+    with pytest.raises(fdb.DownloadError, match="retired on 2026-11-03"):
+        make((src.HiResWARWDownloader, Region.HAWAII), tmp_path, start=after.replace(hour=13)).run()
 
 
 # ----------------------------------------------------------------------------- probe politeness

@@ -15,7 +15,7 @@ There is one downloader class per source (model or observation product), in `sou
 | `sources/hrrr.py` | `HRRRDownloader`, `HRRRAnADownloader`, `HRRRSubhourlyDownloader`, `HRRRSubhourlyAnADownloader` | CONUS, Alaska |
 | `sources/rap.py` | `RAPDownloader`, `RAPAnADownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
 | `sources/nam.py` | `NAMNestDownloader`, `NAMNestAnADownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
-| `sources/hiresw.py` | `HiResWARWDownloader` | Hawaii, Puerto Rico |
+| `sources/hiresw.py` | `HiResWARWDownloader` | Hawaii, Puerto Rico, Guam |
 | `sources/nbm.py` | `NBMDownloader`, `NBMAnADownloader` | CONUS, Alaska, Hawaii, Puerto Rico, Guam |
 | `sources/ndfd.py` | `NDFDDownloader` | CONUS, Alaska, Hawaii, Puerto Rico, Guam (no QPF) |
 | `sources/stage_iv.py` | `StageIVDownloader` | CONUS (hourly), Alaska (6-hourly), Puerto Rico (hourly) |
@@ -75,7 +75,7 @@ Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.p
 | **supp12** | CONUS | Stage IV + MRMS | `StageIVDownloader` (+ MRMS, see below) | NOMADS HTTPS | hourly analyses |
 | **supp15** | Puerto Rico | NBM Puerto Rico APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
 
-> **Retired products**: NAM (forcings 13-17 and AnA 13/14) and HiResW Hawaii/Puerto Rico (8, 18) were retired on 2026-11-03 and replaced by RRFS ([SCN 26-47](https://www.weather.gov/media/notification/pdf_2026/SCN26-47_Updated_Retire_NAM_SREF_HREF_HiresW_NAM_MOS.aab.pdf), [SCN 26-48](https://www.weather.gov/media/notification/pdf_2026/scn26-048_Updated_RRFS_and_REFS_Implementation_aae.pdf)). Their downloaders still fetch cycles up to the last one (2026-11-03 06Z), for retrospective runs, and fail immediately for later cycles. The S3 NAM archive (`noaa-nam-pds`) holds the Alaska, Hawaii and Puerto Rico nests; HiResW Hawaii/Puerto Rico was only on NOMADS, which keeps about two days, so its history is not available from this source.
+> **Retired products**: NAM (forcings 13-17 and AnA 13/14) and HiResW Hawaii/Puerto Rico (8, 18) were retired on 2026-11-03 and replaced by RRFS ([SCN 26-47](https://www.weather.gov/media/notification/pdf_2026/SCN26-47_Updated_Retire_NAM_SREF_HREF_HiresW_NAM_MOS.aab.pdf), [SCN 26-48](https://www.weather.gov/media/notification/pdf_2026/scn26-048_Updated_RRFS_and_REFS_Implementation_aae.pdf)). Their downloaders still fetch cycles up to the last one (2026-11-03 06Z), for retrospective runs, and fail immediately for later cycles. HiResW Guam was not retired. The S3 NAM archive (`noaa-nam-pds`) holds the Alaska, Hawaii and Puerto Rico nests; HiResW Hawaii/Puerto Rico was only on NOMADS, which keeps about two days, so its history is not available from this source.
 
 ---
 

@@ -37,8 +37,11 @@ class _NAMNestBase(ForecastDownloader):
 
     REGIONS = {Region.CONUS: CONUS, Region.ALASKA: ALASKA, Region.HAWAII: HAWAII, Region.PUERTO_RICO: PUERTO_RICO}
 
-    retired_after = RETIRED_AFTER
     retirement_note = RETIREMENT_NOTE
+
+    @classmethod
+    def retirement_date(cls, region):
+        return RETIRED_AFTER
 
     @property
     def base_url(self) -> str:

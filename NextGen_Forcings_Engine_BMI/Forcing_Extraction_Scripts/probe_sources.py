@@ -146,10 +146,11 @@ def pick_cycle(source: Source, now: datetime, age_hours: int, out_dir: str) -> d
     For a retired product, the search starts at its last cycle instead, so the probe exercises the
     historical data retrospective runs use.
     """
-    cls = source[0]
+    cls, region = source
     start = (now - timedelta(hours=age_hours)).replace(minute=0, second=0, microsecond=0, tzinfo=None)
-    if cls.retired_after is not None:
-        start = min(start, cls.retired_after)
+    last_cycle = cls.retirement_date(region)
+    if last_cycle is not None:
+        start = min(start, last_cycle)
     for back in range(SEARCH_HOURS):
         cycle = start - timedelta(hours=back)
         if next(make_probe_downloader(source, cycle, out_dir).iter_remote_files(), None) is not None:
@@ -182,14 +183,15 @@ def sample(urls: list[str]) -> list[str]:
 
 def source_cycle(source: Source, now: datetime | None = None) -> SourceCycle:
     """Choose a recently published cycle for ``source`` and list the files its downloader would fetch."""
-    cls = source[0]
+    cls, region = source
     with tempfile.TemporaryDirectory() as out_dir:
         age = AGE_HOURS_OVERRIDE.get(cls.__name__, DEFAULT_AGE_HOURS)
         cycle = pick_cycle(source, now or datetime.now(timezone.utc), age, out_dir)
         if cycle is None:
             raise LookupError(f"no cycle in the {SEARCH_HOURS} h before now-{age} h yields any files")
         urls = list(dict.fromkeys(u for _, u, _ in make_probe_downloader(source, cycle, out_dir).iter_remote_files()))
-    note = f"retired after {cls.retired_after:%Y-%m-%d %HZ}" if cls.retired_after is not None else ""
+    last_cycle = cls.retirement_date(region)
+    note = f"retired after {last_cycle:%Y-%m-%d %HZ}" if last_cycle is not None else ""
     return SourceCycle(cls.__name__, cycle, urls, note)
 
 
