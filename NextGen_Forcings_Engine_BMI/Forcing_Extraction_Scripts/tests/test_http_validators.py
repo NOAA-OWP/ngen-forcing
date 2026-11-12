@@ -13,7 +13,7 @@ from Forcing_Extraction_Scripts import forecast_download_base as fdb
 from Forcing_Extraction_Scripts import sources as src
 from Forcing_Extraction_Scripts.forecast_download_base import Region
 from test_downloaders import (
-    CYCLE, DAY, HRRR_ANA, HRRR_ANA_URL, HRRR_PATH, LATER_ISSUANCE, MRMS, NDFD, NDFD_OUT, PREV_DAY, START_ARG,
+    CYCLE, DAY, HRRR_ANA, HRRR_ANA_URL, HRRR_PATH, LATER_ISSUANCE, MRMS, NDFD, NDFD_CONUS, NDFD_OUT, PREV_DAY, START_ARG,
     http_date, make, serve_ndfd,
 )
 
@@ -244,11 +244,11 @@ def ndfd_headers(tag):
 
 def test_ndfd_unchanged_parts_leave_file_untouched(server, tmp_path):
     serve_ndfd(server, headers=ndfd_headers("v1"))
-    make(src.NDFDDownloader, tmp_path).run()
+    make(NDFD_CONUS, tmp_path).run()
     tmp_file = tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2"
     inode = tmp_file.stat().st_ino
     first = len(server.gets)
-    make(src.NDFDDownloader, tmp_path).run()
+    make(NDFD_CONUS, tmp_path).run()
     assert len(server.gets) - first == 7  # one conditional request per part
     assert all(h.get("If-None-Match") == '"v1"' for h in server.request_headers[first:])
     assert tmp_file.stat().st_ino == inode
@@ -256,9 +256,9 @@ def test_ndfd_unchanged_parts_leave_file_untouched(server, tmp_path):
 
 def test_ndfd_changed_part_rebuilds_field(server, tmp_path):
     serve_ndfd(server, headers=ndfd_headers("v1"))
-    make(src.NDFDDownloader, tmp_path).run()
+    make(NDFD_CONUS, tmp_path).run()
     server.add(f"{NDFD}/VP.004-007/ds.temp.bin", b"GRIB new days 4-7;", headers=ndfd_headers("v2"))
-    make(src.NDFDDownloader, tmp_path).run()
+    make(NDFD_CONUS, tmp_path).run()
     assert (tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2").read_bytes() == \
         b"GRIB VP.001-003 ds.temp.bin;GRIB new days 4-7;"
     parts = fdb.read_meta(str(tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2"))["parts"]
@@ -267,12 +267,12 @@ def test_ndfd_changed_part_rebuilds_field(server, tmp_path):
 
 def test_ndfd_newer_issuance_does_not_overwrite_cycle(server, tmp_path, caplog):
     serve_ndfd(server, headers=ndfd_headers("v1"))
-    make(src.NDFDDownloader, tmp_path).run()
+    make(NDFD_CONUS, tmp_path).run()
     serve_ndfd(server, headers={"Last-Modified": LATER_ISSUANCE, "ETag": '"v9"'})
     for bin_file in ("ds.temp.bin",):
         server.add(f"{NDFD}/VP.001-003/{bin_file}", b"GRIB later issuance;",
                    headers={"Last-Modified": LATER_ISSUANCE, "ETag": '"v9"'})
-    assert make(src.NDFDDownloader, tmp_path).run() is True
+    assert make(NDFD_CONUS, tmp_path).run() is True
     assert (tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2").read_bytes().startswith(b"GRIB VP.001-003")
     assert "keeping the existing file" in caplog.text
 

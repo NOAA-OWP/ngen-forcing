@@ -26,6 +26,7 @@ class NAMNest:
     lagback: int = ForecastDownloader.default_lagback
 
 
+CONUS = NAMNest("conusnest")
 ALASKA = NAMNest("alaskanest", lookback=36, lagback=1)
 HAWAII = NAMNest("hawaiinest")
 PUERTO_RICO = NAMNest("priconest")
@@ -33,6 +34,8 @@ PUERTO_RICO = NAMNest("priconest")
 
 class _NAMNestBase(ForecastDownloader):
     """File naming shared by the NAM nest downloaders."""
+
+    REGIONS = {Region.CONUS: CONUS, Region.ALASKA: ALASKA, Region.HAWAII: HAWAII, Region.PUERTO_RICO: PUERTO_RICO}
 
     retired_after = RETIRED_AFTER
     retirement_note = RETIREMENT_NOTE
@@ -54,8 +57,6 @@ class _NAMNestBase(ForecastDownloader):
 class NAMNestDownloader(_NAMNestBase):
     """Downloader for NAM nest forecasts."""
 
-    REGIONS = {Region.ALASKA: ALASKA, Region.HAWAII: HAWAII, Region.PUERTO_RICO: PUERTO_RICO}
-
     def should_process_hour(self, d_start):
         return d_start.hour in [0, 6, 12, 18]
 
@@ -71,8 +72,6 @@ class NAMNestDownloader(_NAMNestBase):
 
 class NAMNestAnADownloader(_NAMNestBase):
     """NAM nest AnA: forecast hours 1-6 of the 00/06/12/18Z cycle covering each hour."""
-
-    REGIONS = {Region.HAWAII: HAWAII, Region.PUERTO_RICO: PUERTO_RICO}
 
     @staticmethod
     def nam_cycle(d_start: datetime) -> datetime:

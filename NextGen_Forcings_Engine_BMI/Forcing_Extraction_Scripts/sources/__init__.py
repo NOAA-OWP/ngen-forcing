@@ -54,8 +54,8 @@ SOURCES: dict[str, type[ForecastDownloader]] = {
     cls.__name__.removesuffix("Downloader"): cls for cls in DOWNLOADERS
 }
 
-#: A source in one region.
-Source = tuple[type[ForecastDownloader], Region]
+#: A source in one region; the region is None for a source without regional variants.
+Source = tuple[type[ForecastDownloader], Region | None]
 
 
 def all_sources() -> list[Source]:
@@ -65,7 +65,8 @@ def all_sources() -> list[Source]:
 
 def parse_source(text: str) -> list[Source]:
     """
-    Sources named by ``NAME`` (every region of that source) or ``NAME[Region]`` / ``NAME:Region``.
+    Sources named by ``NAME`` (every region of that source, or a global source) or ``NAME[Region]`` /
+    ``NAME:Region``.
 
     Names are matched without regard to case.
     """

@@ -40,12 +40,12 @@ from Forcing_Extraction_Scripts.sources import (
 LOG = logging.getLogger(__name__)
 
 #: Forecast-mode (AnAFlag 0) sources, keyed by InputForcings value or "supp<SuppPcp>".
-#: Each value is the downloader class and the region it is run for.
+#: Each value is the downloader class and the region it is run for (None for a global source).
 FORCING_SRC: dict[int | str, Source] = {
-    3: (GFSDownloader, Region.GLOBAL),
+    3: (GFSDownloader, None),
     5: (HRRRDownloader, Region.CONUS),
     6: (RAPDownloader, Region.CONUS),
-    7: (CFSv2Downloader, Region.GLOBAL),
+    7: (CFSv2Downloader, None),
     8: (HiResWARWDownloader, Region.HAWAII),
     13: (NAMNestDownloader, Region.HAWAII),
     14: (NAMNestDownloader, Region.PUERTO_RICO),
@@ -99,14 +99,14 @@ class ExtractionJob:
 
     forcing: int | str
     downloader: type[ForecastDownloader]
-    region: Region
+    region: Region | None
     out_dir: str
     horizon_minutes: int | None = None
     local_layout: str | None = None
 
     @property
     def label(self) -> str:
-        """The source and region, e.g. ``HRRR[Alaska]``."""
+        """The source and region, e.g. ``HRRR[Alaska]`` or ``GFS``."""
         return self.downloader.label(self.region)
 
 

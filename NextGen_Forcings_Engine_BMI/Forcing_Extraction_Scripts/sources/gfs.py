@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import os
 
-from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader, Region
+from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 
 
 class GFSDownloader(ForecastDownloader):
     """Downloader for GFS operational forecast data."""
 
-    REGIONS = {Region.GLOBAL: None}
+    #: A global model: no regional variants.
+    REGIONS = {None: None}
 
     default_lookback = 8
     default_cleanback = 384

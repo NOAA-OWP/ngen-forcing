@@ -5,13 +5,14 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 
-from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader, Region
+from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 
 
 class CFSv2Downloader(ForecastDownloader):
     """Downloader for CFSv2 forecast data (6-hour interval outputs for 30 days)."""
 
-    REGIONS = {Region.GLOBAL: None}
+    #: A global model: no regional variants.
+    REGIONS = {None: None}
 
     default_lookback = 24
     default_cleanback = 720

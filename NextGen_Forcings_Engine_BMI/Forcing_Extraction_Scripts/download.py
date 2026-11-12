@@ -4,7 +4,7 @@ Run one downloader standalone.
 Run from ``NextGen_Forcings_Engine_BMI/``::
 
     python -m Forcing_Extraction_Scripts.download HRRR /data/hrrr "2026-11-10 13:00:00" --region Alaska
-    python -m Forcing_Extraction_Scripts.download GFS /data/gfs "2026-11-10 13:00:00" --region Global
+    python -m Forcing_Extraction_Scripts.download GFS /data/gfs "2026-11-10 13:00:00"      # global: no region
     python -m Forcing_Extraction_Scripts.download HRRR --help      # options and regions of one source
 """
 

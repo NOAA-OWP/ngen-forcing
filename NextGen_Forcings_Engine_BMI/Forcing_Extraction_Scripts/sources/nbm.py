@@ -10,6 +10,9 @@ from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
 class _NBMBase(ForecastDownloader):
     """File naming shared by the NBM core downloaders. ``REGIONS`` maps to the domain tag in file names."""
 
+    REGIONS = {Region.CONUS: "co", Region.ALASKA: "ak", Region.HAWAII: "hi", Region.PUERTO_RICO: "pr",
+               Region.GUAM: "gu"}
+
     @property
     def base_url(self):
         return "https://noaa-nbm-grib2-pds.s3.amazonaws.com"
@@ -30,8 +33,6 @@ class _NBMBase(ForecastDownloader):
 class NBMDownloader(_NBMBase):
     """Downloader for NBM core forecasts (GRIB2)."""
 
-    REGIONS = {Region.CONUS: "co", Region.ALASKA: "ak", Region.HAWAII: "hi", Region.PUERTO_RICO: "pr"}
-
     def should_process_hour(self, d_start):
         return d_start.hour in [0, 6, 12, 18]
 
@@ -44,8 +45,6 @@ class NBMDownloader(_NBMBase):
 
 class NBMAnADownloader(_NBMBase):
     """Downloader for the NBM core forecast hour an Analysis and Assimilation (AnA) run reads."""
-
-    REGIONS = {Region.PUERTO_RICO: "pr"}
 
     def get_download_targets(self, _):
         # NBM core has no f000; f001 is the earliest forecast hour.

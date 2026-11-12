@@ -20,7 +20,12 @@ class StageIVDomain:
 class StageIVDownloader(FixedFileDownloader):
     """Downloader for Stage IV precipitation analyses (flat output directory)."""
 
-    REGIONS = {Region.CONUS: StageIVDomain("conus", 1), Region.ALASKA: StageIVDomain("ak", 6)}
+    #: Hourly analyses where the domain has them; Alaska is only analyzed 6-hourly.
+    REGIONS = {
+        Region.CONUS: StageIVDomain("conus", 1),
+        Region.ALASKA: StageIVDomain("ak", 6),
+        Region.PUERTO_RICO: StageIVDomain("pr", 1),
+    }
 
     default_lookback = 36
     default_cleanback = 240

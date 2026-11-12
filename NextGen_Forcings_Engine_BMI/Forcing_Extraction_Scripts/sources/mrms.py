@@ -11,6 +11,9 @@ from Forcing_Extraction_Scripts.forecast_download_base import FileSpec, FixedFil
 class _MRMSBase(FixedFileDownloader):
     """Server location shared by the MRMS downloaders."""
 
+    REGIONS = {Region.CONUS: "CONUS", Region.ALASKA: "ALASKA", Region.HAWAII: "HAWAII",
+               Region.PUERTO_RICO: "CARIB", Region.GUAM: "GUAM"}
+
     @property
     def base_url(self) -> str:
         return f"https://noaa-mrms-pds.s3.amazonaws.com/{self.domain}"
@@ -23,9 +26,6 @@ class MRMSMultiSensorDownloader(_MRMSBase):
     The server layout is ``<domain>/MultiSensor_QPE_01H_PassN_00.00/YYYYMMDD/<file>``. The local
     layout depends on which engine reader consumes the files and is selected by ``local_layout``.
     """
-
-    REGIONS = {Region.CONUS: "CONUS", Region.ALASKA: "ALASKA", Region.HAWAII: "HAWAII",
-               Region.PUERTO_RICO: "CARIB"}
 
     #: Flat per-pass directories, read for SuppPcp 2, 5, 6 and 10.
     LAYOUT_FLAT: typing.ClassVar[str] = "MultiSensor_QPE_01H_{pass_}_00.00"
@@ -51,8 +51,6 @@ class MRMSMultiSensorDownloader(_MRMSBase):
 class MRMSRadarOnlyDownloader(_MRMSBase):
     """Downloader for hourly MRMS RadarOnly QPE."""
 
-    REGIONS = {Region.CONUS: "CONUS"}
-
     def get_file_specs(self, d_start):
         date = d_start.strftime("%Y%m%d")
         product = "RadarOnly_QPE_01H_00.00"
@@ -63,8 +61,6 @@ class MRMSRadarOnlyDownloader(_MRMSBase):
 
 class MRMSPrecipRateDownloader(_MRMSBase):
     """Downloader for MRMS sub-hourly (2-minute) precipitation rate."""
-
-    REGIONS = {Region.CONUS: "CONUS"}
 
     def get_file_specs(self, d_start):
         date = d_start.strftime("%Y%m%d")

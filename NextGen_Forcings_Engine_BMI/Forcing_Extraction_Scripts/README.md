@@ -10,22 +10,20 @@ There is one downloader class per source (model or observation product), in `sou
 
 | Module | Classes | Regions |
 |:---|:---|:---|
-| `sources/gfs.py` | `GFSDownloader` | Global |
-| `sources/cfs.py` | `CFSv2Downloader` | Global |
-| `sources/hrrr.py` | `HRRRDownloader`, `HRRRAnADownloader` | CONUS, Alaska |
-| | `HRRRSubhourlyDownloader`, `HRRRSubhourlyAnADownloader` | CONUS |
-| `sources/rap.py` | `RAPDownloader`, `RAPAnADownloader` | CONUS |
-| `sources/nam.py` | `NAMNestDownloader` | Alaska, Hawaii, Puerto Rico |
-| | `NAMNestAnADownloader` | Hawaii, Puerto Rico |
+| `sources/gfs.py` | `GFSDownloader` | none (global) |
+| `sources/cfs.py` | `CFSv2Downloader` | none (global) |
+| `sources/hrrr.py` | `HRRRDownloader`, `HRRRAnADownloader`, `HRRRSubhourlyDownloader`, `HRRRSubhourlyAnADownloader` | CONUS, Alaska |
+| `sources/rap.py` | `RAPDownloader`, `RAPAnADownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
+| `sources/nam.py` | `NAMNestDownloader`, `NAMNestAnADownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
 | `sources/hiresw.py` | `HiResWARWDownloader` | Hawaii, Puerto Rico |
-| `sources/nbm.py` | `NBMDownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
-| | `NBMAnADownloader` | Puerto Rico |
-| `sources/ndfd.py` | `NDFDDownloader` | CONUS |
-| `sources/stage_iv.py` | `StageIVDownloader` | CONUS, Alaska |
-| `sources/mrms.py` | `MRMSMultiSensorDownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
-| | `MRMSRadarOnlyDownloader`, `MRMSPrecipRateDownloader` | CONUS |
+| `sources/nbm.py` | `NBMDownloader`, `NBMAnADownloader` | CONUS, Alaska, Hawaii, Puerto Rico, Guam |
+| `sources/ndfd.py` | `NDFDDownloader` | CONUS, Alaska, Hawaii, Puerto Rico, Guam (no QPF) |
+| `sources/stage_iv.py` | `StageIVDownloader` | CONUS (hourly), Alaska (6-hourly), Puerto Rico (hourly) |
+| `sources/mrms.py` | `MRMSMultiSensorDownloader`, `MRMSRadarOnlyDownloader`, `MRMSPrecipRateDownloader` | CONUS, Alaska, Hawaii, Puerto Rico, Guam |
 
-Each class lists its regions in `REGIONS`, a mapping from `Region` (`CONUS`, `ALASKA`, `HAWAII`, `PUERTO_RICO`, `GLOBAL`) to what differs for that region: directory and file-name tags, cycle hours, and so on. A downloader is constructed with a required `region=...` argument and reads its region's settings from `self.domain`; a region the source does not cover is rejected. Analysis and Assimilation (AnA) variants are separate classes from the forecast ones. The tables in `forcing_extraction.py` map each forcing identifier to a `(downloader class, Region)` pair.
+A class covers every region its source is published for upstream, whether or not a forcing identifier uses it yet; the tables below list the combinations that are registered.
+
+Each class lists its regions in `REGIONS`, a mapping from `Region` (`CONUS`, `ALASKA`, `HAWAII`, `PUERTO_RICO`, `GUAM`) to what differs for that region: directory and file-name tags, cycle hours, and so on. A downloader is constructed with a required `region=...` argument and reads its region's settings from `self.domain`; a region the source does not cover is rejected. The global models (GFS, CFSv2) have no regional variants and take `region=None`. Analysis and Assimilation (AnA) variants are separate classes from the forecast ones. The tables in `forcing_extraction.py` map each forcing identifier to a `(downloader class, Region)` pair, with `None` as the region of a global model.
 
 All downloaders inherit from `ForecastDownloader` (`forecast_download_base.py`), establishing a standard lifecycle across datasets:
 1. **Cycle Window Evaluation**: Computes lookback/lagback windows aligned to model operational cadences, optionally limited to the configured forecast horizon.
@@ -56,10 +54,10 @@ Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.p
 
 | Forcing ID | Region | Model / Product | Downloader class | Source Endpoint | Forecast Hours Available |
 |:---:|:---|:---|:---|:---|:---:|
-| **3** | Global | GFS | `GFSDownloader` | AWS S3 (`noaa-gfs-bdp-pds`) | 1–384 |
+| **3** | (global) | GFS | `GFSDownloader` | AWS S3 (`noaa-gfs-bdp-pds`) | 1–384 |
 | **5** | CONUS | HRRR | `HRRRDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
 | **6** | CONUS | RAP (`pgrb` and `bgrb`) | `RAPDownloader` | AWS S3 (`noaa-rap-pds`) | 0–51 (03/09/15/21Z), 0–18 otherwise |
-| **7** | Global | CFSv2 (members 01–04) | `CFSv2Downloader` | AWS S3 (`noaa-cfs-pds`) | 0–720, 6-hourly |
+| **7** | (global) | CFSv2 (members 01–04) | `CFSv2Downloader` | AWS S3 (`noaa-cfs-pds`) | 0–720, 6-hourly |
 | **8** | Hawaii | HIRESW WRF-ARW | `HiResWARWDownloader` | NOMADS HTTPS | 1–48 |
 | **13** | Hawaii | NAM Nest Hawaii | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
 | **14** | Puerto Rico | NAM Nest Puerto Rico | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
@@ -154,11 +152,12 @@ cd ../
 python forcing_extraction.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
 ```
 
-Individual downloaders can also be run directly from `NextGen_Forcings_Engine_BMI/`, naming the source (the class name without `Downloader`) and the region:
+Individual downloaders can also be run directly from `NextGen_Forcings_Engine_BMI/`, naming the source (the class name without `Downloader`) and the region (global models take none):
 
 ```bash
 python -m Forcing_Extraction_Scripts.download HRRR ./HRRR "2026-11-10 12:00:00" --region CONUS --lookBackHours 6
 python -m Forcing_Extraction_Scripts.download HRRR ./HRRR_AK "2026-11-10 12:00:00" --region Alaska
+python -m Forcing_Extraction_Scripts.download GFS ./GFS "2026-11-10 12:00:00"
 python -m Forcing_Extraction_Scripts.download --help        # lists the sources
 python -m Forcing_Extraction_Scripts.download NBM --help    # options and regions of one source
 ```

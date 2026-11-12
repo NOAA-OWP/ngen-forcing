@@ -51,7 +51,7 @@ class Region(enum.Enum):
     ALASKA = "Alaska"
     HAWAII = "Hawaii"
     PUERTO_RICO = "Puerto_Rico"
-    GLOBAL = "Global"
+    GUAM = "Guam"
 
     def __str__(self) -> str:
         return self.value
@@ -313,11 +313,12 @@ class ForecastDownloader(ABC):
 
     A concrete subclass describes one source (model or observation product). ``REGIONS`` maps each
     region the source is fetched for to that region's settings, which an instance reads from
-    ``self.domain``. The region is a required argument.
+    ``self.domain``. A source without regional variants (a global model) has the single key
+    ``None``. The region is a required argument: a Region, or None for a source without variants.
     """
 
-    #: Region -> settings of this source for that region.
-    REGIONS: typing.ClassVar[typing.Mapping[Region, typing.Any]] = {}
+    #: Region -> settings of this source for that region; ``{None: ...}`` for a global source.
+    REGIONS: typing.ClassVar[typing.Mapping[Region | None, typing.Any]] = {}
 
     default_lookback: int = 24
     default_cleanback: int = 240
@@ -351,10 +352,10 @@ class ForecastDownloader(ABC):
         max_forecast_hour: int | None = None,
         revalidate: bool = False,
         *,
-        region: Region | str,
+        region: Region | str | None,
     ) -> None:
-        #: Region this instance downloads, and the source's settings for it.
-        self.region: Region = self.resolve_region(region)
+        #: Region this instance downloads (None for a global source), and the source's settings for it.
+        self.region: Region | None = self.resolve_region(region)
         self.domain: typing.Any = self.REGIONS[self.region]
         if lookback_hours <= lagback_hours:
             raise ValueError(
@@ -382,23 +383,33 @@ class ForecastDownloader(ABC):
         self._cycle_time: datetime | None = None
 
     @classmethod
-    def resolve_region(cls, region: Region | str) -> Region:
-        """Return ``region`` as a Region, rejecting regions the source does not cover."""
+    def resolve_region(cls, region: Region | str | None) -> Region | None:
+        """
+        Return ``region`` as a Region, rejecting regions the source does not cover.
+
+        A source without regional variants accepts only None, and other sources do not accept None.
+        """
+        if None in cls.REGIONS:
+            if region is not None:
+                raise ValueError(f"{cls.__name__} has no regional variants; its region must be None, not {region}.")
+            return None
+        covered = ", ".join(str(r) for r in cls.REGIONS)
+        if region is None:
+            raise ValueError(f"{cls.__name__} needs a region: one of {covered}.")
         resolved = Region.parse(region)
         if resolved not in cls.REGIONS:
-            raise ValueError(
-                f"{cls.__name__} does not cover region {resolved}; it covers "
-                f"{', '.join(str(r) for r in cls.REGIONS)}."
-            )
+            raise ValueError(f"{cls.__name__} does not cover region {resolved}; it covers {covered}.")
         return resolved
 
     @classmethod
-    def label(cls, region: Region | str) -> str:
-        """A short name for this source in one region, e.g. ``HRRR[Alaska]``."""
-        return f"{cls.__name__.removesuffix('Downloader')}[{cls.resolve_region(region)}]"
+    def label(cls, region: Region | str | None) -> str:
+        """A short name for this source in one region, e.g. ``HRRR[Alaska]``, or ``GFS`` for a global source."""
+        name = cls.__name__.removesuffix("Downloader")
+        resolved = cls.resolve_region(region)
+        return name if resolved is None else f"{name}[{resolved}]"
 
     @classmethod
-    def window_defaults(cls, region: Region) -> tuple[int, int, int]:
+    def window_defaults(cls, region: Region | None) -> tuple[int, int, int]:
         """Standalone defaults (lookback, cleanback, lagback) in hours for ``region``."""
         return cls.default_lookback, cls.default_cleanback, cls.default_lagback
 
@@ -416,8 +427,11 @@ class ForecastDownloader(ABC):
         parser = argparse.ArgumentParser(prog=prog, description=cls.__doc__)
         parser.add_argument("outDir", type=str, help="Output directory path")
         parser.add_argument("startTime", type=lambda s: datetime.strptime(s, "%Y-%m-%d %H:%M:%S"))
-        parser.add_argument("--region", type=cls.resolve_region, required=True,
-                            help=f"One of: {', '.join(str(r) for r in cls.REGIONS)}.")
+        if len(cls.REGIONS) == 1:  # nothing to choose: a global source, or one that covers a single region
+            parser.set_defaults(region=next(iter(cls.REGIONS)))
+        else:
+            parser.add_argument("--region", type=cls.resolve_region, required=True,
+                                help=f"One of: {', '.join(str(r) for r in cls.REGIONS)}.")
         parser.add_argument("--lookBackHours", type=int, default=None, help="Default depends on source and region.")
         parser.add_argument("--cleanBackHours", type=int, default=None, help="Default depends on source and region.")
         parser.add_argument("--lagBackHours", type=int, default=None, help="Default depends on source and region.")

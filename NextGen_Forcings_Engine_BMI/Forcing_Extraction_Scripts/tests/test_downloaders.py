@@ -41,7 +41,7 @@ CONFIG_DIR = Path(fe.__file__).resolve().parent / "BMI_NextGen_Configs"
 
 
 def make(source, out_dir, start=CYCLE + dt.timedelta(hours=1), **overrides):
-    """Instantiate a (class, region) pair, or a class that covers a single region, for a one-cycle window."""
+    """Instantiate a (class, region) pair, or a global-source class, for a one-cycle window."""
     if isinstance(source, tuple):
         cls, region = source
     else:
@@ -69,6 +69,7 @@ def config(**kw):
 
 HRRR_ANA = (src.HRRRAnADownloader, Region.CONUS)
 MRMS = (src.MRMSMultiSensorDownloader, Region.CONUS)
+NDFD_CONUS = (src.NDFDDownloader, Region.CONUS)
 HRRR_PATH = f"hrrr.{DAY}/conus/hrrr.t12z.wrfsfcf01.grib2"
 HRRR_ANA_URL = f"https://noaa-hrrr-bdp-pds.s3.amazonaws.com/{HRRR_PATH}"
 MRMS_URL = (f"https://noaa-mrms-pds.s3.amazonaws.com/CONUS/MultiSensor_QPE_01H_Pass1_00.00/{DAY}/"
@@ -107,20 +108,40 @@ def test_region_is_required(tmp_path):
 
 
 def test_region_not_covered_is_rejected(tmp_path):
-    with pytest.raises(ValueError, match="RAPDownloader does not cover region Alaska; it covers CONUS"):
-        make((src.RAPDownloader, Region.ALASKA), tmp_path)
+    with pytest.raises(ValueError, match="HiResWARWDownloader does not cover region CONUS; it covers Hawaii, Puerto_Rico"):
+        make((src.HiResWARWDownloader, Region.CONUS), tmp_path)
+
+
+def test_global_sources_take_region_none(tmp_path):
+    gfs = make((src.GFSDownloader, None), tmp_path)
+    assert gfs.region is None and src.GFSDownloader.label(None) == "GFS"
+    with pytest.raises(ValueError, match="GFSDownloader has no regional variants"):
+        make((src.GFSDownloader, Region.CONUS), tmp_path)
+    with pytest.raises(ValueError, match="HRRRDownloader needs a region: one of CONUS, Alaska"):
+        make((src.HRRRDownloader, None), tmp_path)
+    assert {cls for cls in src.DOWNLOADERS if None in cls.REGIONS} == {src.GFSDownloader, src.CFSv2Downloader}
+
+
+def test_only_global_sources_cover_a_single_region():
+    assert all(len(cls.REGIONS) > 1 for cls in src.DOWNLOADERS if None not in cls.REGIONS)
+
+
+def test_cli_takes_no_region_for_a_global_source(tmp_path):
+    assert src.GFSDownloader.from_cli_args([str(tmp_path), START_ARG]).region is None
+    with pytest.raises(SystemExit):
+        src.GFSDownloader.from_cli_args([str(tmp_path), START_ARG, "--region", "CONUS"])
 
 
 @pytest.mark.parametrize("text,region", [("conus", Region.CONUS), ("Puerto Rico", Region.PUERTO_RICO),
                                          ("puerto_rico", Region.PUERTO_RICO), ("ALASKA", Region.ALASKA),
-                                         (Region.HAWAII, Region.HAWAII)])
+                                         ("guam", Region.GUAM), (Region.HAWAII, Region.HAWAII)])
 def test_region_parse(text, region):
     assert Region.parse(text) is region
 
 
 def test_region_parse_rejects_unknown_names():
-    with pytest.raises(ValueError, match="Unknown region 'Guam'"):
-        Region.parse("Guam")
+    with pytest.raises(ValueError, match="Unknown region 'Samoa'"):
+        Region.parse("Samoa")
 
 
 def test_cli_selects_region_and_its_window_defaults(tmp_path):
@@ -128,7 +149,7 @@ def test_cli_selects_region_and_its_window_defaults(tmp_path):
     assert (alaska.region, alaska.lookback_hours, alaska.lagback_hours) == (Region.ALASKA, 36, 1)
     hawaii = src.NAMNestDownloader.from_cli_args([str(tmp_path), START_ARG, "--region", "hawaii"])
     assert (hawaii.region, hawaii.lookback_hours, hawaii.lagback_hours) == (Region.HAWAII, 24, 6)
-    for argv in ([], ["--region", "CONUS"]):  # required, and must be a region the source covers
+    for argv in ([], ["--region", "Guam"]):  # required, and must be a region the source covers
         with pytest.raises(SystemExit):
             src.NAMNestDownloader.from_cli_args([str(tmp_path), START_ARG, *argv])
 
@@ -137,6 +158,7 @@ def test_parse_source():
     assert src.parse_source("hrrr") == [(src.HRRRDownloader, Region.CONUS), (src.HRRRDownloader, Region.ALASKA)]
     assert src.parse_source("NBM[Alaska]") == [(src.NBMDownloader, Region.ALASKA)]
     assert src.parse_source("StageIV:conus") == [(src.StageIVDownloader, Region.CONUS)]
+    assert src.parse_source("gfs") == [(src.GFSDownloader, None)]
     with pytest.raises(ValueError, match="Unknown source"):
         src.parse_source("ECMWF")
 
@@ -181,7 +203,7 @@ def test_alaska_hrrr_horizon_by_cycle(tmp_path, hour, count):
 
 
 @pytest.mark.parametrize("region,tag", [(Region.CONUS, "co"), (Region.ALASKA, "ak"), (Region.HAWAII, "hi"),
-                                        (Region.PUERTO_RICO, "pr")])
+                                        (Region.PUERTO_RICO, "pr"), (Region.GUAM, "gu")])
 def test_nbm_targets_unique_through_f264(tmp_path, region, tag):
     downloader = make((src.NBMDownloader, region), tmp_path)
     assert files(downloader)[0][1].endswith(f"/blend.{DAY}/12/core/blend.t12z.core.f001.{tag}.grib2")
@@ -202,7 +224,7 @@ def test_cfs_requires_valid_member(tmp_path):
 
 
 def test_rap_fetches_both_grib_types_without_forcing_id(tmp_path):
-    names = [os.path.basename(p) for _, _, p in files(make(src.RAPAnADownloader, tmp_path))]
+    names = [os.path.basename(p) for _, _, p in files(make((src.RAPAnADownloader, Region.CONUS), tmp_path))]
     assert names == ["rap.t12z.awp130pgrbf01.grib2", "rap.t12z.awp130bgrbf01.grib2"]
 
 
@@ -229,19 +251,19 @@ def test_mrms_multisensor_urls_and_layouts(tmp_path):
 
 
 @pytest.mark.parametrize("region,mrms_domain", [(Region.ALASKA, "ALASKA"), (Region.HAWAII, "HAWAII"),
-                                                (Region.PUERTO_RICO, "CARIB")])
+                                                (Region.PUERTO_RICO, "CARIB"), (Region.GUAM, "GUAM")])
 def test_regional_mrms_urls(tmp_path, region, mrms_domain):
     url = files(make((src.MRMSMultiSensorDownloader, region), tmp_path))[0][1]
     assert url.startswith(f"https://noaa-mrms-pds.s3.amazonaws.com/{mrms_domain}/MultiSensor_QPE_01H_Pass1_00.00/{DAY}/")
 
 
 def test_mrms_radar_only_and_precip_rate_paths(tmp_path):
-    (_, url, path), = files(make(src.MRMSRadarOnlyDownloader, tmp_path))
+    (_, url, path), = files(make((src.MRMSRadarOnlyDownloader, Region.CONUS), tmp_path))
     name = f"MRMS_RadarOnly_QPE_01H_00.00_{DAY}-120000.grib2.gz"
     assert url == f"https://noaa-mrms-pds.s3.amazonaws.com/CONUS/RadarOnly_QPE_01H_00.00/{DAY}/{name}"
     assert rel(path, tmp_path) == f"CONUS/RadarOnly_QPE_01H_00.00/{DAY}/{name}"
 
-    entries = files(make(src.MRMSPrecipRateDownloader, tmp_path))
+    entries = files(make((src.MRMSPrecipRateDownloader, Region.CONUS), tmp_path))
     assert len(entries) == 30
     name = f"MRMS_PrecipRate_00.00_{DAY}-120200.grib2.gz"
     assert entries[1][1] == f"https://noaa-mrms-pds.s3.amazonaws.com/CONUS/PrecipRate_00.00/{DAY}/{name}"
@@ -258,12 +280,52 @@ def test_mrms_radar_only_and_precip_rate_paths(tmp_path):
     ((src.NAMNestDownloader, Region.HAWAII), "nam.{day}/nam.t12z.hawaiinest.hiresf01.tm00.grib2", "nam.{day}"),
     ((src.NAMNestDownloader, Region.PUERTO_RICO), "nam.{day}/nam.t12z.priconest.hiresf01.tm00.grib2", "nam.{day}"),
     ((src.HiResWARWDownloader, Region.HAWAII), "hiresw.{day}/hiresw.t12z.arw_2p5km.f01.hi.grib2", "hiresw.{day}"),
-    ((src.GFSDownloader, Region.GLOBAL), "gfs.{day}/12/atmos/gfs.t12z.sfluxgrbf001.grib2", "gfs.{day}/12/atmos"),
+    ((src.NAMNestDownloader, Region.CONUS), "nam.{day}/nam.t12z.conusnest.hiresf01.tm00.grib2", "nam.{day}"),
+    ((src.NAMNestAnADownloader, Region.CONUS), "nam.{day}/nam.t12z.conusnest.hiresf01.tm00.grib2", "nam.{day}"),
+    ((src.MRMSPrecipRateDownloader, Region.GUAM),
+     "GUAM/PrecipRate_00.00/{day}/MRMS_PrecipRate_00.00_{day}-120000.grib2.gz", "{day}"),
+    ((src.GFSDownloader, None), "gfs.{day}/12/atmos/gfs.t12z.sfluxgrbf001.grib2", "gfs.{day}/12/atmos"),
+    ((src.HRRRSubhourlyDownloader, Region.ALASKA), "hrrr.{day}/alaska/hrrr.t12z.wrfsubhf00.ak.grib2", "hrrr.{day}/subhourly"),
+    ((src.HRRRSubhourlyAnADownloader, Region.ALASKA), "hrrr.{day}/alaska/hrrr.t12z.wrfsubhf01.ak.grib2", "hrrr.{day}/subhourly"),
+    ((src.RAPDownloader, Region.ALASKA), "rap.{day}/rap.t12z.awp242f00.grib2", "rap.{day}"),
+    ((src.RAPDownloader, Region.HAWAII), "rap.{day}/rap.t12z.awp243f00.grib2", "rap.{day}"),
+    ((src.RAPAnADownloader, Region.PUERTO_RICO), "rap.{day}/rap.t12z.awp200f01.grib2", "rap.{day}"),
+    ((src.NAMNestAnADownloader, Region.ALASKA), "nam.{day}/nam.t12z.alaskanest.hiresf01.tm00.grib2", "nam.{day}"),
+    ((src.NBMAnADownloader, Region.ALASKA), "blend.{day}/12/core/blend.t12z.core.f001.ak.grib2", "blend.{day}/12/core"),
+    ((src.NBMAnADownloader, Region.CONUS), "blend.{day}/12/core/blend.t12z.core.f001.co.grib2", "blend.{day}/12/core"),
+    ((src.MRMSRadarOnlyDownloader, Region.PUERTO_RICO),
+     "CARIB/RadarOnly_QPE_01H_00.00/{day}/MRMS_RadarOnly_QPE_01H_00.00_{day}-120000.grib2.gz",
+     "CARIB/RadarOnly_QPE_01H_00.00/{day}"),
+    ((src.MRMSPrecipRateDownloader, Region.HAWAII),
+     "HAWAII/PrecipRate_00.00/{day}/MRMS_PrecipRate_00.00_{day}-120000.grib2.gz", "{day}"),
 ])
 def test_first_file_of_cycle(tmp_path, source, url, local):
     _, first_url, first_path = files(make(source, tmp_path))[0]
     assert first_url.endswith("/" + url.format(day=DAY))
     assert rel(first_path, tmp_path) == os.path.join(local.format(day=DAY), os.path.basename(first_url))
+
+
+def test_rap_fetches_one_file_per_hour_outside_conus(tmp_path):
+    assert len(files(make((src.RAPDownloader, Region.CONUS), tmp_path))) == 2 * 19
+    assert len(files(make((src.RAPDownloader, Region.ALASKA), tmp_path))) == 19
+
+
+@pytest.mark.parametrize("region,area,qpf_periods", [
+    (Region.CONUS, "conus", ["VP.001-003"]),
+    (Region.ALASKA, "alaska", ["VP.001-003"]),
+    (Region.HAWAII, "hawaii", ["VP.001-003", "VP.004-007"]),
+    (Region.PUERTO_RICO, "puertori", ["VP.001-003", "VP.004-007"]),
+    (Region.GUAM, "guam", []),
+])
+def test_ndfd_areas_and_qpf_periods(tmp_path, region, area, qpf_periods):
+    entries = files(make((src.NDFDDownloader, region), tmp_path))
+    fields = ("tmp", "wdir", "wspd", "qpf") if qpf_periods else ("tmp", "wdir", "wspd")
+    assert {rel(p, tmp_path) for _, _, p in entries} == {
+        f"NDFD/{DAY}/wgrbbul/ndfd_{area}/ndfd_{area}_{t}.grib2" for t in fields}
+    base = f"https://noaa-ndfd-pds.s3.amazonaws.com/opnl/AR.{area}"
+    assert [u for _, u, p in entries if p.endswith("_qpf.grib2")] == [f"{base}/{vp}/ds.qpf.bin" for vp in qpf_periods]
+    assert [u for _, u, p in entries if p.endswith("_tmp.grib2")] == [
+        f"{base}/VP.001-003/ds.temp.bin", f"{base}/VP.004-007/ds.temp.bin"]
 
 
 def test_hiresw_cycles_differ_by_region(tmp_path):
@@ -284,7 +346,7 @@ def test_alaska_hrrr_ana_reads_four_hours_of_three_hourly_cycles(tmp_path, hour,
 
 
 def test_ndfd_files_match_engine_names(tmp_path):
-    entries = files(make(src.NDFDDownloader, tmp_path))
+    entries = files(make(NDFD_CONUS, tmp_path))
     local = {rel(p, tmp_path) for _, _, p in entries}
     assert local == {f"NDFD/{DAY}/wgrbbul/ndfd_conus/ndfd_conus_{t}.grib2" for t in ("tmp", "wdir", "wspd", "qpf")}
     qpf_urls = [u for _, u, p in entries if p.endswith("_qpf.grib2")]
@@ -292,7 +354,8 @@ def test_ndfd_files_match_engine_names(tmp_path):
 
 
 @pytest.mark.parametrize("region,name", [(Region.CONUS, f"st4_conus.{DAY}12.01h.grb2"),
-                                         (Region.ALASKA, f"st4_ak.{DAY}12.06h.grb2")])
+                                         (Region.ALASKA, f"st4_ak.{DAY}12.06h.grb2"),
+                                         (Region.PUERTO_RICO, f"st4_pr.{DAY}12.01h.grb2")])
 def test_stageiv_flat_output(tmp_path, region, name):
     (_, url, path), = files(make((src.StageIVDownloader, region), tmp_path))
     assert url.endswith(f"/pcpanl.{DAY}/{name}")
@@ -484,7 +547,7 @@ def serve_ndfd(server, headers=ISSUED, skip=()):
 
 def test_ndfd_concatenates_valid_periods(server, tmp_path):
     serve_ndfd(server)
-    make(src.NDFDDownloader, tmp_path).run()
+    make(NDFD_CONUS, tmp_path).run()
     out = tmp_path / NDFD_OUT
     assert (out / "ndfd_conus_tmp.grib2").read_bytes() == b"GRIB VP.001-003 ds.temp.bin;GRIB VP.004-007 ds.temp.bin;"
     assert (out / "ndfd_conus_qpf.grib2").read_bytes() == b"GRIB VP.001-003 ds.qpf.bin;"
@@ -495,7 +558,7 @@ def test_ndfd_concatenates_valid_periods(server, tmp_path):
 def test_ndfd_partial_field_is_not_published(server, tmp_path):
     serve_ndfd(server, skip={f"{NDFD}/VP.004-007/ds.temp.bin"})
     with pytest.raises(fdb.DownloadError):
-        make(src.NDFDDownloader, tmp_path).run()
+        make(NDFD_CONUS, tmp_path).run()
     out = tmp_path / NDFD_OUT
     assert not list(out.iterdir())
 
@@ -503,7 +566,7 @@ def test_ndfd_partial_field_is_not_published(server, tmp_path):
 def test_ndfd_rejects_issuance_from_another_cycle(server, tmp_path):
     serve_ndfd(server, headers={"Last-Modified": LATER_ISSUANCE})
     with pytest.raises(fdb.DownloadError, match="only holds the latest issuance"):
-        make(src.NDFDDownloader, tmp_path).run()
+        make(NDFD_CONUS, tmp_path).run()
 
 
 # ----------------------------------------------------------------------------- orchestrator
