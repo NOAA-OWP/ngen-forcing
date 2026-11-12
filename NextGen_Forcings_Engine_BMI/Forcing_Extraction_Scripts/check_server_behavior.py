@@ -1,7 +1,7 @@
 """
 Check, against the live servers, the assumptions the downloaders make about server metadata.
 
-For each downloader script a recently published cycle is chosen (as in probe_sources), the files
+For each source and region a recently published cycle is chosen (as in probe_sources), the files
 the downloader would fetch are listed, and a sample of them is checked. Each check passes, fails
 (the server contradicts an assumption), or is skipped (not applicable or not checkable):
 
@@ -23,8 +23,8 @@ the downloader would fetch are listed, and a sample of them is checked. Each che
 
 Files larger than --max-mb get the HEAD check only. Run from NextGen_Forcings_Engine_BMI/:
 
-    python -m Forcing_Extraction_Scripts.check_server_behavior                 # all scripts
-    python -m Forcing_Extraction_Scripts.check_server_behavior CONUS/get_conus_HRRR.py --max-mb 200
+    python -m Forcing_Extraction_Scripts.check_server_behavior                 # all sources
+    python -m Forcing_Extraction_Scripts.check_server_behavior HRRR[CONUS] --max-mb 200
     python -m Forcing_Extraction_Scripts.check_server_behavior --url https://host/path/file.grib2
 """
 
@@ -55,6 +55,7 @@ from Forcing_Extraction_Scripts.forecast_download_base import (
     plain_md5_etag,
 )
 from Forcing_Extraction_Scripts.probe_sources import TIMEOUT, get_prefix
+from Forcing_Extraction_Scripts.sources import Source
 
 PASS, FAIL, SKIP, NOTE = "pass", "fail", "skip", "note"
 DEFAULT_MAX_MB = 64
@@ -258,22 +259,22 @@ def extra_checks(report: FileReport, url: str, session: requests.Session,
 
 
 @dataclass
-class ScriptReport:
-    script: str
+class SourceReport:
+    source: str
     cycle: str = ""
     files: list[FileReport] = field(default_factory=list)
     error: str = ""
 
 
-def check_script(script: str, session: requests.Session, max_bytes: int, per_script: int) -> ScriptReport:
-    result = ScriptReport(script)
+def check_source(source: Source, session: requests.Session, max_bytes: int, per_source: int) -> SourceReport:
+    result = SourceReport(probe_sources.source_label(source))
     try:
-        chosen = probe_sources.script_cycle(script)
-    except Exception as exc:  # report and continue with the other scripts
+        chosen = probe_sources.source_cycle(source)
+    except Exception as exc:  # report and continue with the other sources
         result.error = f"{type(exc).__name__}: {exc}"
         return result
     result.cycle = chosen.cycle.strftime("%Y-%m-%d %HZ") + (f" ({chosen.note})" if chosen.note else "")
-    for url in probe_sources.sample(chosen.urls)[:per_script]:
+    for url in probe_sources.sample(chosen.urls)[:per_source]:
         result.files.append(check_url(url, session, max_bytes))
     return result
 
@@ -305,18 +306,23 @@ def format_file(f: FileReport, indent: str = "  ") -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("scripts", nargs="*", help="Scripts relative to Forcing_Extraction_Scripts (default: all).")
-    parser.add_argument("--url", action="append", default=[], help="Check this URL (repeatable) instead of scripts.")
+    parser.add_argument("sources", nargs="*",
+                        help="Sources as NAME (every region) or NAME[Region], e.g. HRRR or NBM[Alaska] (default: all).")
+    parser.add_argument("--url", action="append", default=[], help="Check this URL (repeatable) instead of sources.")
     parser.add_argument("--max-mb", type=int, default=DEFAULT_MAX_MB,
                         help=f"Download files up to this size for full checks (default {DEFAULT_MAX_MB}).")
-    parser.add_argument("--per-script", type=int, default=3, help="Files sampled per script (default 3).")
+    parser.add_argument("--per-source", type=int, default=3, help="Files sampled per source (default 3).")
     parser.add_argument("--json", type=Path, help="Also write results as JSON to this path.")
     args = parser.parse_args(argv)
     max_bytes = args.max_mb << 20
+    try:
+        sources = probe_sources.sources_from_args(args.sources)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     lines: list[str] = []
     files: list[FileReport] = []
-    scripts: list[ScriptReport] = []
+    reports: list[SourceReport] = []
     with probe_sources.PoliteSession() as session:
         if args.url:
             for url in args.url:
@@ -324,17 +330,17 @@ def main(argv: list[str] | None = None) -> int:
                 files.append(f)
                 lines += format_file(f, "")
         else:
-            for script in args.scripts or probe_sources.all_scripts():
-                r = check_script(script, session, max_bytes, args.per_script)
-                scripts.append(r)
+            for source in sources:
+                r = check_source(source, session, max_bytes, args.per_source)
+                reports.append(r)
                 files += r.files
-                lines.append(f"{script} ({r.cycle or r.error})")
+                lines.append(f"{r.source} ({r.cycle or r.error})")
                 for f in r.files:
                     lines += format_file(f)
     print("\n".join(lines) + summarize(files))
     if args.json:
         args.json.write_text(json.dumps({"files": [asdict(f) for f in files],
-                                         "scripts": [asdict(s) for s in scripts]}, indent=2))
+                                         "sources": [asdict(r) for r in reports]}, indent=2))
     return 1 if any(f.failed for f in files) else 0
 
 

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
-import inspect
 import logging
 import math
 import sys
@@ -14,61 +12,81 @@ from config_models import ForcingExtractionConfig
 from Forcing_Extraction_Scripts.forecast_download_base import (
     DownloadError,
     ForecastDownloader,
-    MRMSMultiSensorDownloader,
+    Region,
     configure_logging,
+)
+from Forcing_Extraction_Scripts.sources import (
+    CFSv2Downloader,
+    GFSDownloader,
+    HiResWARWDownloader,
+    HRRRAnADownloader,
+    HRRRDownloader,
+    HRRRSubhourlyAnADownloader,
+    HRRRSubhourlyDownloader,
+    MRMSMultiSensorDownloader,
+    MRMSPrecipRateDownloader,
+    MRMSRadarOnlyDownloader,
+    NAMNestAnADownloader,
+    NAMNestDownloader,
+    NBMAnADownloader,
+    NBMDownloader,
+    NDFDDownloader,
+    RAPAnADownloader,
+    RAPDownloader,
+    Source,
+    StageIVDownloader,
 )
 
 LOG = logging.getLogger(__name__)
 
-SCRIPT_DIR: Path = Path(__file__).resolve().parent / "Forcing_Extraction_Scripts"
-
-#: Forecast-mode (AnAFlag 0) downloaders, keyed by InputForcings value or "supp<SuppPcp>".
-FORCING_SRC: dict[int | str, str] = {
-    3: "Global/get_prod_GFS.py",
-    5: "CONUS/get_conus_HRRR.py",
-    6: "CONUS/get_conus_RAP.py",
-    7: "Global/get_CFSv2.py",
-    8: "Hawaii/get_ARW_Hawaii.py",
-    13: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
-    14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py",
-    15: "Alaska/get_prod_NAM_Nest_Alaska.py",
-    16: "Hawaii/get_prod_NAM_Nest_Hawaii.py",
-    17: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py",
-    18: "Puerto_Rico/get_ARW_Puerto_Rico.py",
-    19: "Alaska/get_Alaska_HRRR.py",
-    24: "CONUS/get_prod_NBM_Conus.py",
-    25: "CONUS/get_conus_NDFD.py",
-    26: "CONUS/get_CONUS_HRRR_subhourly.py",
-    "supp8": "CONUS/get_prod_NBM_Conus.py",
-    "supp9": "Alaska/get_prod_NBM_Alaska.py",
-    "supp11": "Alaska/get_Alaska_StageIV.py",
-    "supp12": "CONUS/get_conus_StageIV.py",
-    "supp15": "Puerto_Rico/get_prod_NBM_Puerto_Rico.py",
+#: Forecast-mode (AnAFlag 0) sources, keyed by InputForcings value or "supp<SuppPcp>".
+#: Each value is the downloader class and the region it is run for.
+FORCING_SRC: dict[int | str, Source] = {
+    3: (GFSDownloader, Region.GLOBAL),
+    5: (HRRRDownloader, Region.CONUS),
+    6: (RAPDownloader, Region.CONUS),
+    7: (CFSv2Downloader, Region.GLOBAL),
+    8: (HiResWARWDownloader, Region.HAWAII),
+    13: (NAMNestDownloader, Region.HAWAII),
+    14: (NAMNestDownloader, Region.PUERTO_RICO),
+    15: (NAMNestDownloader, Region.ALASKA),
+    16: (NAMNestDownloader, Region.HAWAII),
+    17: (NAMNestDownloader, Region.PUERTO_RICO),
+    18: (HiResWARWDownloader, Region.PUERTO_RICO),
+    19: (HRRRDownloader, Region.ALASKA),
+    24: (NBMDownloader, Region.CONUS),
+    25: (NDFDDownloader, Region.CONUS),
+    26: (HRRRSubhourlyDownloader, Region.CONUS),
+    "supp8": (NBMDownloader, Region.CONUS),
+    "supp9": (NBMDownloader, Region.ALASKA),
+    "supp11": (StageIVDownloader, Region.ALASKA),
+    "supp12": (StageIVDownloader, Region.CONUS),
+    "supp15": (NBMDownloader, Region.PUERTO_RICO),
 }
 
-#: Analysis and Assimilation (AnAFlag 1) downloaders.
-FORCING_ANA_SRC: dict[int | str, str] = {
-    5: "CONUS/get_conus_HRRR_AnA.py",
-    6: "CONUS/get_conus_RAP_AnA.py",
-    13: "Hawaii/get_prod_NAM_Nest_Hawaii_AnA.py",
-    14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py",
-    19: "Alaska/get_Alaska_HRRR.py",
-    20: "Alaska/get_Alaska_HRRR_AnA.py",
-    26: "CONUS/get_conus_HRRR_subhourly_AnA.py",
-    "supp1": "CONUS/get_conus_MRMS_Radar.py",
-    "supp2": "CONUS/get_conus_MRMS_MultiSensor.py",
-    "supp6": "Hawaii/get_MRMS_MultiSensor_Hawaii.py",
-    "supp10": "Alaska/get_MRMS_MultiSensor_Alaska.py",
-    "supp11": "Alaska/get_Alaska_StageIV.py",
-    "supp12": "CONUS/get_conus_StageIV.py",
-    "supp15": "Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py",
-    "supp16": "CONUS/get_conus_MRMS_subhourly.py",
+#: Analysis and Assimilation (AnAFlag 1) sources.
+FORCING_ANA_SRC: dict[int | str, Source] = {
+    5: (HRRRAnADownloader, Region.CONUS),
+    6: (RAPAnADownloader, Region.CONUS),
+    13: (NAMNestAnADownloader, Region.HAWAII),
+    14: (NAMNestAnADownloader, Region.PUERTO_RICO),
+    19: (HRRRDownloader, Region.ALASKA),
+    20: (HRRRAnADownloader, Region.ALASKA),
+    26: (HRRRSubhourlyAnADownloader, Region.CONUS),
+    "supp1": (MRMSRadarOnlyDownloader, Region.CONUS),
+    "supp2": (MRMSMultiSensorDownloader, Region.CONUS),
+    "supp6": (MRMSMultiSensorDownloader, Region.HAWAII),
+    "supp10": (MRMSMultiSensorDownloader, Region.ALASKA),
+    "supp11": (StageIVDownloader, Region.ALASKA),
+    "supp12": (StageIVDownloader, Region.CONUS),
+    "supp15": (NBMAnADownloader, Region.PUERTO_RICO),
+    "supp16": (MRMSPrecipRateDownloader, Region.CONUS),
 }
 
 #: MRMS MultiSensor source for the second (MRMS) directory of the Stage IV/MRMS SuppPcp options.
-STAGE4_MRMS_SRC: dict[str, str] = {
-    "supp11": "Alaska/get_MRMS_MultiSensor_Alaska.py",
-    "supp12": "CONUS/get_conus_MRMS_MultiSensor.py",
+STAGE4_MRMS_SRC: dict[str, Source] = {
+    "supp11": (MRMSMultiSensorDownloader, Region.ALASKA),
+    "supp12": (MRMSMultiSensorDownloader, Region.CONUS),
 }
 
 #: Hourly observation products whose AnA window is shifted one hour later.
@@ -80,30 +98,16 @@ class ExtractionJob:
     """One downloader invocation."""
 
     forcing: int | str
-    script: str
+    downloader: type[ForecastDownloader]
+    region: Region
     out_dir: str
     horizon_minutes: int | None = None
     local_layout: str | None = None
 
-
-def load_downloader_class(script: Path) -> type[ForecastDownloader]:
-    """Import a downloader script and return the concrete downloader class it defines."""
-    spec = importlib.util.spec_from_file_location(f"forcing_{script.stem}", script)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load specification for {script}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    candidates = [
-        obj
-        for obj in vars(module).values()
-        if isinstance(obj, type)
-        and issubclass(obj, ForecastDownloader)
-        and obj.__module__ == module.__name__
-        and not inspect.isabstract(obj)
-    ]
-    if len(candidates) != 1:
-        raise ImportError(f"Expected one downloader class in {script}, found {[c.__name__ for c in candidates]}")
-    return candidates[0]
+    @property
+    def label(self) -> str:
+        """The source and region, e.g. ``HRRR[Alaska]``."""
+        return self.downloader.label(self.region)
 
 
 def _supp_dirs(cfg: ForcingExtractionConfig) -> list[str]:
@@ -120,13 +124,14 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
     horizons = list(cfg.fcst_input_horizons)
     jobs: list[ExtractionJob] = []
 
-    def add(forcing: int | str, out_dir: str, horizon: int | None, script: str | None = None,
+    def add(forcing: int | str, out_dir: str, horizon: int | None, source: Source | None = None,
             local_layout: str | None = None) -> None:
-        script = script or src.get(forcing)
-        if script is None:
+        source = source or src.get(forcing)
+        if source is None:
             LOG.warning("No downloader is registered for forcing %r in %s mode; skipping it.", forcing, mode)
             return
-        jobs.append(ExtractionJob(forcing, script, out_dir, horizon, local_layout))
+        downloader, region = source
+        jobs.append(ExtractionJob(forcing, downloader, region, out_dir, horizon, local_layout))
 
     if len(cfg.input_force_dirs) < len(cfg.input_forcings):
         raise ValueError("InputForcingDirectories must have one entry per InputForcings value.")
@@ -148,7 +153,7 @@ def build_jobs(cfg: ForcingExtractionConfig) -> list[ExtractionJob]:
         label = stage4[0]
         add(label, supp_dirs[0], supp_horizon)
         if len(supp_dirs) > 1:
-            add(label, supp_dirs[1], supp_horizon, script=STAGE4_MRMS_SRC[label],
+            add(label, supp_dirs[1], supp_horizon, source=STAGE4_MRMS_SRC[label],
                 local_layout=MRMSMultiSensorDownloader.LAYOUT_STAGE4_BLEND)
         else:
             LOG.warning("%s has no second (MRMS) directory in SuppPcpDirectories; MRMS will not be downloaded.", label)
@@ -196,8 +201,9 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
         max_forecast_hour = None
 
     ens_number = cfg.cfsv2EnsMember
-    downloader_class = load_downloader_class(SCRIPT_DIR / job.script)
-    downloader = downloader_class(
+    options = {"local_layout": job.local_layout} if job.local_layout is not None else {}
+    return job.downloader(
+        region=job.region,
         out_dir=job.out_dir,
         start_time=start_time,
         lookback_hours=look_back_hours,
@@ -211,10 +217,8 @@ def make_downloader(cfg: ForcingExtractionConfig, job: ExtractionJob) -> Forecas
         subhourly_avg=subhourly_avg,
         gfs_extended=(3 in cfg.input_forcings and len(cfg.input_forcings) == 1),
         max_forecast_hour=max_forecast_hour,
+        **options,
     )
-    if job.local_layout is not None:
-        downloader.local_layout = job.local_layout
-    return downloader
 
 
 def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
@@ -224,7 +228,7 @@ def retrieve_forcing(cfg: ForcingExtractionConfig) -> None:
     for job in build_jobs(cfg):
         downloader = make_downloader(cfg, job)
         if not downloader.run():
-            missing.append(f"{job.forcing} ({job.script})")
+            missing.append(f"{job.forcing} ({job.label})")
 
     if missing:
         raise DownloadError("Files are missing upstream for: " + "; ".join(missing))

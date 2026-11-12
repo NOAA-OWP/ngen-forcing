@@ -1,9 +1,18 @@
+"""Climate Forecast System version 2 (CFSv2) downloader."""
+
+from __future__ import annotations
+
 import os
 from datetime import timedelta
-from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
+
+from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader, Region
+
 
 class CFSv2Downloader(ForecastDownloader):
     """Downloader for CFSv2 forecast data (6-hour interval outputs for 30 days)."""
+
+    REGIONS = {Region.GLOBAL: None}
+
     default_lookback = 24
     default_cleanback = 720
     default_lagback = 6
@@ -41,6 +50,3 @@ class CFSv2Downloader(ForecastDownloader):
     @property
     def recursive_cleanup(self) -> bool:
         return True
-
-if __name__ == "__main__":
-    CFSv2Downloader.cli_main()

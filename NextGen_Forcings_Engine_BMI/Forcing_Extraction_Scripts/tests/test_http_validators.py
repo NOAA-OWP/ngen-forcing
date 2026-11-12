@@ -10,16 +10,22 @@ import pytest
 
 from conftest import FakeResponse
 from Forcing_Extraction_Scripts import forecast_download_base as fdb
-from test_downloaders import CYCLE, HRRR_ANA, HRRR_ANA_URL, NDFD, load, make, serve_ndfd
+from Forcing_Extraction_Scripts import sources as src
+from Forcing_Extraction_Scripts.forecast_download_base import Region
+from test_downloaders import (
+    CYCLE, DAY, HRRR_ANA, HRRR_ANA_URL, HRRR_PATH, LATER_ISSUANCE, MRMS, NDFD, NDFD_OUT, PREV_DAY, START_ARG,
+    http_date, make, serve_ndfd,
+)
 
 DATA = b"GRIB-0123456789abcdef"
 ETAG = f'"{hashlib.md5(DATA).hexdigest()}"'
-LM = "Tue, 10 Nov 2026 12:55:00 GMT"
+LM = http_date(CYCLE + dt.timedelta(minutes=55))
 S3_HEADERS = {"ETag": ETAG, "Last-Modified": LM, "Accept-Ranges": "bytes"}
-HRRR_PATH = "hrrr.20261110/conus/hrrr.t12z.wrfsfcf01.grib2"
-
-STAGE4 = "CONUS/get_conus_StageIV.py"
-STAGE4_URL = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/pcpanl/v4.1/pcpanl.20261110/st4_conus.2026111012.01h.grb2"
+STAGE4 = (src.StageIVDownloader, Region.CONUS)
+STAGE4_NAME = f"st4_conus.{DAY}12.01h.grb2"
+STAGE4_URL = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/pcpanl/v4.1/pcpanl.{DAY}/{STAGE4_NAME}"
+STAGE4_ISSUED = http_date(CYCLE + dt.timedelta(minutes=56))
+STAGE4_REISSUED = http_date(CYCLE + dt.timedelta(days=1, minutes=56))
 
 
 @pytest.fixture(autouse=True)
@@ -67,17 +73,17 @@ def test_revalidate_sends_conditional_request(server, tmp_path):
 
 def test_mutable_product_is_updated_when_changed_upstream(server, tmp_path, caplog):
     caplog.set_level(logging.INFO)
-    server.add(STAGE4_URL, b"GRIB first", headers={"Last-Modified": "Tue, 10 Nov 2026 12:56:00 GMT"})
+    server.add(STAGE4_URL, b"GRIB first", headers={"Last-Modified": STAGE4_ISSUED})
     make(STAGE4, tmp_path).run()
     make(STAGE4, tmp_path).run()  # unchanged: 304
-    assert server.request_headers[-1]["If-Modified-Since"] == "Tue, 10 Nov 2026 12:56:00 GMT"
+    assert server.request_headers[-1]["If-Modified-Since"] == STAGE4_ISSUED
     assert server.request_headers[-1]["Cache-Control"] == "no-cache"
-    assert (tmp_path / "st4_conus.2026111012.01h.grb2").read_bytes() == b"GRIB first"
+    assert (tmp_path / STAGE4_NAME).read_bytes() == b"GRIB first"
 
-    server.add(STAGE4_URL, b"GRIB rerun", headers={"Last-Modified": "Wed, 11 Nov 2026 12:56:00 GMT"})
+    server.add(STAGE4_URL, b"GRIB rerun", headers={"Last-Modified": STAGE4_REISSUED})
     make(STAGE4, tmp_path).run()
-    assert (tmp_path / "st4_conus.2026111012.01h.grb2").read_bytes() == b"GRIB rerun"
-    assert fdb.read_meta(str(tmp_path / "st4_conus.2026111012.01h.grb2"))["last_modified"].startswith("Wed")
+    assert (tmp_path / STAGE4_NAME).read_bytes() == b"GRIB rerun"
+    assert fdb.read_meta(str(tmp_path / STAGE4_NAME))["last_modified"] == STAGE4_REISSUED
     assert "Updated" in caplog.text
 
 
@@ -86,7 +92,7 @@ def test_failed_revalidation_keeps_existing_file(server, tmp_path, caplog):
     make(STAGE4, tmp_path).run()
     del server.files[STAGE4_URL]
     assert make(STAGE4, tmp_path).run() is True
-    assert (tmp_path / "st4_conus.2026111012.01h.grb2").read_bytes() == b"GRIB first"
+    assert (tmp_path / STAGE4_NAME).read_bytes() == b"GRIB first"
     assert "keeping the existing file" in caplog.text
 
 
@@ -218,34 +224,31 @@ def test_fixed_file_cleanup_removes_sidecars(server, tmp_path):
     server.serve_all = True
     flat = tmp_path / "MultiSensor_QPE_01H_Pass1_00.00"
     flat.mkdir()
-    old = flat / "MRMS_MultiSensor_QPE_01H_Pass1_00.00_20261109-120000.grib2.gz"
+    old = flat / f"MRMS_MultiSensor_QPE_01H_Pass1_00.00_{PREV_DAY}-120000.grib2.gz"
     old.write_bytes(b"old")
     fdb.write_meta(str(old), {"url": "x"})
-    make("CONUS/get_conus_MRMS_MultiSensor.py", tmp_path, start=CYCLE, lookback_hours=3, cleanback_hours=240).run()
+    make(MRMS, tmp_path, start=CYCLE, lookback_hours=3, cleanback_hours=240).run()
     assert not old.exists() and not os.path.exists(fdb.meta_path(str(old)))
 
 
 def test_cli_revalidate_flag(tmp_path):
-    downloader = load(HRRR_ANA).from_cli_args(argv=[str(tmp_path), "2026-11-10 13:00:00", "--revalidate"])
+    downloader = src.HRRRAnADownloader.from_cli_args([str(tmp_path), START_ARG, "--region", "CONUS", "--revalidate"])
     assert downloader.revalidate is True
 
 
 # ----------------------------------------------------------------------------- NDFD parts
 
-NDFD_OUT = "NDFD/20261110/wgrbbul/ndfd_conus"
-
-
 def ndfd_headers(tag):
-    return {"Last-Modified": "Tue, 10 Nov 2026 12:30:00 GMT", "ETag": f'"{tag}"'}
+    return {"Last-Modified": http_date(CYCLE + dt.timedelta(minutes=30)), "ETag": f'"{tag}"'}
 
 
 def test_ndfd_unchanged_parts_leave_file_untouched(server, tmp_path):
     serve_ndfd(server, headers=ndfd_headers("v1"))
-    make("CONUS/get_conus_NDFD.py", tmp_path).run()
+    make(src.NDFDDownloader, tmp_path).run()
     tmp_file = tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2"
     inode = tmp_file.stat().st_ino
     first = len(server.gets)
-    make("CONUS/get_conus_NDFD.py", tmp_path).run()
+    make(src.NDFDDownloader, tmp_path).run()
     assert len(server.gets) - first == 7  # one conditional request per part
     assert all(h.get("If-None-Match") == '"v1"' for h in server.request_headers[first:])
     assert tmp_file.stat().st_ino == inode
@@ -253,9 +256,9 @@ def test_ndfd_unchanged_parts_leave_file_untouched(server, tmp_path):
 
 def test_ndfd_changed_part_rebuilds_field(server, tmp_path):
     serve_ndfd(server, headers=ndfd_headers("v1"))
-    make("CONUS/get_conus_NDFD.py", tmp_path).run()
+    make(src.NDFDDownloader, tmp_path).run()
     server.add(f"{NDFD}/VP.004-007/ds.temp.bin", b"GRIB new days 4-7;", headers=ndfd_headers("v2"))
-    make("CONUS/get_conus_NDFD.py", tmp_path).run()
+    make(src.NDFDDownloader, tmp_path).run()
     assert (tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2").read_bytes() == \
         b"GRIB VP.001-003 ds.temp.bin;GRIB new days 4-7;"
     parts = fdb.read_meta(str(tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2"))["parts"]
@@ -264,12 +267,12 @@ def test_ndfd_changed_part_rebuilds_field(server, tmp_path):
 
 def test_ndfd_newer_issuance_does_not_overwrite_cycle(server, tmp_path, caplog):
     serve_ndfd(server, headers=ndfd_headers("v1"))
-    make("CONUS/get_conus_NDFD.py", tmp_path).run()
-    serve_ndfd(server, headers={"Last-Modified": "Thu, 12 Nov 2026 12:00:00 GMT", "ETag": '"v9"'})
+    make(src.NDFDDownloader, tmp_path).run()
+    serve_ndfd(server, headers={"Last-Modified": LATER_ISSUANCE, "ETag": '"v9"'})
     for bin_file in ("ds.temp.bin",):
         server.add(f"{NDFD}/VP.001-003/{bin_file}", b"GRIB later issuance;",
-                   headers={"Last-Modified": "Thu, 12 Nov 2026 12:00:00 GMT", "ETag": '"v9"'})
-    assert make("CONUS/get_conus_NDFD.py", tmp_path).run() is True
+                   headers={"Last-Modified": LATER_ISSUANCE, "ETag": '"v9"'})
+    assert make(src.NDFDDownloader, tmp_path).run() is True
     assert (tmp_path / NDFD_OUT / "ndfd_conus_tmp.grib2").read_bytes().startswith(b"GRIB VP.001-003")
     assert "keeping the existing file" in caplog.text
 

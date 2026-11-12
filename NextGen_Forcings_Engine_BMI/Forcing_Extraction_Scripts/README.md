@@ -6,6 +6,27 @@ The `Forcing_Extraction_Scripts` subsystem provides modular downloaders for retr
 
 ## Architecture Overview
 
+There is one downloader class per source (model or observation product), in `sources/`, and each class is parameterized over the regions it covers:
+
+| Module | Classes | Regions |
+|:---|:---|:---|
+| `sources/gfs.py` | `GFSDownloader` | Global |
+| `sources/cfs.py` | `CFSv2Downloader` | Global |
+| `sources/hrrr.py` | `HRRRDownloader`, `HRRRAnADownloader` | CONUS, Alaska |
+| | `HRRRSubhourlyDownloader`, `HRRRSubhourlyAnADownloader` | CONUS |
+| `sources/rap.py` | `RAPDownloader`, `RAPAnADownloader` | CONUS |
+| `sources/nam.py` | `NAMNestDownloader` | Alaska, Hawaii, Puerto Rico |
+| | `NAMNestAnADownloader` | Hawaii, Puerto Rico |
+| `sources/hiresw.py` | `HiResWARWDownloader` | Hawaii, Puerto Rico |
+| `sources/nbm.py` | `NBMDownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
+| | `NBMAnADownloader` | Puerto Rico |
+| `sources/ndfd.py` | `NDFDDownloader` | CONUS |
+| `sources/stage_iv.py` | `StageIVDownloader` | CONUS, Alaska |
+| `sources/mrms.py` | `MRMSMultiSensorDownloader` | CONUS, Alaska, Hawaii, Puerto Rico |
+| | `MRMSRadarOnlyDownloader`, `MRMSPrecipRateDownloader` | CONUS |
+
+Each class lists its regions in `REGIONS`, a mapping from `Region` (`CONUS`, `ALASKA`, `HAWAII`, `PUERTO_RICO`, `GLOBAL`) to what differs for that region: directory and file-name tags, cycle hours, and so on. A downloader is constructed with a required `region=...` argument and reads its region's settings from `self.domain`; a region the source does not cover is rejected. Analysis and Assimilation (AnA) variants are separate classes from the forecast ones. The tables in `forcing_extraction.py` map each forcing identifier to a `(downloader class, Region)` pair.
+
 All downloaders inherit from `ForecastDownloader` (`forecast_download_base.py`), establishing a standard lifecycle across datasets:
 1. **Cycle Window Evaluation**: Computes lookback/lagback windows aligned to model operational cadences, optionally limited to the configured forecast horizon.
 2. **Cleanup**: Removes data of cycles older than the window (standalone runs only; never data the window needs).
@@ -23,9 +44,9 @@ Each downloaded file gets a sidecar `.<name>.meta.json` recording the upstream `
 
 File modification times are set from `Last-Modified`.
 
-`FixedFileDownloader` covers observation products (MRMS, Stage IV) with one or more fixed files per hour; `MRMSMultiSensorDownloader` covers the hourly MRMS MultiSensor products of every MRMS domain. NDFD additionally concatenates its valid-period bins into one GRIB2 file per field.
+`FixedFileDownloader` is the base of the observation products (MRMS, Stage IV), which have one or more fixed files per hour. NDFD additionally concatenates its valid-period bins into one GRIB2 file per field.
 
-A failed download raises `DownloadError`; the standalone scripts and `forcing_extraction.py` exit with status 1.
+A failed download raises `DownloadError`; the standalone command line and `forcing_extraction.py` exit with status 1.
 
 ---
 
@@ -33,28 +54,28 @@ A failed download raises `DownloadError`; the standalone scripts and `forcing_ex
 
 Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.py`. Downloads are limited to the hours needed for `ForecastInputHorizons`.
 
-| Forcing ID | Domain | Model / Product | Script | Source Endpoint | Forecast Hours Available |
+| Forcing ID | Region | Model / Product | Downloader class | Source Endpoint | Forecast Hours Available |
 |:---:|:---|:---|:---|:---|:---:|
-| **3** | Global | GFS | `Global/get_prod_GFS.py` | AWS S3 (`noaa-gfs-bdp-pds`) | 1–384 |
-| **5** | CONUS | HRRR | `CONUS/get_conus_HRRR.py` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
-| **6** | CONUS | RAP (`pgrb` and `bgrb`) | `CONUS/get_conus_RAP.py` | AWS S3 (`noaa-rap-pds`) | 0–51 (03/09/15/21Z), 0–18 otherwise |
-| **7** | Global | CFSv2 (members 01–04) | `Global/get_CFSv2.py` | AWS S3 (`noaa-cfs-pds`) | 0–720, 6-hourly |
-| **8** | Hawaii | HIRESW WRF-ARW | `Hawaii/get_ARW_Hawaii.py` | NOMADS HTTPS | 1–48 |
-| **13** | Hawaii | NAM Nest Hawaii | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **14** | Puerto Rico | NAM Nest Puerto Rico | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **15** | Alaska | NAM Nest Alaska | `Alaska/get_prod_NAM_Nest_Alaska.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **16** | Hawaii | NAM Nest Hawaii (radiation only) | `Hawaii/get_prod_NAM_Nest_Hawaii.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **17** | Puerto Rico | NAM Nest Puerto Rico (radiation only) | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **18** | Puerto Rico | HIRESW WRF-ARW | `Puerto_Rico/get_ARW_Puerto_Rico.py` | NOMADS HTTPS | 1–48 |
-| **19** | Alaska | Alaska HRRR | `Alaska/get_Alaska_HRRR.py` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
-| **24** | CONUS | NBM CONUS | `CONUS/get_prod_NBM_Conus.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
-| **25** | CONUS | NDFD CONUS | `CONUS/get_conus_NDFD.py` | AWS S3 (`noaa-ndfd-pds`, latest issuance only) | Day 1–7 (QPF Day 1–3) |
-| **26** | CONUS | HRRR 15-minute | `CONUS/get_CONUS_HRRR_subhourly.py` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–18 |
-| **supp8** | CONUS | NBM CONUS APCP | `CONUS/get_prod_NBM_Conus.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
-| **supp9** | Alaska | NBM Alaska APCP | `Alaska/get_prod_NBM_Alaska.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
-| **supp11** | Alaska | Stage IV + MRMS | `Alaska/get_Alaska_StageIV.py` (+ MRMS, see below) | NOMADS HTTPS | 6-hourly analyses |
-| **supp12** | CONUS | Stage IV + MRMS | `CONUS/get_conus_StageIV.py` (+ MRMS, see below) | NOMADS HTTPS | hourly analyses |
-| **supp15** | Puerto Rico | NBM Puerto Rico APCP | `Puerto_Rico/get_prod_NBM_Puerto_Rico.py` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **3** | Global | GFS | `GFSDownloader` | AWS S3 (`noaa-gfs-bdp-pds`) | 1–384 |
+| **5** | CONUS | HRRR | `HRRRDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
+| **6** | CONUS | RAP (`pgrb` and `bgrb`) | `RAPDownloader` | AWS S3 (`noaa-rap-pds`) | 0–51 (03/09/15/21Z), 0–18 otherwise |
+| **7** | Global | CFSv2 (members 01–04) | `CFSv2Downloader` | AWS S3 (`noaa-cfs-pds`) | 0–720, 6-hourly |
+| **8** | Hawaii | HIRESW WRF-ARW | `HiResWARWDownloader` | NOMADS HTTPS | 1–48 |
+| **13** | Hawaii | NAM Nest Hawaii | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **14** | Puerto Rico | NAM Nest Puerto Rico | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **15** | Alaska | NAM Nest Alaska | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **16** | Hawaii | NAM Nest Hawaii (radiation only) | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **17** | Puerto Rico | NAM Nest Puerto Rico (radiation only) | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
+| **18** | Puerto Rico | HIRESW WRF-ARW | `HiResWARWDownloader` | NOMADS HTTPS | 1–48 |
+| **19** | Alaska | Alaska HRRR | `HRRRDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
+| **24** | CONUS | NBM CONUS | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **25** | CONUS | NDFD CONUS | `NDFDDownloader` | AWS S3 (`noaa-ndfd-pds`, latest issuance only) | Day 1–7 (QPF Day 1–3) |
+| **26** | CONUS | HRRR 15-minute | `HRRRSubhourlyDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–18 |
+| **supp8** | CONUS | NBM CONUS APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **supp9** | Alaska | NBM Alaska APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **supp11** | Alaska | Stage IV + MRMS | `StageIVDownloader` (+ MRMS, see below) | NOMADS HTTPS | 6-hourly analyses |
+| **supp12** | CONUS | Stage IV + MRMS | `StageIVDownloader` (+ MRMS, see below) | NOMADS HTTPS | hourly analyses |
+| **supp15** | Puerto Rico | NBM Puerto Rico APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
 
 > **Retired products**: NAM (forcings 13-17 and AnA 13/14) and HiResW Hawaii/Puerto Rico (8, 18) were retired on 2026-11-03 and replaced by RRFS ([SCN 26-47](https://www.weather.gov/media/notification/pdf_2026/SCN26-47_Updated_Retire_NAM_SREF_HREF_HiresW_NAM_MOS.aab.pdf), [SCN 26-48](https://www.weather.gov/media/notification/pdf_2026/scn26-048_Updated_RRFS_and_REFS_Implementation_aae.pdf)). Their downloaders still fetch cycles up to the last one (2026-11-03 06Z), for retrospective runs, and fail immediately for later cycles. The S3 NAM archive (`noaa-nam-pds`) holds the Alaska, Hawaii and Puerto Rico nests; HiResW Hawaii/Puerto Rico was only on NOMADS, which keeps about two days, so its history is not available from this source.
 
@@ -64,23 +85,23 @@ Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.p
 
 Registered in `FORCING_ANA_SRC`:
 
-| Forcing ID | Domain | Product | Script |
+| Forcing ID | Region | Product | Downloader class |
 |:---:|:---|:---|:---|
-| **5** | CONUS | HRRR f01 | `CONUS/get_conus_HRRR_AnA.py` |
-| **6** | CONUS | RAP f01 (`pgrb` and `bgrb`) | `CONUS/get_conus_RAP_AnA.py` |
-| **13** | Hawaii | NAM Nest Hawaii f01–f06 of the covering 6-hourly cycle | `Hawaii/get_prod_NAM_Nest_Hawaii_AnA.py` |
-| **14** | Puerto Rico | NAM Nest Puerto Rico f01–f06 of the covering 6-hourly cycle | `Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py` |
-| **19** | Alaska | Alaska HRRR | `Alaska/get_Alaska_HRRR.py` |
-| **20** | Alaska | Alaska HRRR f01–f04 | `Alaska/get_Alaska_HRRR_AnA.py` |
-| **26** | CONUS | HRRR 15-minute f01 | `CONUS/get_conus_HRRR_subhourly_AnA.py` |
-| **supp1** | CONUS | MRMS Radar-Only QPE | `CONUS/get_conus_MRMS_Radar.py` |
-| **supp2** | CONUS | MRMS MultiSensor QPE (hourly) | `CONUS/get_conus_MRMS_MultiSensor.py` |
-| **supp6** | Hawaii | MRMS MultiSensor QPE (hourly) | `Hawaii/get_MRMS_MultiSensor_Hawaii.py` |
-| **supp10** | Alaska | MRMS MultiSensor QPE (hourly) | `Alaska/get_MRMS_MultiSensor_Alaska.py` |
-| **supp11** | Alaska | Stage IV + MRMS | `Alaska/get_Alaska_StageIV.py` (+ MRMS, see below) |
-| **supp12** | CONUS | Stage IV + MRMS | `CONUS/get_conus_StageIV.py` (+ MRMS, see below) |
-| **supp15** | Puerto Rico | NBM Puerto Rico f001 | `Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py` |
-| **supp16** | CONUS | MRMS 2-minute precipitation rate | `CONUS/get_conus_MRMS_subhourly.py` |
+| **5** | CONUS | HRRR f01 | `HRRRAnADownloader` |
+| **6** | CONUS | RAP f01 (`pgrb` and `bgrb`) | `RAPAnADownloader` |
+| **13** | Hawaii | NAM Nest Hawaii f01–f06 of the covering 6-hourly cycle | `NAMNestAnADownloader` |
+| **14** | Puerto Rico | NAM Nest Puerto Rico f01–f06 of the covering 6-hourly cycle | `NAMNestAnADownloader` |
+| **19** | Alaska | Alaska HRRR | `HRRRDownloader` |
+| **20** | Alaska | Alaska HRRR f01–f04 | `HRRRAnADownloader` |
+| **26** | CONUS | HRRR 15-minute f01 | `HRRRSubhourlyAnADownloader` |
+| **supp1** | CONUS | MRMS Radar-Only QPE | `MRMSRadarOnlyDownloader` |
+| **supp2** | CONUS | MRMS MultiSensor QPE (hourly) | `MRMSMultiSensorDownloader` |
+| **supp6** | Hawaii | MRMS MultiSensor QPE (hourly) | `MRMSMultiSensorDownloader` |
+| **supp10** | Alaska | MRMS MultiSensor QPE (hourly) | `MRMSMultiSensorDownloader` |
+| **supp11** | Alaska | Stage IV + MRMS | `StageIVDownloader` (+ MRMS, see below) |
+| **supp12** | CONUS | Stage IV + MRMS | `StageIVDownloader` (+ MRMS, see below) |
+| **supp15** | Puerto Rico | NBM Puerto Rico f001 | `NBMAnADownloader` |
+| **supp16** | CONUS | MRMS 2-minute precipitation rate | `MRMSPrecipRateDownloader` |
 
 Identifiers without an entry (for example 22, `supp5`) are skipped with a warning.
 
@@ -133,10 +154,13 @@ cd ../
 python forcing_extraction.py ./BMI_NextGen_Configs/CONUS/Medium_Range_Blend/hydrofabric/config.yml
 ```
 
-Individual downloaders can also be run directly as modules from `NextGen_Forcings_Engine_BMI/`:
+Individual downloaders can also be run directly from `NextGen_Forcings_Engine_BMI/`, naming the source (the class name without `Downloader`) and the region:
 
 ```bash
-python -m Forcing_Extraction_Scripts.CONUS.get_conus_HRRR ./HRRR "2026-11-10 12:00:00" --lookBackHours 6
+python -m Forcing_Extraction_Scripts.download HRRR ./HRRR "2026-11-10 12:00:00" --region CONUS --lookBackHours 6
+python -m Forcing_Extraction_Scripts.download HRRR ./HRRR_AK "2026-11-10 12:00:00" --region Alaska
+python -m Forcing_Extraction_Scripts.download --help        # lists the sources
+python -m Forcing_Extraction_Scripts.download NBM --help    # options and regions of one source
 ```
 
 ## Testing
@@ -145,21 +169,21 @@ From `NextGen_Forcings_Engine_BMI/Forcing_Extraction_Scripts` (requires `pytest`
 
 ```bash
 python -m pytest tests            # offline tests; upstream servers are simulated
-python -m pytest tests --live     # also probe every downloader against its live upstream server
+python -m pytest tests --live     # also probe every downloader, in every region, against its live upstream server
 ```
 
-The live probe can also be run on its own from `NextGen_Forcings_Engine_BMI/`. For each downloader it picks a recently published cycle, lists the files the downloader would fetch, and checks a sample of them with `HEAD` plus a ranged `GET` that must contain a GRIB2 message:
+The live probe can also be run on its own from `NextGen_Forcings_Engine_BMI/`. For each source and region it picks a recently published cycle, lists the files the downloader would fetch, and checks a sample of them with `HEAD` plus a ranged `GET` that must contain a GRIB2 message:
 
 ```bash
-python -m Forcing_Extraction_Scripts.probe_sources                      # all scripts, three files each
-python -m Forcing_Extraction_Scripts.probe_sources CONUS/get_conus_HRRR.py --all
+python -m Forcing_Extraction_Scripts.probe_sources                      # all sources and regions, three files each
+python -m Forcing_Extraction_Scripts.probe_sources HRRR "NBM[Alaska]" --all  # every HRRR region, and NBM for Alaska
 ```
 
 `check_server_behavior` re-checks the assumptions the downloaders make about server metadata: that HEAD and GET agree, that `Content-Length` matches the bytes served, that an MD5-style ETag (plain or multipart) matches the content, that no transfer compression is applied, that the content is GRIB2 as named, and that conditional requests (`If-None-Match`, `If-Modified-Since`) and byte ranges (`Range`, `If-Range`) behave as the change detection above relies on. It downloads a sample of each product in full (up to `--max-mb`, default 64), and also notes whether each server would compress transfers if allowed to (the downloaders request identity encoding):
 
 ```bash
-python -m Forcing_Extraction_Scripts.check_server_behavior                       # all scripts
-python -m Forcing_Extraction_Scripts.check_server_behavior Global/get_prod_GFS.py --max-mb 400
+python -m Forcing_Extraction_Scripts.check_server_behavior                       # all sources and regions
+python -m Forcing_Extraction_Scripts.check_server_behavior GFS --max-mb 400
 python -m Forcing_Extraction_Scripts.check_server_behavior --url https://host/path/file.grib2
 ```
 

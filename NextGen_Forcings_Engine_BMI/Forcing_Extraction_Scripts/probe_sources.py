@@ -1,17 +1,18 @@
 """
-Probe every downloader script against its live upstream server without downloading whole files.
+Probe every downloader, in every region it covers, against its live upstream server without
+downloading whole files.
 
-For each script, a recent cycle that the product should already have published is chosen, the files
-the downloader would fetch for that cycle are enumerated with the downloader's own URL logic, and a
-sample of them (or all, with ``--all``) is checked:
+For each source and region, a recent cycle that the product should already have published is chosen,
+the files the downloader would fetch for that cycle are enumerated with the downloader's own URL
+logic, and a sample of them (or all, with ``--all``) is checked:
 
 1. ``HEAD`` must return 200 (the file exists; its size is reported).
 2. A ranged ``GET`` of the first bytes must look like GRIB edition 2 (after gunzip for ``.gz`` files).
 
 Run from ``NextGen_Forcings_Engine_BMI/``::
 
-    python -m Forcing_Extraction_Scripts.probe_sources                 # every script
-    python -m Forcing_Extraction_Scripts.probe_sources CONUS/get_conus_HRRR.py --all
+    python -m Forcing_Extraction_Scripts.probe_sources                 # every source and region
+    python -m Forcing_Extraction_Scripts.probe_sources HRRR NBM[Alaska] --all
 """
 
 from __future__ import annotations
@@ -38,20 +39,19 @@ from Forcing_Extraction_Scripts.forecast_download_base import (
     ForecastDownloader,
     content_signature_problem,
 )
-
-SCRIPT_DIR = Path(__file__).resolve().parent
+from Forcing_Extraction_Scripts.sources import Source, all_sources, parse_source
 
 #: How old (hours) a cycle must be before it is expected to be complete upstream.
 DEFAULT_AGE_HOURS = 26
 #: Products whose upstream only holds the latest issuance are probed at the newest cycle.
-AGE_HOURS_OVERRIDE: dict[str, int] = {"NDFDConusDownloader": 0}
+AGE_HOURS_OVERRIDE: dict[str, int] = {"NDFDDownloader": 0}
 #: How far back to search for a cycle the product runs at.
 SEARCH_HOURS = 48
 
 
 TIMEOUT = (CONNECT_TIMEOUT, READ_TIMEOUT)
 
-#: Hosts with request-rate limits: (minimum seconds between requests, files sampled per script).
+#: Hosts with request-rate limits: (minimum seconds between requests, files sampled per source).
 RATE_LIMITED_HOSTS: dict[str, tuple[float, int]] = {"nomads.ncep.noaa.gov": (5.0, 1)}
 
 
@@ -87,8 +87,8 @@ def get_prefix(session: requests.Session, url: str, extra_headers: dict[str, str
 
 
 @dataclass
-class ScriptCycle:
-    """The cycle chosen for a script and the remote files its downloader would fetch for it."""
+class SourceCycle:
+    """The cycle chosen for a source and the remote files its downloader would fetch for it."""
 
     downloader: str
     cycle: datetime
@@ -106,8 +106,8 @@ class FileProbe:
 
 
 @dataclass
-class ScriptProbe:
-    script: str
+class SourceProbe:
+    source: str
     downloader: str = ""
     registered_as: list[str] = field(default_factory=list)
     cycle: str = ""
@@ -120,42 +120,39 @@ class ScriptProbe:
         return not self.error and bool(self.probes) and all(p.ok for p in self.probes)
 
 
-def all_scripts() -> list[str]:
-    """Every downloader script under Forcing_Extraction_Scripts, as paths relative to it."""
-    return sorted(str(p.relative_to(SCRIPT_DIR)) for p in SCRIPT_DIR.glob("*/get_*.py"))
-
-
-def registrations() -> dict[str, list[str]]:
-    """Map script -> forcing identifiers it is registered under in forcing_extraction."""
+def registrations() -> dict[Source, list[str]]:
+    """Map (downloader class, region) -> forcing identifiers it is registered under in forcing_extraction."""
     import forcing_extraction as fe
 
-    regs: dict[str, list[str]] = {}
+    regs: dict[Source, list[str]] = {}
     for label, table in (("forecast", fe.FORCING_SRC), ("AnA", fe.FORCING_ANA_SRC),
                          ("Stage IV MRMS", fe.STAGE4_MRMS_SRC)):
-        for key, script in table.items():
-            regs.setdefault(script, []).append(f"{label} {key}")
+        for key, source in table.items():
+            regs.setdefault(source, []).append(f"{label} {key}")
     return regs
 
 
-def make_probe_downloader(cls: type[ForecastDownloader], cycle: datetime, out_dir: str) -> ForecastDownloader:
+def make_probe_downloader(source: Source, cycle: datetime, out_dir: str) -> ForecastDownloader:
     """Instantiate a downloader whose processing window is exactly ``cycle``."""
+    cls, region = source
     return cls(out_dir=out_dir, start_time=cycle + timedelta(hours=1), lookback_hours=1, ens_number=1,
-               max_download_attempts=1, download_attempt_interval=0, check_file_availability=1)
+               max_download_attempts=1, download_attempt_interval=0, check_file_availability=1, region=region)
 
 
-def pick_cycle(cls: type[ForecastDownloader], now: datetime, age_hours: int, out_dir: str) -> datetime | None:
+def pick_cycle(source: Source, now: datetime, age_hours: int, out_dir: str) -> datetime | None:
     """
     Most recent cycle at least ``age_hours`` old that the downloader would fetch files for.
 
     For a retired product, the search starts at its last cycle instead, so the probe exercises the
     historical data retrospective runs use.
     """
+    cls = source[0]
     start = (now - timedelta(hours=age_hours)).replace(minute=0, second=0, microsecond=0, tzinfo=None)
     if cls.retired_after is not None:
         start = min(start, cls.retired_after)
     for back in range(SEARCH_HOURS):
         cycle = start - timedelta(hours=back)
-        if next(make_probe_downloader(cls, cycle, out_dir).iter_remote_files(), None) is not None:
+        if next(make_probe_downloader(source, cycle, out_dir).iter_remote_files(), None) is not None:
             return cycle
     return None
 
@@ -183,27 +180,30 @@ def sample(urls: list[str]) -> list[str]:
     return picks[:limit]
 
 
-def script_cycle(script: str, now: datetime | None = None) -> ScriptCycle:
-    """Choose a recently published cycle for ``script`` and list the files its downloader would fetch."""
-    import forcing_extraction as fe
-
+def source_cycle(source: Source, now: datetime | None = None) -> SourceCycle:
+    """Choose a recently published cycle for ``source`` and list the files its downloader would fetch."""
+    cls = source[0]
     with tempfile.TemporaryDirectory() as out_dir:
-        cls = fe.load_downloader_class(SCRIPT_DIR / script)
         age = AGE_HOURS_OVERRIDE.get(cls.__name__, DEFAULT_AGE_HOURS)
-        cycle = pick_cycle(cls, now or datetime.now(timezone.utc), age, out_dir)
+        cycle = pick_cycle(source, now or datetime.now(timezone.utc), age, out_dir)
         if cycle is None:
             raise LookupError(f"no cycle in the {SEARCH_HOURS} h before now-{age} h yields any files")
-        urls = list(dict.fromkeys(u for _, u, _ in make_probe_downloader(cls, cycle, out_dir).iter_remote_files()))
+        urls = list(dict.fromkeys(u for _, u, _ in make_probe_downloader(source, cycle, out_dir).iter_remote_files()))
     note = f"retired after {cls.retired_after:%Y-%m-%d %HZ}" if cls.retired_after is not None else ""
-    return ScriptCycle(cls.__name__, cycle, urls, note)
+    return SourceCycle(cls.__name__, cycle, urls, note)
 
 
-def probe_script(script: str, *, probe_all: bool = False, now: datetime | None = None,
-                 regs: dict[str, list[str]] | None = None) -> ScriptProbe:
-    result = ScriptProbe(script, registered_as=(regs or {}).get(script, []))
+def source_label(source: Source) -> str:
+    """``Name[Region]`` for a (downloader class, region) pair."""
+    return source[0].label(source[1])
+
+
+def probe_source(source: Source, *, probe_all: bool = False, now: datetime | None = None,
+                 regs: dict[Source, list[str]] | None = None) -> SourceProbe:
+    result = SourceProbe(source_label(source), registered_as=(regs or {}).get(source, []))
     try:
-        chosen = script_cycle(script, now)
-    except Exception as exc:  # report and continue with the other scripts
+        chosen = source_cycle(source, now)
+    except Exception as exc:  # report and continue with the other sources
         result.error = f"{type(exc).__name__}: {exc}"
         return result
     result.downloader = chosen.downloader
@@ -214,12 +214,19 @@ def probe_script(script: str, *, probe_all: bool = False, now: datetime | None =
     return result
 
 
-def format_report(results: list[ScriptProbe]) -> str:
+def sources_from_args(specs: list[str]) -> list[Source]:
+    """Sources named on a command line (all of them when none are named)."""
+    if not specs:
+        return all_sources()
+    return list(dict.fromkeys(source for spec in specs for source in parse_source(spec)))
+
+
+def format_report(results: list[SourceProbe]) -> str:
     lines = []
     for r in results:
         status = "OK  " if r.ok else "FAIL"
         reg = ", ".join(r.registered_as) or "not registered"
-        lines.append(f"{status} {r.script} [{r.downloader or '?'}] ({reg})")
+        lines.append(f"{status} {r.source} ({reg})")
         if r.error:
             lines.append(f"       {r.error}")
             continue
@@ -229,20 +236,25 @@ def format_report(results: list[ScriptProbe]) -> str:
             if not p.ok:
                 lines.append(f"       - {p.detail}: {p.url}")
     failed = sum(not r.ok for r in results)
-    lines.append(f"\n{len(results) - failed}/{len(results)} downloader script(s) passed.")
+    lines.append(f"\n{len(results) - failed}/{len(results)} source(s) passed.")
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("scripts", nargs="*", help="Scripts relative to Forcing_Extraction_Scripts (default: all).")
+    parser.add_argument("sources", nargs="*",
+                        help="Sources as NAME (every region) or NAME[Region], e.g. HRRR or NBM[Alaska] (default: all).")
     parser.add_argument("--all", action="store_true", help="Probe every file of the cycle, not a sample of three.")
     parser.add_argument("--json", type=Path, help="Also write results as JSON to this path.")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
 
     regs = registrations()
-    results = [probe_script(s, probe_all=args.all, regs=regs) for s in (args.scripts or all_scripts())]
+    try:
+        sources = sources_from_args(args.sources)
+    except ValueError as exc:
+        parser.error(str(exc))
+    results = [probe_source(s, probe_all=args.all, regs=regs) for s in sources]
     print(format_report(results))
     if args.json:
         args.json.write_text(json.dumps(

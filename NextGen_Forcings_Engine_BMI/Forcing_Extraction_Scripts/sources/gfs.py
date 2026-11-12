@@ -1,8 +1,17 @@
+"""Global Forecast System (GFS) downloader."""
+
+from __future__ import annotations
+
 import os
-from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader
+
+from Forcing_Extraction_Scripts.forecast_download_base import ForecastDownloader, Region
+
 
 class GFSDownloader(ForecastDownloader):
     """Downloader for GFS operational forecast data."""
+
+    REGIONS = {Region.GLOBAL: None}
+
     default_lookback = 8
     default_cleanback = 384
     default_lagback = 4
@@ -23,14 +32,10 @@ class GFSDownloader(ForecastDownloader):
         return os.path.join(self.out_dir, f"gfs.{d_start.strftime('%Y%m%d')}", d_start.strftime("%H"), "atmos")
 
     def build_file_url_and_name(self, d_start, forecast_hour, _):
-        fhr = str(forecast_hour).zfill(3)
-        filename = f"gfs.t{d_start.strftime('%H')}z.sfluxgrbf{fhr}.grib2"
+        filename = f"gfs.t{d_start.strftime('%H')}z.sfluxgrbf{forecast_hour:03d}.grib2"
         url = os.path.join(self.base_url, f"gfs.{d_start.strftime('%Y%m%d')}", d_start.strftime("%H"), "atmos", filename)
         return url, filename
 
     @property
     def recursive_cleanup(self) -> bool:
         return True
-
-if __name__ == "__main__":
-    GFSDownloader.cli_main()

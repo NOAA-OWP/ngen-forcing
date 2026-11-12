@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import email.utils
+import enum
 import hashlib
 import json
 import logging
@@ -43,13 +44,28 @@ SNIFF_BYTES: int = 4096
 REQUEST_HEADERS: dict[str, str] = {"Accept-Encoding": "identity"}
 
 
-#: NAM and HiResW (except Guam) ended with the RRFS implementation on 2026-11-03; the last NAM cycle
-#: in the S3 archive is 06Z that day. Earlier cycles are still fetched, for retrospective runs.
-NAM_HIRESW_RETIRED_AFTER = datetime(2026, 11, 3, 6)
-NAM_HIRESW_RETIREMENT_NOTE = (
-    "NAM and HiResW were retired on 2026-11-03 and replaced by RRFS "
-    "(NWS Service Change Notices 26-47 and 26-48)"
-)
+class Region(enum.Enum):
+    """Geographic domain a downloader fetches a source for."""
+
+    CONUS = "CONUS"
+    ALASKA = "Alaska"
+    HAWAII = "Hawaii"
+    PUERTO_RICO = "Puerto_Rico"
+    GLOBAL = "Global"
+
+    def __str__(self) -> str:
+        return self.value
+
+    @classmethod
+    def parse(cls, value: Region | str) -> Region:
+        """Return the region named by ``value``, ignoring case and spaces/underscores/hyphens."""
+        if isinstance(value, cls):
+            return value
+        key = re.sub(r"[\s_-]+", "", str(value)).lower()
+        for region in cls:
+            if key in (region.value.replace("_", "").lower(), region.name.replace("_", "").lower()):
+                return region
+        raise ValueError(f"Unknown region {value!r}; expected one of {', '.join(r.value for r in cls)}.")
 
 
 class DownloadError(RuntimeError):
@@ -292,7 +308,16 @@ def content_signature_problem(name: str, head: bytes, require_edition2: bool = F
 
 
 class ForecastDownloader(ABC):
-    """Abstract base class for structured forecast data downloads."""
+    """
+    Abstract base class for structured forecast data downloads.
+
+    A concrete subclass describes one source (model or observation product). ``REGIONS`` maps each
+    region the source is fetched for to that region's settings, which an instance reads from
+    ``self.domain``. The region is a required argument.
+    """
+
+    #: Region -> settings of this source for that region.
+    REGIONS: typing.ClassVar[typing.Mapping[Region, typing.Any]] = {}
 
     default_lookback: int = 24
     default_cleanback: int = 240
@@ -325,7 +350,12 @@ class ForecastDownloader(ABC):
         gfs_extended: bool = False,
         max_forecast_hour: int | None = None,
         revalidate: bool = False,
+        *,
+        region: Region | str,
     ) -> None:
+        #: Region this instance downloads, and the source's settings for it.
+        self.region: Region = self.resolve_region(region)
+        self.domain: typing.Any = self.REGIONS[self.region]
         if lookback_hours <= lagback_hours:
             raise ValueError(
                 f"Invalid configuration: lookback_hours ({lookback_hours}) must be greater than "
@@ -351,6 +381,27 @@ class ForecastDownloader(ABC):
         self.last_hour: bool | None = None
         self._cycle_time: datetime | None = None
 
+    @classmethod
+    def resolve_region(cls, region: Region | str) -> Region:
+        """Return ``region`` as a Region, rejecting regions the source does not cover."""
+        resolved = Region.parse(region)
+        if resolved not in cls.REGIONS:
+            raise ValueError(
+                f"{cls.__name__} does not cover region {resolved}; it covers "
+                f"{', '.join(str(r) for r in cls.REGIONS)}."
+            )
+        return resolved
+
+    @classmethod
+    def label(cls, region: Region | str) -> str:
+        """A short name for this source in one region, e.g. ``HRRR[Alaska]``."""
+        return f"{cls.__name__.removesuffix('Downloader')}[{cls.resolve_region(region)}]"
+
+    @classmethod
+    def window_defaults(cls, region: Region) -> tuple[int, int, int]:
+        """Standalone defaults (lookback, cleanback, lagback) in hours for ``region``."""
+        return cls.default_lookback, cls.default_cleanback, cls.default_lagback
+
     def effective_lagback(self) -> int:
         """Return the lag-back (in hours) that ends the processing window; subclasses may override."""
         return self.lagback_hours
@@ -358,16 +409,18 @@ class ForecastDownloader(ABC):
     @classmethod
     def from_cli_args(
         cls,
-        desc: str | None = None,
         argv: typing.Sequence[str] | None = None,
+        prog: str | None = None,
     ) -> typing.Self:
         """Create an instance of the subclass using command-line arguments."""
-        parser = argparse.ArgumentParser(description=desc or cls.__doc__)
+        parser = argparse.ArgumentParser(prog=prog, description=cls.__doc__)
         parser.add_argument("outDir", type=str, help="Output directory path")
         parser.add_argument("startTime", type=lambda s: datetime.strptime(s, "%Y-%m-%d %H:%M:%S"))
-        parser.add_argument("--lookBackHours", type=int, default=cls.default_lookback)
-        parser.add_argument("--cleanBackHours", type=int, default=cls.default_cleanback)
-        parser.add_argument("--lagBackHours", type=int, default=cls.default_lagback)
+        parser.add_argument("--region", type=cls.resolve_region, required=True,
+                            help=f"One of: {', '.join(str(r) for r in cls.REGIONS)}.")
+        parser.add_argument("--lookBackHours", type=int, default=None, help="Default depends on source and region.")
+        parser.add_argument("--cleanBackHours", type=int, default=None, help="Default depends on source and region.")
+        parser.add_argument("--lagBackHours", type=int, default=None, help="Default depends on source and region.")
         parser.add_argument("--ensNumber", type=int, default=None)
         parser.add_argument("--inputforcing", type=parse_forcing_id, default=None,
                             help="Forcing identifier (e.g. 6 or supp12); informational only.")
@@ -383,6 +436,10 @@ class ForecastDownloader(ABC):
         parser.add_argument("--revalidate", action="store_true", default=False,
                             help="Check existing files against upstream with conditional requests.")
         args = parser.parse_args(argv)
+        lookback, cleanback, lagback = cls.window_defaults(args.region)
+        args.lookBackHours = lookback if args.lookBackHours is None else args.lookBackHours
+        args.cleanBackHours = cleanback if args.cleanBackHours is None else args.cleanBackHours
+        args.lagBackHours = lagback if args.lagBackHours is None else args.lagBackHours
         LOG.info("%s args: %s", cls.__name__, vars(args))
 
         return cls(
@@ -400,14 +457,15 @@ class ForecastDownloader(ABC):
             gfs_extended=args.gfs_extended,
             max_forecast_hour=args.maxForecastHour,
             revalidate=args.revalidate,
+            region=args.region,
         )
 
     @classmethod
-    def cli_main(cls, desc: str | None = None) -> None:
+    def cli_main(cls, argv: typing.Sequence[str] | None = None, prog: str | None = None) -> None:
         """Command-line entry point: parse arguments, run, and exit non-zero on failure."""
         configure_logging()
         try:
-            ok = cls.from_cli_args(desc).run()
+            ok = cls.from_cli_args(argv, prog).run()
         except DownloadError as exc:
             LOG.error("%s", exc)
             sys.exit(1)
@@ -530,7 +588,7 @@ class ForecastDownloader(ABC):
         """Why no data can exist for cycle ``d_start``, if the product was retired before it."""
         if self.retired_after is None or d_start <= self.retired_after:
             return None
-        return (f"{type(self).__name__}: no data after the {self.retired_after:%Y-%m-%d %HZ} cycle "
+        return (f"{self.label(self.region)}: no data after the {self.retired_after:%Y-%m-%d %HZ} cycle "
                 f"({self.retirement_note}); cannot supply {d_start:%Y-%m-%d %HZ}")
 
     def _warn_nothing_processed(self) -> None:
@@ -538,7 +596,7 @@ class ForecastDownloader(ABC):
         last = self.start_time - timedelta(hours=self.effective_lagback() + 1)
         LOG.warning(
             "%s: no cycle between %s and %s matches this product's cycle schedule; nothing was downloaded.",
-            type(self).__name__, first, last,
+            self.label(self.region), first, last,
         )
 
     # ------------------------------------------------------------------ cleanup
@@ -588,7 +646,7 @@ class ForecastDownloader(ABC):
         """Download forecast files across desired time horizons and targets."""
         LOG.info(
             "%s: downloading. lookback: %s lagback: %s",
-            type(self).__name__, self.lookback_hours, self.effective_lagback(),
+            self.label(self.region), self.lookback_hours, self.effective_lagback(),
         )
         processed = 0
         for d_start, files in self._cycles():
@@ -873,7 +931,7 @@ class ForecastDownloader(ABC):
         """
         LOG.info(
             "%s: checking data availability. lookback: %s lagback: %s",
-            type(self).__name__, self.lookback_hours, self.effective_lagback(),
+            self.label(self.region), self.lookback_hours, self.effective_lagback(),
         )
         counts: Counter[str] = Counter()
         for d_start, files in self._cycles():
@@ -1021,67 +1079,3 @@ class FixedFileDownloader(ForecastDownloader, ABC):
                 parent = os.path.dirname(path)
                 if parent != os.path.normpath(str(self.out_dir)) and not os.listdir(parent):
                     os.rmdir(parent)
-
-
-class MRMSMultiSensorDownloader(FixedFileDownloader, ABC):
-    """
-    Hourly MRMS MultiSensor QPE (Pass1 and Pass2) for one MRMS domain.
-
-    The server layout is ``<domain>/MultiSensor_QPE_01H_PassN_00.00/YYYYMMDD/<file>``. The local
-    layout depends on which engine reader consumes the files and is selected by ``local_layout``.
-    """
-
-    #: MRMS domain directory on the server: CONUS, ALASKA, HAWAII or CARIB.
-    region: str = ""
-
-    #: Flat per-pass directories, read for SuppPcp 2, 5, 6 and 10.
-    LAYOUT_FLAT: typing.ClassVar[str] = "MultiSensor_QPE_01H_{pass_}_00.00"
-    #: Per-pass, per-date directories, read under MRMS_Hourly for SuppPcp 16 bias correction.
-    LAYOUT_DATED: typing.ClassVar[str] = "MultiSensor_QPE_01H_{pass_}_00.00/{date}"
-    #: Per-date directories without the product version, read for the MRMS half of SuppPcp 11 and 12.
-    LAYOUT_STAGE4_BLEND: typing.ClassVar[str] = "MultiSensor_QPE_01H_{pass_}/{date}"
-
-    local_layout: str = LAYOUT_FLAT
-
-    @property
-    def base_url(self) -> str:
-        return f"https://noaa-mrms-pds.s3.amazonaws.com/{self.region}"
-
-    def get_file_specs(self, d_start: datetime) -> list[FileSpec]:
-        date = d_start.strftime("%Y%m%d")
-        specs: list[FileSpec] = []
-        for pass_ in ("Pass1", "Pass2"):
-            product = f"MultiSensor_QPE_01H_{pass_}_00.00"
-            filename = f"MRMS_{product}_{date}-{d_start.strftime('%H')}0000.grib2.gz"
-            specs.append(FileSpec(f"{product}/{date}", filename, self.local_layout.format(pass_=pass_, date=date)))
-        return specs
-
-
-class NAMNestAnADownloader(ForecastDownloader, ABC):
-    """NAM nest AnA: forecast hours 1-6 of the 00/06/12/18Z cycle covering each hour, for one nest."""
-
-    retired_after = NAM_HIRESW_RETIRED_AFTER
-    retirement_note = NAM_HIRESW_RETIREMENT_NOTE
-
-    #: Nest name used in NAM file names, e.g. hawaiinest or priconest.
-    domain: str = ""
-
-    @property
-    def base_url(self) -> str:
-        return "https://noaa-nam-pds.s3.amazonaws.com"
-
-    @staticmethod
-    def nam_cycle(d_start: datetime) -> datetime:
-        """Return the 00/06/12/18Z NAM cycle that covers d_start."""
-        return d_start - timedelta(hours=d_start.hour % 6)
-
-    def get_download_targets(self, d_start: datetime) -> list[typing.Any]:
-        return list(range(1, 7))
-
-    def build_output_dir(self, d_start: datetime, ens_number: str) -> str:
-        return os.path.join(str(self.out_dir), f"nam.{self.nam_cycle(d_start).strftime('%Y%m%d')}")
-
-    def build_file_url_and_name(self, d_start: datetime, target: typing.Any, ens_number: str) -> tuple[str, str]:
-        cycle = self.nam_cycle(d_start)
-        filename = f"nam.t{cycle.strftime('%H')}z.{self.domain}.hiresf{target:02d}.tm00.grib2"
-        return f"{self.base_url}/nam.{cycle.strftime('%Y%m%d')}/{filename}", filename
