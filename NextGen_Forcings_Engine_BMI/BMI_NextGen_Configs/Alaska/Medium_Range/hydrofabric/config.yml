@@ -60,3 +60,6 @@ RqiThreshold: 0.9
 cfsEnsNumber: ''
 custom_input_fcst_freq: []
 includeLQFrac: 1
+max_download_attempts: 10
+download_attempt_interval: 10
+check_file_availability: 0
