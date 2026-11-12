@@ -54,26 +54,26 @@ Registered in `FORCING_SRC` in `NextGen_Forcings_Engine_BMI/forcing_extraction.p
 
 | Forcing ID | Region | Model / Product | Downloader class | Source Endpoint | Forecast Hours Available |
 |:---:|:---|:---|:---|:---|:---:|
-| **3** | (global) | GFS | `GFSDownloader` | AWS S3 (`noaa-gfs-bdp-pds`) | 1–384 |
-| **5** | CONUS | HRRR | `HRRRDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
-| **6** | CONUS | RAP (`pgrb` and `bgrb`) | `RAPDownloader` | AWS S3 (`noaa-rap-pds`) | 0–51 (03/09/15/21Z), 0–18 otherwise |
-| **7** | (global) | CFSv2 (members 01–04) | `CFSv2Downloader` | AWS S3 (`noaa-cfs-pds`) | 0–720, 6-hourly |
-| **8** | Hawaii | HIRESW WRF-ARW | `HiResWARWDownloader` | NOMADS HTTPS | 1–48 |
-| **13** | Hawaii | NAM Nest Hawaii | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **14** | Puerto Rico | NAM Nest Puerto Rico | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **15** | Alaska | NAM Nest Alaska | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **16** | Hawaii | NAM Nest Hawaii (radiation only) | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **17** | Puerto Rico | NAM Nest Puerto Rico (radiation only) | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1–60 |
-| **18** | Puerto Rico | HIRESW WRF-ARW | `HiResWARWDownloader` | NOMADS HTTPS | 1–48 |
-| **19** | Alaska | Alaska HRRR | `HRRRDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–48 (00/06/12/18Z), 0–18 otherwise |
-| **24** | CONUS | NBM CONUS | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
-| **25** | CONUS | NDFD CONUS | `NDFDDownloader` | AWS S3 (`noaa-ndfd-pds`, latest issuance only) | Day 1–7 (QPF Day 1–3) |
-| **26** | CONUS | HRRR 15-minute | `HRRRSubhourlyDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0–18 |
-| **supp8** | CONUS | NBM CONUS APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
-| **supp9** | Alaska | NBM Alaska APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **3** | (global) | GFS | `GFSDownloader` | AWS S3 (`noaa-gfs-bdp-pds`) | 1-384 |
+| **5** | CONUS | HRRR | `HRRRDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0-48 (00/06/12/18Z), 0-18 otherwise |
+| **6** | CONUS | RAP (`pgrb` and `bgrb`) | `RAPDownloader` | AWS S3 (`noaa-rap-pds`) | 0-51 (03/09/15/21Z), 0-18 otherwise |
+| **7** | (global) | CFSv2 (members 01-04) | `CFSv2Downloader` | AWS S3 (`noaa-cfs-pds`) | 0-720, 6-hourly |
+| **8** | Hawaii | HIRESW WRF-ARW | `HiResWARWDownloader` | NOMADS HTTPS | 1-48 |
+| **13** | Hawaii | NAM Nest Hawaii | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1-60 |
+| **14** | Puerto Rico | NAM Nest Puerto Rico | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1-60 |
+| **15** | Alaska | NAM Nest Alaska | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1-60 |
+| **16** | Hawaii | NAM Nest Hawaii (radiation only) | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1-60 |
+| **17** | Puerto Rico | NAM Nest Puerto Rico (radiation only) | `NAMNestDownloader` | AWS S3 (`noaa-nam-pds`) | 1-60 |
+| **18** | Puerto Rico | HIRESW WRF-ARW | `HiResWARWDownloader` | NOMADS HTTPS | 1-48 |
+| **19** | Alaska | Alaska HRRR | `HRRRDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0-48 (00/06/12/18Z), 0-18 otherwise |
+| **24** | CONUS | NBM CONUS | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1-264 |
+| **25** | CONUS | NDFD CONUS | `NDFDDownloader` | AWS S3 (`noaa-ndfd-pds`, latest issuance only) | Day 1-7 (QPF Day 1-3) |
+| **26** | CONUS | HRRR 15-minute | `HRRRSubhourlyDownloader` | AWS S3 (`noaa-hrrr-bdp-pds`) | 0-18 |
+| **supp8** | CONUS | NBM CONUS APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1-264 |
+| **supp9** | Alaska | NBM Alaska APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1-264 |
 | **supp11** | Alaska | Stage IV + MRMS | `StageIVDownloader` (+ MRMS, see below) | NOMADS HTTPS | 6-hourly analyses |
 | **supp12** | CONUS | Stage IV + MRMS | `StageIVDownloader` (+ MRMS, see below) | NOMADS HTTPS | hourly analyses |
-| **supp15** | Puerto Rico | NBM Puerto Rico APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1–264 |
+| **supp15** | Puerto Rico | NBM Puerto Rico APCP | `NBMDownloader` | AWS S3 (`noaa-nbm-grib2-pds`) | 1-264 |
 
 > **Retired products**: NAM (forcings 13-17 and AnA 13/14) and HiResW Hawaii/Puerto Rico (8, 18) were retired on 2026-11-03 and replaced by RRFS ([SCN 26-47](https://www.weather.gov/media/notification/pdf_2026/SCN26-47_Updated_Retire_NAM_SREF_HREF_HiresW_NAM_MOS.aab.pdf), [SCN 26-48](https://www.weather.gov/media/notification/pdf_2026/scn26-048_Updated_RRFS_and_REFS_Implementation_aae.pdf)). Their downloaders still fetch cycles up to the last one (2026-11-03 06Z), for retrospective runs, and fail immediately for later cycles. HiResW Guam was not retired. The S3 NAM archive (`noaa-nam-pds`) holds the Alaska, Hawaii and Puerto Rico nests; HiResW Hawaii/Puerto Rico was only on NOMADS, which keeps about two days, so its history is not available from this source.
 
@@ -87,10 +87,10 @@ Registered in `FORCING_ANA_SRC`:
 |:---:|:---|:---|:---|
 | **5** | CONUS | HRRR f01 | `HRRRAnADownloader` |
 | **6** | CONUS | RAP f01 (`pgrb` and `bgrb`) | `RAPAnADownloader` |
-| **13** | Hawaii | NAM Nest Hawaii f01–f06 of the covering 6-hourly cycle | `NAMNestAnADownloader` |
-| **14** | Puerto Rico | NAM Nest Puerto Rico f01–f06 of the covering 6-hourly cycle | `NAMNestAnADownloader` |
+| **13** | Hawaii | NAM Nest Hawaii f01-f06 of the covering 6-hourly cycle | `NAMNestAnADownloader` |
+| **14** | Puerto Rico | NAM Nest Puerto Rico f01-f06 of the covering 6-hourly cycle | `NAMNestAnADownloader` |
 | **19** | Alaska | Alaska HRRR | `HRRRDownloader` |
-| **20** | Alaska | Alaska HRRR f01–f04 | `HRRRAnADownloader` |
+| **20** | Alaska | Alaska HRRR f01-f04 | `HRRRAnADownloader` |
 | **26** | CONUS | HRRR 15-minute f01 | `HRRRSubhourlyAnADownloader` |
 | **supp1** | CONUS | MRMS Radar-Only QPE | `MRMSRadarOnlyDownloader` |
 | **supp2** | CONUS | MRMS MultiSensor QPE (hourly) | `MRMSMultiSensorDownloader` |
